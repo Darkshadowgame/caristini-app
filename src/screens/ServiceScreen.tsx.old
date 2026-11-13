@@ -1,0 +1,78 @@
+import React, { useState } from 'react';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Make, MAKES, PROCEDURES } from '../service/procedures';
+import { radius, space, useTheme } from '../theme';
+import { Body, Card, Label, Pill, Title } from '../ui';
+
+export function ServiceScreen() {
+  const t = useTheme();
+  const [make, setMake] = useState<Make>('vag');
+  const guide = PROCEDURES[make];
+
+  return (
+    <View>
+      <Title>Service reset</Title>
+      <Body muted style={{ marginTop: space.xs, marginBottom: space.lg }}>
+        Reset the service or oil change reminder after a service. These methods use the car's own buttons and menus, so no adapter is needed.
+      </Body>
+
+      <View accessibilityRole="tablist" style={[styles.segment, { backgroundColor: t.sunken }]}>
+        {MAKES.map((m) => {
+          const on = m.id === make;
+          return (
+            <Pressable
+              key={m.id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              onPress={() => setMake(m.id)}
+              style={[styles.segItem, on && { backgroundColor: t.surface, borderColor: t.border }]}
+            >
+              <Text style={[styles.segText, { color: on ? t.text : t.muted }]}>{m.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Body muted style={{ marginBottom: space.lg }}>{guide.intro}</Body>
+
+      {guide.methods.map((m, i) => (
+        <Card key={m.title}>
+          <Label>Method {i + 1}</Label>
+          <Text style={[styles.methodTitle, { color: t.text }]}>{m.title}</Text>
+          <Body muted style={{ marginBottom: space.md }}>{m.applies}</Body>
+          {m.steps.map((s, n) => (
+            <View key={s} style={styles.step}>
+              <View style={[styles.stepNum, { backgroundColor: t.accent }]}>
+                <Text style={[styles.stepNumText, { color: t.onAccent }]}>{n + 1}</Text>
+              </View>
+              <Body style={{ flex: 1 }}>{s}</Body>
+            </View>
+          ))}
+          {m.note ? <Body muted style={{ fontSize: 13, marginTop: space.sm }}>{m.note}</Body> : null}
+          <View style={[styles.source, { borderColor: t.border }]}>
+            <Pill text={m.source.official ? 'Maker source' : 'Third-party source'} tone={m.source.official ? 'ok' : 'neutral'} />
+            <Pressable accessibilityRole="link" onPress={() => Linking.openURL(m.source.url)} style={{ flex: 1 }}>
+              <Text style={[styles.link, { color: t.accentText }]}>{m.source.label}</Text>
+            </Pressable>
+          </View>
+        </Card>
+      ))}
+
+      <Body muted style={{ fontSize: 13 }}>
+        Steps vary by model and year. If a method does not work, check the owner manual for your car.
+      </Body>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  segment: { flexDirection: 'row', borderRadius: radius.md, padding: 3, marginBottom: space.lg },
+  segItem: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
+  segText: { fontSize: 14, fontWeight: '600' },
+  methodTitle: { fontSize: 19, fontWeight: '700', marginBottom: space.xs },
+  step: { flexDirection: 'row', gap: space.md, marginBottom: space.sm, alignItems: 'flex-start' },
+  stepNum: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  stepNumText: { fontSize: 13, fontWeight: '700' },
+  source: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, marginTop: space.md, paddingTop: space.md },
+  link: { fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
+});

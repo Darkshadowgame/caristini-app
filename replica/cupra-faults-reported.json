@@ -1,0 +1,38 @@
+[
+  {
+    "title": "Diverter valve split",
+    "symptoms": "Boost leak, loss of power",
+    "codes": ["P0299 (named by generic sources)"],
+    "cause": "The diaphragm in diverter valve 06F 145 710 G splits under boost",
+    "fix": "Fit the piston-type valve 06H 145 710 D, listed for the Leon Mk2 Cupra",
+    "confidence": "Low",
+    "source": { "label": "awesomegti, Genuine VAG / Pierburg piston diverter valve 06H 145 710D", "url": "https://www.awesomegti.com/shop-by-brand/vag/06h-145-710d" }
+  },
+  {
+    "title": "PCV valve failure",
+    "symptoms": "Whistle or honk under the bonnet at idle, rough running, power loss",
+    "codes": ["P2187", "P0171", "P0506", "P0507 (named by generic sources)"],
+    "cause": "The diaphragm or check valve in the PCV valve fails and boost leaks past it",
+    "fix": "Replace with the current revision, 06F 129 101 P or R",
+    "confidence": "Low",
+    "source": { "label": "Dap, 2.0T FSI PCV valve failure (Paul Barrett), 11 Oct 2017", "url": "https://www.shopdap.com/blog/2-0t-fsi-pcv-valve-failure-how-it-sounds-and-more.html" }
+  },
+  {
+    "title": "Carbon on the intake valves",
+    "symptoms": "Misfires from cold, worse fuel economy",
+    "codes": ["Misfire codes (not quoted)"],
+    "cause": "Direct injection: fuel does not wash the intake valves",
+    "fix": "Clean the valves by hand or with walnut media, intake manifold off",
+    "confidence": "Low",
+    "source": { "label": "Dap, Carbon build up and cold start misfires on 2.0T FSI (Paul Barrett), 11 Oct 2017", "url": "https://shopdap.com/carbon-build-up-and-cold-start-misfires-on-2-0t-fsi/" }
+  },
+  {
+    "title": "Overboost or boost surging (N75, wastegate, hoses)",
+    "symptoms": "Boost surging or limp mode",
+    "codes": ["P0234"],
+    "cause": "N75 boost control valve sticking or the wrong variant; also the wastegate, the MAP sensor or a hose",
+    "fix": "Test the N75, the wastegate rod and the hoses before replacing parts",
+    "confidence": "Low",
+    "source": { "label": "TorqueCars, Causes of the 2.0TFSI P0234 error (Waynne Smith)", "url": "https://www.torquecars.com/volkswagen/tfsi-overboost-error-p0234.php" }
+  }
+]

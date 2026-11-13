@@ -1,0 +1,343 @@
+# Every push runs the type-check and the tests. An over-the-air update is
+# published only where an EXPO_TOKEN secret exists; this repository has none,
+# and updates are published by the maintainer.
+#
+# (Earlier: every push published an over-the-air update.) The installable
+# apps below are built only on request (Actions > Build sideload apps > Run
+# workflow), because the macOS runner costs 10 times the Linux minutes and
+# every push building them used up the account's Actions allowance
+# (12 Nov 2026). Build them again when a native change needs a reinstall.
+#
+# Only the iOS app is built on request; the Android job is switched off.
+#
+# Builds installable test copies of Caristini without a Mac:
+#   - iOS:     an UNSIGNED .ipa (Caristini-unsigned.ipa). Sideloadly signs it on
+#              Windows with your own Apple ID when you install it.
+#   - Android: a release .apk signed with the template's debug keystore.
+#
+# Both builds are Release builds: the JavaScript is bundled into the app, so
+# they run on the phone without `npx expo start` on the PC.
+#
+# The ios/ and android/ folders are not in git (see .gitignore). Each job
+# generates them fresh with `npx expo prebuild` from app.json and the config
+# plugins (Continuous Native Generation).
+
+name: Build sideload apps
+
+on:
+  workflow_dispatch:
+  push:
+    # The local repo was created on "master". Listing both means the first
+    # push builds whichever name the default branch ends up with.
+    branches: [main, master]
+    # Doc-only changes do not need a new build (saves macOS minutes).
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "replica/**"
+      - "kb/**"
+      - "LICENSE"
+
+# A newer push cancels an update still running for the same branch; a
+# requested app build is kept apart, so a push does not cancel it.
+concurrency:
+  group: build-sideload-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # Explicit bash gives `-e -o pipefail`, so a failure in a pipe stops the step.
+    shell: bash
+
+env:
+  NODE_VERSION: "24"
+  # No key or token is built into the app. Anything compiled in (EXPO_PUBLIC_*)
+  # ends up readable in the update bundle, and the update address is public in
+  # app.json. The Claude API key and the findings upload token are typed into
+  # the app's Settings once and kept in the phone's keychain.
+  EXPO_PUBLIC_UPLOAD_REPO: Darkshadowgame/caristini-data
+  EXPO_PUBLIC_COMMIT: ${{ github.sha }}
+
+jobs:
+  # Over-the-air update: new JavaScript reaches installed copies on their next
+  # launch, without reinstalling. Native changes (new modules) still need a new
+  # IPA; the fingerprint runtime version keeps an update off builds it does not fit.
+  ota-update:
+    name: Publish over-the-air update
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Runs on a push, or by hand from Run workflow (an empty push changes no files
+    # and does not start the workflow).
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # One version number for the app, its updates and releases, kept in
+      # scripts/version.txt (1.0.<number>).
+      - name: Set version
+        run: |
+          V="1.0.$(tr -d '[:space:]' < scripts/version.txt)"
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
+          echo "EXPO_PUBLIC_APP_VERSION=$V" >> "$GITHUB_ENV"
+          echo "EXPO_PUBLIC_BUILD_DATE=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install npm packages
+        run: npm ci
+
+      # Nothing is published unless the code type-checks and every test passes.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm test -- --ci
+
+      - name: Publish update to the production channel
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "No EXPO_TOKEN secret; skipping the update."
+            exit 0
+          fi
+          # The app asks the "production" channel for updates. A channel is not
+          # made by publishing to a branch, so make it (once) and point it at
+          # the production branch before publishing.
+          npx --yes eas-cli@latest channel:create production --non-interactive || true
+          npx --yes eas-cli@latest update --branch production --message "$APP_VERSION: $(git log -1 --pretty=%s | cut -c1-90)" --non-interactive
+          npx --yes eas-cli@latest channel:edit production --branch production --non-interactive
+          npx --yes eas-cli@latest channel:view production --non-interactive
+
+  ios-unsigned:
+    name: iOS unsigned IPA
+    # Pinned to macOS 26 (Apple silicon). Its default Xcode must be 26.4 or
+    # later for Expo SDK 58; the "Check Xcode" step fails fast if not.
+    runs-on: macos-26
+    timeout-minutes: 60
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # One version number for the app, its updates and releases, kept in
+      # scripts/version.txt (1.0.<number>).
+      - name: Set version
+        run: |
+          V="1.0.$(tr -d '[:space:]' < scripts/version.txt)"
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
+          echo "EXPO_PUBLIC_APP_VERSION=$V" >> "$GITHUB_ENV"
+          echo "EXPO_PUBLIC_BUILD_DATE=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Check Xcode (Expo SDK 58 needs 26.4 or later)
+        run: |
+          xcodebuild -version
+          XCODE_VERSION=$(xcodebuild -version | awk '/^Xcode/ {print $2}')
+          MAJOR=$(echo "$XCODE_VERSION" | awk -F. '{print $1 + 0}')
+          MINOR=$(echo "$XCODE_VERSION" | awk -F. '{print $2 + 0}')
+          if [ "$MAJOR" -lt 26 ] || { [ "$MAJOR" -eq 26 ] && [ "$MINOR" -lt 4 ]; }; then
+            echo "::error::Xcode $XCODE_VERSION is older than 26.4, the minimum for Expo SDK 58."
+            exit 1
+          fi
+
+      - name: Install npm packages
+        run: npm ci
+
+      - name: Generate native iOS project (expo prebuild)
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      # Caches downloaded pod sources and the specs repo, not ios/Pods
+      # (prebuild --clean deletes ios/ on every run).
+      - name: Cache CocoaPods downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods/repos
+          key: pods-${{ runner.os }}-${{ hashFiles('package-lock.json', 'app.json') }}
+          restore-keys: |
+            pods-${{ runner.os }}-
+
+      - name: Install CocoaPods
+        working-directory: ios
+        run: |
+          pod --version
+          pod install
+
+      # Prebuild names the workspace and scheme after the app name ("Caristini").
+      # Read them from what was generated so a rename in app.json still works.
+      - name: Find workspace and scheme
+        run: |
+          WORKSPACE=$(find ios -maxdepth 1 -name '*.xcworkspace' | head -n 1)
+          PROJECT=$(find ios -maxdepth 1 -name '*.xcodeproj' | head -n 1)
+          if [ -z "$WORKSPACE" ] || [ -z "$PROJECT" ]; then
+            echo "::error::No .xcworkspace or .xcodeproj in ios/. Did prebuild or pod install fail?"
+            exit 1
+          fi
+          NAME=$(basename "$WORKSPACE" .xcworkspace)
+          # Project-level list holds only the app's own schemes (no Pods schemes).
+          # Prefer the scheme that matches the workspace name, else the first one.
+          SCHEME=$(xcodebuild -list -json -project "$PROJECT" | node -e '
+            let s = "";
+            process.stdin.on("data", d => (s += d)).on("end", () => {
+              const schemes = JSON.parse(s).project.schemes || [];
+              const want = process.argv[1];
+              console.log(schemes.includes(want) ? want : (schemes[0] || ""));
+            });' "$NAME")
+          if [ -z "$SCHEME" ]; then
+            echo "::error::No scheme found in $PROJECT."
+            exit 1
+          fi
+          echo "Workspace: $WORKSPACE"
+          echo "Scheme:    $SCHEME"
+          echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+          echo "SCHEME=$SCHEME" >> "$GITHUB_ENV"
+
+      # Release configuration bundles the JS (main.jsbundle) into the app.
+      # Code signing is switched off; Sideloadly signs the app at install time.
+      - name: Archive Release build (unsigned)
+        run: |
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/Caristini.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package Caristini-unsigned.ipa
+        run: |
+          APP=$(find "$RUNNER_TEMP/Caristini.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' | head -n 1)
+          if [ -z "$APP" ]; then
+            echo "::error::No .app found in the archive."
+            exit 1
+          fi
+          echo "Found $APP"
+          # Check the JS bundle is inside, so the app runs without a dev server.
+          if [ ! -f "$APP/main.jsbundle" ]; then
+            echo "::error::main.jsbundle is missing from $APP."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/Caristini.app"
+          cd "$RUNNER_TEMP/ipa"
+          # -y keeps symlinks inside embedded frameworks intact.
+          zip -qry "$GITHUB_WORKSPACE/Caristini-unsigned.ipa" Payload
+          ls -lh "$GITHUB_WORKSPACE/Caristini-unsigned.ipa"
+
+      # archive: false uploads the .ipa as-is (not wrapped in a zip).
+      # The artifact takes the file name: Caristini-unsigned.ipa.
+      - name: Upload IPA
+        uses: actions/upload-artifact@v7
+        with:
+          path: Caristini-unsigned.ipa
+          archive: false
+          if-no-files-found: error
+          retention-days: 7
+
+  android-apk:
+    name: Android release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Off: the owner uses an iPhone only, so the APK is not built (saves minutes,
+    # 13 Nov 2026). Set this to the workflow_dispatch test to build it again.
+    if: ${{ false }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # One version number for the app, its updates and releases, kept in
+      # scripts/version.txt (1.0.<number>).
+      - name: Set version
+        run: |
+          V="1.0.$(tr -d '[:space:]' < scripts/version.txt)"
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
+          echo "EXPO_PUBLIC_APP_VERSION=$V" >> "$GITHUB_ENV"
+          echo "EXPO_PUBLIC_BUILD_DATE=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # React Native recommends JDK 17.
+      - name: Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install npm packages
+        run: npm ci
+
+      - name: Generate native Android project (expo prebuild)
+        run: npx expo prebuild --platform android --clean --no-install
+
+      # Caches the Gradle home between runs. "basic" is the MIT-licensed cache
+      # provider (no extra terms to accept).
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      # The Expo template signs release builds with android/app/debug.keystore
+      # ("signingConfig signingConfigs.debug"), so the APK installs as-is.
+      # Fine for sideloading; not for the Play Store.
+      # Only arm64-v8a (64-bit ARM, used by modern phones) is built, to keep the
+      # APK small and the build quick. Delete the -P flag to build all 4 ABIs
+      # (needed for an old 32-bit phone or an x86 emulator).
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          path: android/app/build/outputs/apk/release/app-release.apk
+          archive: false
+          if-no-files-found: error
+          retention-days: 7
+
+  # The same version on GitHub: a tag and a release with both builds attached,
+  # after a requested app build.
+  release:
+    name: GitHub release
+    needs: [ios-unsigned]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Tag and release this version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APP_VERSION="1.0.$(tr -d '[:space:]' < scripts/version.txt)"
+          NOTES="$(git log -1 --pretty=%s)"
+          mkdir out
+          # Through the API the files come back whole; "gh run download" unpacks
+          # an IPA or APK as if it were a zip of files.
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[] | "\(.id) \(.name)"' |
+            while read -r id name; do gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "out/$name"; done
+          ls -la out
+          gh release create "v$APP_VERSION" out/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Caristini $APP_VERSION" --notes "${NOTES:-Manual build}"

@@ -1,0 +1,144 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { bluetoothUnavailableReason, FoundAdapter, looksLikeObd, scanForAdapters } from '../obd/bleTransport';
+import { useConnection } from '../state';
+import { space, useTheme } from '../theme';
+import { Body, Button, Card, Label, Notice, Pill, Row, Title } from '../ui';
+
+export function CarScreen({ goTo }: { goTo: (tab: 'codes' | 'service') => void }) {
+  const t = useTheme();
+  const conn = useConnection();
+  const bleBlocked = bluetoothUnavailableReason();
+  const [scanning, setScanning] = useState(false);
+  const [found, setFound] = useState<FoundAdapter[]>([]);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const stopRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => stopRef.current?.(), []);
+
+  const scan = async () => {
+    setScanError(null);
+    setFound([]);
+    setScanning(true);
+    try {
+      stopRef.current = await scanForAdapters((a) =>
+        setFound((list) => (list.some((x) => x.id === a.id) ? list : [...list, a])),
+      );
+      setTimeout(() => setScanning(false), 10000);
+    } catch (e) {
+      setScanning(false);
+      setScanError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const pick = async (a: FoundAdapter) => {
+    stopRef.current?.();
+    setScanning(false);
+    await conn.connectBluetooth(a.id, a.name);
+  };
+
+  const sorted = [...found].sort((a, b) => Number(looksLikeObd(b.name)) - Number(looksLikeObd(a.name)) || (b.rssi ?? -999) - (a.rssi ?? -999));
+  const v = conn.vehicle;
+
+  return (
+    <View>
+      <Title>Gauge</Title>
+      <Body muted style={{ marginTop: space.xs, marginBottom: space.xl }}>
+        Read and clear fault codes, watch live data, reset the service light.
+      </Body>
+
+      {conn.status === 'connected' && v ? (
+        <>
+          <Card>
+            <Label>Check engine light</Label>
+            <View style={styles.milRow}>
+              <View style={[styles.lamp, { backgroundColor: v.milOn ? t.accent : t.sunken, borderColor: v.milOn ? t.accent : t.border }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.big, { color: t.text }]}>{v.milOn ? 'On' : 'Off'}</Text>
+                <Body muted>
+                  {v.storedCount === 0 ? 'No stored fault codes' : `${v.storedCount} stored fault code${v.storedCount === 1 ? '' : 's'}`}
+                </Body>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.lg }}>
+              <Button label="See fault codes" onPress={() => goTo('codes')} style={{ flex: 1 }} />
+              <Button label="Service reset" variant="secondary" onPress={() => goTo('service')} style={{ flex: 1 }} />
+            </View>
+          </Card>
+
+          <Card>
+            <Label>Vehicle</Label>
+            <Row label="VIN" value={v.vin ?? 'Not reported'} />
+            <Row label="Protocol" value={v.protocol} />
+            <Row label="Adapter" value={`${conn.client?.transport.label ?? ''} · ${v.adapter}`} />
+            <Button label="Disconnect" variant="secondary" onPress={conn.disconnect} style={{ marginTop: space.md }} />
+          </Card>
+        </>
+      ) : (
+        <>
+          {conn.status === 'error' && conn.error ? <Notice tone="danger" text={conn.error} /> : null}
+
+          {conn.status === 'connecting' ? (
+            <Card>
+              <View style={styles.milRow}>
+                <ActivityIndicator color={t.accentText} />
+                <Body>{conn.step}…</Body>
+              </View>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <Label>Connect your adapter</Label>
+                <Body muted style={{ marginBottom: space.md }}>
+                  Plug the adapter into the OBD2 port under the dashboard, switch the ignition on, then scan. On iPhone the adapter must be Bluetooth LE.
+                </Body>
+                {bleBlocked ? (
+                  <Notice text={bleBlocked} />
+                ) : (
+                  <Button label={scanning ? 'Scanning…' : 'Scan for adapters'} busy={scanning} onPress={scan} />
+                )}
+                {scanError ? <Notice tone="danger" text={scanError} /> : null}
+                {sorted.map((a) => (
+                  <Pressable
+                    key={a.id}
+                    accessibilityRole="button"
+                    onPress={() => pick(a)}
+                    style={({ pressed }) => [styles.device, { borderColor: t.border, opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Body>{a.name}</Body>
+                      {a.rssi != null ? <Body muted style={{ fontSize: 13 }}>Signal {a.rssi} dBm</Body> : null}
+                    </View>
+                    {looksLikeObd(a.name) ? <Pill text="Likely OBD" tone="ok" /> : null}
+                  </Pressable>
+                ))}
+              </Card>
+
+              <Card>
+                <Label>No car to hand?</Label>
+                <Body muted style={{ marginBottom: space.md }}>
+                  Try every screen on a simulated car with three fault codes and the check engine light on.
+                </Body>
+                <Button label="Use simulated car" variant="secondary" onPress={conn.connectSimulated} />
+              </Card>
+            </>
+          )}
+        </>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  milRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  lamp: { width: 44, height: 44, borderRadius: 22, borderWidth: 2 },
+  big: { fontSize: 32, fontWeight: '700', letterSpacing: -0.5 },
+  device: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: space.md,
+    marginTop: space.sm,
+    gap: space.md,
+  },
+});

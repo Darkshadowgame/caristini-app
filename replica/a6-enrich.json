@@ -1,0 +1,211 @@
+{
+  "car": "2012 Audi A6 C7 (4G) 2.0 TDI, UK, MLB, VIN WAUZZZ4GXCN000000",
+  "researched": "2026-11-12",
+  "modules": [
+    {
+      "id": "vag-17",
+      "part": "4G8920950K",
+      "plainName": "Instrument cluster (J285)",
+      "what": "The dials, warning lamps and centre driver information display in front of the driver; its long coding also tells it which equipment the car has and how to show units, clock and chimes.",
+      "notes": "Coding is 11 bytes, the same length as the two labelled C7 clusters on vagcode.info (2012 A7 4G8 920 931 R, 2015 A6 4G8 920 984 K). UDS on this car, so the only module here the app can write with public information. Byte 0 bit 5 (right-hand drive) is set, which fits a UK car and suggests the C7 label layout applies. Multi-bit fields (seat belt, model, tyre circumference, fuel unit, consumption unit, language, country) are not decoded: the label pages show a fixed option name, not the value.",
+      "sources": [
+        { "label": "vagcode.info: C7 cluster labels (2012 A7, 4G8 920 931 R)", "url": "https://vagcode.info/en/components/31efa0ba8917e512d6ff0c1465c23711.html" },
+        { "label": "vagcode.info: C7 cluster labels (2015 A6, 4G8 920 984 K)", "url": "https://vagcode.info/en/components/79e2492b9e5083b6f9b4b18e4e3a06fc.html" },
+        { "label": "Ross-Tech wiki: Audi A6 (4G) instrument cluster", "url": "https://wiki.ross-tech.com/wiki/index.php/Audi_A6_(4G)_Instrument_Cluster" }
+      ]
+    },
+    {
+      "id": "vag-08",
+      "part": "4G0820043G",
+      "plainName": "Heating and air conditioning (Climatronic, J255)",
+      "what": "Runs the climate control: temperatures, fan, air flaps and the air conditioning request; on the C7 it also holds the heated seat step-down timers.",
+      "notes": "Coding is 5 bytes. The 2012 A7 (4G0 820 043 L, 3603007E24) and a 2015 A6 (4G0 820 043 AQ, 64812018C9) also have 5 bytes, but no public page labels the bits of this module. Only low-confidence hints exist (byte 1 bits 3 and 4 auxiliary heating or ventilation, byte 4 bit 6 climate styles blocked on an A8 D4), so no setting is offered. Heated seat timers are adaptation channels, not coding (see vag-tweaks.md A6C7-049).",
+      "sources": [
+        { "label": "vagcode.info: VCDS log of a 2012 A7 (08 coding)", "url": "https://vagcode.info/en/brands/audi/a7/4GA/log-180.html" },
+        { "label": "vagcode.info: 08 Auto HVAC 4G0 820 043 AQ, 2015 A6 (no labels)", "url": "https://vagcode.info/en/components/7eff3f8a014da3768037ed68e984f023.html" },
+        { "label": "AudiWorld: A8 D4 HVAC styles thread", "url": "https://www.audiworld.com/forums/a8-s8-d4-platform-discussion-190/hvac-styles-3003963/" }
+      ]
+    },
+    {
+      "id": "vag-10",
+      "part": "4H0919475L",
+      "plainName": "Parking aid (Audi parking system, J446)",
+      "what": "Reads the ultrasonic parking sensors, sounds the warning tones and can send the parking graphic to the MMI screen.",
+      "notes": "Coding is 3 bytes, the same as the 2012 A7 (4H0 919 475 R, 992B03) and a 2015 A6 (4H0 919 475 AA, A8C105). No C7 label page exists. The MMI graphic bit (byte 0 bit 4, login 71679) comes from vag-coding.net guides for the A4 B8 and Q5 8R; vag-coding.net's own A6 C7 and A7 C7 pages give an older 7-digit short coding for address 76, which does not fit this car. The switch-off speed is an adaptation: vag-coding.net says channel 233, 0 to 20 km/h; the C7 community list says channel 23.",
+      "sources": [
+        { "label": "vag-coding.net: A4 (B8) parking aid display on MMI", "url": "https://www.vag-coding.net/audi/a4-b8/a4-b8-parking-aid-display-on-mmi" },
+        { "label": "vag-coding.net: Q5 (8R) parking aid display on MMI", "url": "https://www.vag-coding.net/audi/q5-8r/q5-8r-parking-aid-display-on-mmi/" },
+        { "label": "vag-coding.net: A6 (C7) speed of radar deactivation", "url": "https://www.vag-coding.net/audi/a6-c7/a6-c7-speed-of-radar-deactivation-or-reversing-camera/" },
+        { "label": "vagcode.info: 10 ParkSteer Assist 4H0 919 475 R, 2012 A7 (no labels)", "url": "https://vagcode.info/en/components/42b4df9042bed0f277ed1aa5ba4830cb.html" }
+      ]
+    },
+    {
+      "id": "vag-19",
+      "part": "4G0907468F",
+      "plainName": "CAN gateway (J533)",
+      "what": "Links the car's separate data networks so the modules can talk to each other, holds the list of fitted modules and the battery data, and is the diagnostic entry point.",
+      "notes": "Coding is 5 bytes (00CD074400). Two 2012 A7 gateways of the same family (4G0 907 468 G and E, software 0214 and 0213) are coded 00CD077D00; only byte 3 differs from this car (44 against 7D). No public page names any bit of this coding. The installed-module list is a separate gateway function (see vag-sources.md section 1). No settings found.",
+      "sources": [
+        { "label": "vagcode.info: 19 gateway 4G0 907 468 G, 2012 A7 (no labels)", "url": "https://vagcode.info/en/components/3e3806d864ed0d29fb5ca0845ec080d6.html" },
+        { "label": "vagcode.info: 19 gateway 4G0 907 468 E, 2012 A7 (no labels)", "url": "https://vagcode.info/en/components/65f610a86f69b20022e25bcbba50f787.html" },
+        { "label": "Ross-Tech wiki: battery replacement (gateway 4G0 907 468 E battery channels)", "url": "https://wiki.ross-tech.com/wiki/index.php/Battery_Replacement" }
+      ]
+    },
+    {
+      "id": "vag-09",
+      "part": "",
+      "plainName": "Central electronics (body control module 1, J519)",
+      "what": "Switches the exterior lights, daytime running lights, indicators, wipers and washers, and the interior and footwell lighting.",
+      "notes": "Part number and coding not read from this car. The 2012 A7 has 4H0 907 063 BN with 30 bytes of coding. KWP2000 on TP2.0 on the C7, so writes need the KWP route. Existing app items cover DRL, fogs, footwell lights and tourist mode. vag-coding.net confirms tourist mode in MMI at byte 4 bit 6 (already in items.ts as c7-tourist). A highway light bit (above 140 km/h) is published but in a sub-coding, so it is not offered.",
+      "sources": [
+        { "label": "Ross-Tech wiki: A4/A5 (8K/8T) tweaks, BCM1 (MLB sibling)", "url": "https://wiki.ross-tech.com/wiki/index.php/Audi_A4/S4/A5/S5_(8K/8T)_Tweaks" },
+        { "label": "vag-coding.net: A6 (C7) display travel mode on MMI", "url": "https://www.vag-coding.net/audi/a6-c7/a6-c7-display-travel-mode-on-mmi/" },
+        { "label": "vagcode.info: VCDS log of a 2012 A7", "url": "https://vagcode.info/en/brands/audi/a7/4GA/log-180.html" }
+      ]
+    },
+    {
+      "id": "vag-46",
+      "part": "",
+      "plainName": "Comfort system (central convenience, body control module 2, J393)",
+      "what": "Runs central locking, the alarm, the key remote, comfort opening and closing of the windows and sunroof, and the emergency brake flashing.",
+      "notes": "Part number and coding not read from this car. The 2012 A7 has 4H0 907 064 BP with 30 bytes of coding. KWP2000 on TP2.0 on the C7. No new byte or bit was found beyond vag-tweaks.md and carista-a6-map.md.",
+      "sources": [
+        { "label": "Ross-Tech wiki: A4/A5 (8K/8T) tweaks, BCM2 (MLB sibling)", "url": "https://wiki.ross-tech.com/wiki/index.php/Audi_A4/S4/A5/S5_(8K/8T)_Tweaks" },
+        { "label": "vagcode.info: VCDS log of a 2012 A7", "url": "https://vagcode.info/en/brands/audi/a7/4GA/log-180.html" }
+      ]
+    },
+    {
+      "id": "vag-42",
+      "part": "",
+      "plainName": "Driver door control unit (J386)",
+      "what": "Runs the driver door window, lock, mirror adjust, fold and heat, the door switch panel and the door lights.",
+      "notes": "Part number and coding not read from this car. The 2012 A7 has 4G8 959 793 D with 12 bytes (011F56225E00628202080413); its page has no bit labels. KWP2000 on TP2.0 on the C7. New: door ambient lighting at byte 1 bit 1 (retrofit lamps needed).",
+      "sources": [
+        { "label": "vag-coding.net: A6 (C7) activate door mood lighting (retrofit)", "url": "https://www.vag-coding.net/audi/a6-c7/a6-c7-activate-door-mood-lighting-retrofit/" },
+        { "label": "vagcode.info: 42 door 4G8 959 793 D, 2012 A7 (no labels)", "url": "https://vagcode.info/en/components/764ba8151ab13f2dbbf5682e9b01d033.html" }
+      ]
+    },
+    {
+      "id": "vag-52",
+      "part": "",
+      "plainName": "Front passenger door control unit (J387)",
+      "what": "Runs the passenger door window, lock, mirror adjust, fold, heat and reverse dip, and the door lights.",
+      "notes": "Part number and coding not read from this car. The 2012 A7 has 4G8 959 792 E with 12 bytes (011F56225E00628202080402); its page has no bit labels. KWP2000 on TP2.0 on the C7. New: door ambient lighting at byte 1 bit 1 (retrofit lamps needed).",
+      "sources": [
+        { "label": "vag-coding.net: A6 (C7) activate door mood lighting (retrofit)", "url": "https://www.vag-coding.net/audi/a6-c7/a6-c7-activate-door-mood-lighting-retrofit/" },
+        { "label": "vagcode.info: 52 door 4G8 959 792 E, 2012 A7 (no labels)", "url": "https://vagcode.info/en/components/38fa099cd0a720ea58ef8e67687f83a6.html" }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "id": "a6e-speed-warning-120",
+      "title": "Chime at 120 km/h",
+      "summary": "A chime sounds when the car passes 120 km/h (75 mph).",
+      "category": "Warnings and chimes",
+      "platforms": ["MLB"],
+      "module": "vag-17",
+      "length": 11,
+      "byte": 0,
+      "bits": [6],
+      "confidence": "high",
+      "note": "Label \"Speed Warning at 120 kph (75 mph) active\" on two C7 clusters and two MLB sibling clusters; vag-coding.net (A4 B8) names the same option in byte 0. No C7 owner report. Byte 0 bits 2 to 4 are the seat belt field and bit 5 is right-hand drive: leave them unchanged. Currently off on this car.",
+      "sources": [
+        { "label": "vagcode.info: C7 cluster labels (2012 A7)", "url": "https://vagcode.info/en/components/31efa0ba8917e512d6ff0c1465c23711.html" },
+        { "label": "vagcode.info: C7 cluster labels (2015 A6)", "url": "https://vagcode.info/en/components/79e2492b9e5083b6f9b4b18e4e3a06fc.html" },
+        { "label": "vag-coding.net: A4 (B8) 120 km/h overrun warning", "url": "https://www.vag-coding.net/audi/a4-b8/a4-b8-120-km-h-overrun-warning" },
+        { "label": "vagcode.info: A4 8K cluster labels (MLB sibling)", "url": "https://vagcode.info/components/8aad58ed4a86c16b9a2486eb144760f0.html" }
+      ]
+    },
+    {
+      "id": "a6e-start-hint",
+      "title": "Engine start hint in the display",
+      "summary": "The cluster shows a hint such as \"Press clutch to start engine\" before starting.",
+      "category": "Instrument cluster",
+      "platforms": ["MLB"],
+      "module": "vag-17",
+      "length": 11,
+      "byte": 1,
+      "bits": [1],
+      "confidence": "medium",
+      "note": "Label \"Engine Start Note\" on the C7 and MLB sibling cluster labels (one label source). No owner report. Currently on on this car.",
+      "sources": [
+        { "label": "vagcode.info: C7 cluster labels (2012 A7)", "url": "https://vagcode.info/en/components/31efa0ba8917e512d6ff0c1465c23711.html" },
+        { "label": "vagcode.info: C7 cluster labels (2015 A6)", "url": "https://vagcode.info/en/components/79e2492b9e5083b6f9b4b18e4e3a06fc.html" }
+      ]
+    },
+    {
+      "id": "a6e-ops-mmi",
+      "title": "Parking sensor graphic on the MMI",
+      "summary": "The MMI screen shows the parking sensor picture while the parking aid is active.",
+      "category": "Parking",
+      "platforms": ["MLB"],
+      "module": "vag-10",
+      "byte": 0,
+      "bits": [4],
+      "confidence": "medium",
+      "note": "Label \"Optical illustration active\", login 71679, from vag-coding.net guides for the A4 B8 (phase 1) and Q5 8R (phase 1), one publisher; coding length not stated. Not confirmed on the C7 module 4H0 919 475: vag-coding.net's A6 C7 page gives an older short coding instead. The 2012 A7 has the bit set; this car has it clear. Needs the MMI.",
+      "sources": [
+        { "label": "vag-coding.net: A4 (B8) parking aid display on MMI", "url": "https://www.vag-coding.net/audi/a4-b8/a4-b8-parking-aid-display-on-mmi" },
+        { "label": "vag-coding.net: Q5 (8R) parking aid display on MMI", "url": "https://www.vag-coding.net/audi/q5-8r/q5-8r-parking-aid-display-on-mmi/" }
+      ]
+    },
+    {
+      "id": "a6e-door-ambient-42",
+      "title": "Door ambient lighting (driver door)",
+      "summary": "Lets the driver door ambient lamps work with the mood lighting.",
+      "category": "Lights",
+      "platforms": ["MLB"],
+      "module": "vag-42",
+      "byte": 1,
+      "bits": [1],
+      "confidence": "medium",
+      "note": "For retrofitted door lamps; set in every door module, after the 09 ambient lighting bit (cat-c7-footwell-lights). A 2012 A7 and a 2015 and a 2016 A6 (vagcode.info logs 180, 171, 170) all have driver door byte 1 = 1F (bit set). 42 is KWP2000 on TP2.0 on the C7.",
+      "sources": [
+        { "label": "vag-coding.net: A6 (C7) activate door mood lighting (retrofit)", "url": "https://www.vag-coding.net/audi/a6-c7/a6-c7-activate-door-mood-lighting-retrofit/" },
+        { "label": "vagcode.info: VCDS log of a 2012 A7", "url": "https://vagcode.info/en/brands/audi/a7/4GA/log-180.html" }
+      ]
+    },
+    {
+      "id": "a6e-door-ambient-52",
+      "title": "Door ambient lighting (passenger door)",
+      "summary": "Lets the passenger door ambient lamps work with the mood lighting.",
+      "category": "Lights",
+      "platforms": ["MLB"],
+      "module": "vag-52",
+      "byte": 1,
+      "bits": [1],
+      "confidence": "medium",
+      "note": "For retrofitted door lamps; set in every door module, after the 09 ambient lighting bit (cat-c7-footwell-lights). A 2012 A7 and a 2015 and a 2016 A6 (vagcode.info logs 180, 171, 170) all have passenger door byte 1 = 1F (bit set). 52 is KWP2000 on TP2.0 on the C7.",
+      "sources": [
+        { "label": "vag-coding.net: A6 (C7) activate door mood lighting (retrofit)", "url": "https://www.vag-coding.net/audi/a6-c7/a6-c7-activate-door-mood-lighting-retrofit/" },
+        { "label": "vagcode.info: VCDS log of a 2012 A7", "url": "https://vagcode.info/en/brands/audi/a7/4GA/log-180.html" }
+      ]
+    }
+  ],
+  "decoded": [
+    { "module": "vag-17", "setting": "Right-hand drive (equipment)", "state": "on", "byte": 0, "bits": [5], "source": "vagcode.info C7 cluster labels (2012 A7, 2015 A6)" },
+    { "module": "vag-17", "setting": "Chime at 120 km/h (a6e-speed-warning-120)", "state": "off", "byte": 0, "bits": [6], "source": "vagcode.info C7 cluster labels; vag-coding.net A4 B8" },
+    { "module": "vag-17", "setting": "Brake warning lamp, North America or Australia style", "state": "off", "byte": 0, "bits": [7], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Needle sweep (c7-needle-sweep)", "state": "on", "byte": 1, "bits": [0], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Engine start hint (a6e-start-hint)", "state": "on", "byte": 1, "bits": [1], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Driver information display active (equipment)", "state": "on", "byte": 1, "bits": [2], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Lap timer (c7-lap-timer)", "state": "off", "byte": 1, "bits": [3], "source": "vagcode.info C7 cluster labels; vag-coding.net A6 C7 oil temperature via lap timer" },
+    { "module": "vag-17", "setting": "Cruise control installed (C7 label) or shift suggestion (sibling labels and vag-coding.net): sources disagree", "state": "on", "byte": 1, "bits": [5], "source": "vagcode.info C7 cluster labels against vag-coding.net A6 C7 gearshift recommendation and 8K/8R labels" },
+    { "module": "vag-17", "setting": "Tyre pressure monitoring installed (cat-c7-tpms-installed)", "state": "on", "byte": 4, "bits": [0], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Electric parking brake installed (equipment)", "state": "on", "byte": 4, "bits": [1], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Adaptive cruise control installed (equipment)", "state": "off", "byte": 4, "bits": [2], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Swivelling headlights installed (equipment)", "state": "off", "byte": 4, "bits": [3], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Dynamic ride control installed (equipment)", "state": "off", "byte": 4, "bits": [4], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Dynamic steering installed (equipment)", "state": "off", "byte": 4, "bits": [5], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Lane assist installed (equipment)", "state": "off", "byte": 4, "bits": [6], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Quattro sport differential installed (equipment)", "state": "off", "byte": 4, "bits": [7], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "Electronic power steering installed (C7 label; 8K/8R label says adaptive air suspension)", "state": "on", "byte": 5, "bits": [0], "source": "vagcode.info C7 cluster labels against 8K/8R labels" },
+    { "module": "vag-17", "setting": "Rear spoiler installed (equipment)", "state": "off", "byte": 5, "bits": [1], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-17", "setting": "12-hour clock (cat-c7-12h-clock)", "state": "on", "byte": 6, "bits": [7], "source": "vagcode.info C7 cluster labels (0 = 24 h, 1 = 12 h)" },
+    { "module": "vag-17", "setting": "Brake pad wear warning (not offered)", "state": "off", "byte": 10, "bits": [0], "source": "vagcode.info C7 cluster labels" },
+    { "module": "vag-08", "setting": "Auxiliary heating or ventilation (low confidence)", "state": "off", "byte": 1, "bits": [3, 4], "source": "Audizine C7 list (search text) and Audi SG list" },
+    { "module": "vag-08", "setting": "Climate styles blocked (low confidence, A8 D4 only)", "state": "off", "byte": 4, "bits": [6], "source": "AudiWorld A8 D4 HVAC styles thread" },
+    { "module": "vag-10", "setting": "Parking sensor graphic on the MMI (a6e-ops-mmi)", "state": "off", "byte": 0, "bits": [4], "source": "vag-coding.net A4 B8 and Q5 8R" }
+  ]
+}

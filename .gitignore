@@ -1,0 +1,60 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+dist-web/
+
+# Screen recordings for review (never push)
+*.mp4
+*.MP4
+*.mov
+*.MOV
+*.old
+
+# Frame-by-frame notes from screen recordings (personal details, keep local)
+replica/recording-review/
+captures/
+
+# Keys the owner keeps beside the project: never committed.
+*API key*.txt
+*api key*.txt
+*api_key*
+*.secret

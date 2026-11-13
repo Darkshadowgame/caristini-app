@@ -1,0 +1,85 @@
+import { StatusBar } from 'expo-status-bar';
+import React, { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { CarScreen } from './src/screens/CarScreen';
+import { CodesScreen } from './src/screens/CodesScreen';
+import { LiveScreen } from './src/screens/LiveScreen';
+import { ServiceScreen } from './src/screens/ServiceScreen';
+import { ConnectionProvider, useConnection } from './src/state';
+import { space, useTheme } from './src/theme';
+
+type Tab = 'car' | 'codes' | 'live' | 'service';
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'car', label: 'Car' },
+  { id: 'codes', label: 'Codes' },
+  { id: 'live', label: 'Live' },
+  { id: 'service', label: 'Service' },
+];
+
+function Shell() {
+  const t = useTheme();
+  const conn = useConnection();
+  const [tab, setTab] = useState<Tab>('car');
+
+  return (
+    <SafeAreaView style={[styles.root, { backgroundColor: t.bg }]} edges={['top', 'left', 'right']}>
+      <StatusBar style="auto" />
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.column}>
+          {tab === 'car' && <CarScreen goTo={setTab} />}
+          {tab === 'codes' && <CodesScreen />}
+          {tab === 'live' && <LiveScreen active={tab === 'live'} />}
+          {tab === 'service' && <ServiceScreen />}
+        </View>
+      </ScrollView>
+      <SafeAreaView edges={['bottom']} style={[styles.tabbar, { backgroundColor: t.surface, borderColor: t.border }]}>
+        <View accessibilityRole="tablist" style={styles.tabRow}>
+          {TABS.map((x) => {
+            const on = x.id === tab;
+            const badge = x.id === 'codes' && conn.vehicle?.milOn;
+            return (
+              <Pressable
+                key={x.id}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={badge ? `${x.label}, check engine light on` : x.label}
+                onPress={() => setTab(x.id)}
+                style={styles.tab}
+              >
+                <View style={[styles.indicator, { backgroundColor: on ? t.accent : 'transparent' }]} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[styles.tabText, { color: on ? t.text : t.muted }]}>{x.label}</Text>
+                  {badge ? <View style={[styles.dot, { backgroundColor: t.accent }]} /> : null}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </SafeAreaView>
+    </SafeAreaView>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ConnectionProvider>
+        <Shell />
+      </ConnectionProvider>
+    </SafeAreaProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  content: { paddingHorizontal: space.lg, paddingTop: space.lg, paddingBottom: space.xxl },
+  column: { width: '100%', maxWidth: 560, alignSelf: 'center' },
+  tabbar: { borderTopWidth: StyleSheet.hairlineWidth },
+  tabRow: { flexDirection: 'row', maxWidth: 560, width: '100%', alignSelf: 'center' },
+  tab: { flex: 1, alignItems: 'center', paddingBottom: space.md, minHeight: 52 },
+  indicator: { height: 3, width: 28, borderRadius: 2, marginBottom: space.sm },
+  tabText: { fontSize: 14, fontWeight: '600' },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+});

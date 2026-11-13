@@ -1,0 +1,166 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { describeDtc } from '../obd/dtc';
+import { FaultCodes, FreezeFrame } from '../obd/elm';
+import { useConnection } from '../state';
+import { space, useTheme } from '../theme';
+import { Body, Button, Card, ConfirmSheet, Label, Notice, Pill, Row, Title } from '../ui';
+
+const SECTIONS: { key: keyof FaultCodes; title: string; help: string }[] = [
+  { key: 'stored', title: 'Stored', help: 'Confirmed faults. These turn the check engine light on.' },
+  { key: 'pending', title: 'Pending', help: 'Seen once, not yet confirmed. They may become stored codes.' },
+  { key: 'permanent', title: 'Permanent', help: 'Only the car can clear these, after it sees the fault is fixed over normal driving.' },
+];
+
+export function CodesScreen() {
+  const t = useTheme();
+  const conn = useConnection();
+  const [codes, setCodes] = useState<FaultCodes | null>(null);
+  const [freeze, setFreeze] = useState<FreezeFrame | null>(null);
+  const [busy, setBusy] = useState<'read' | 'clear' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+
+  const read = useCallback(async () => {
+    if (!conn.client) return;
+    setBusy('read');
+    setError(null);
+    try {
+      setCodes(await conn.client.readFaultCodes());
+      setFreeze(await conn.client.readFreezeFrame());
+      await conn.refreshStatus();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conn.client]);
+
+  useEffect(() => {
+    if (conn.client) read();
+    else setCodes(null);
+  }, [conn.client, read]);
+
+  const clear = async () => {
+    setConfirm(false);
+    if (!conn.client) return;
+    setBusy('clear');
+    setError(null);
+    setMessage(null);
+    try {
+      await conn.client.clearFaultCodes();
+      await conn.refreshStatus();
+      setCodes(await conn.client.readFaultCodes());
+      setFreeze(await conn.client.readFreezeFrame());
+      setMessage('Codes cleared and the check engine light is off. If the fault is still there, the light will come back.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!conn.client) {
+    return (
+      <View>
+        <Title>Fault codes</Title>
+        <Notice text="Connect an adapter or the simulated car on the Car tab first." />
+      </View>
+    );
+  }
+
+  const clearable = (codes?.stored.length ?? 0) + (codes?.pending.length ?? 0) > 0 || conn.vehicle?.milOn;
+
+  return (
+    <View>
+      <Title style={{ marginBottom: space.lg }}>Fault codes</Title>
+      {error ? <Notice tone="danger" text={error} /> : null}
+      {message ? <Notice text={message} /> : null}
+
+      {SECTIONS.map((s) => {
+        const list = codes?.[s.key] ?? [];
+        return (
+          <Card key={s.key}>
+            <View style={styles.head}>
+              <Label style={{ marginBottom: 0 }}>{s.title}</Label>
+              <Text style={[styles.count, { color: list.length ? t.accentText : t.muted }]}>{codes ? list.length : '–'}</Text>
+            </View>
+            <Body muted style={{ fontSize: 13, marginBottom: list.length ? space.sm : 0 }}>{s.help}</Body>
+            {list.map((code) => {
+              const d = describeDtc(code);
+              return (
+                <View key={code} style={[styles.code, { borderColor: t.border }]}>
+                  <Text selectable style={[styles.codeId, { color: t.text }]}>{code}</Text>
+                  <Body muted={!d.known} style={{ flex: 1 }}>{d.text}</Body>
+                </View>
+              );
+            })}
+          </Card>
+        );
+      })}
+
+      {freeze ? (
+        <Card>
+          <Label>Freeze frame</Label>
+          <Body muted style={{ fontSize: 13, marginBottom: space.sm }}>
+            Conditions the engine saved when {freeze.code} was stored. Useful to see whether it happened cold, at idle or under load.
+          </Body>
+          {freeze.values.map((v) => (
+            <Row key={v.pid} label={v.label} value={`${v.value.toFixed(v.decimals)} ${v.unit}`} />
+          ))}
+        </Card>
+      ) : null}
+
+      {conn.vehicle && conn.vehicle.monitors.length ? (
+        <Card>
+          <View style={styles.head}>
+            <Label style={{ marginBottom: 0 }}>Emissions readiness</Label>
+            <Pill
+              text={conn.vehicle.monitors.some((m) => m.state === 'incomplete') ? 'Not ready' : 'Ready'}
+              tone={conn.vehicle.monitors.some((m) => m.state === 'incomplete') ? 'danger' : 'ok'}
+            />
+          </View>
+          <Body muted style={{ fontSize: 13, marginBottom: space.sm }}>
+            Self-tests the car runs while driving. All must be complete to pass an emissions test (MOT). They reset when codes are cleared.
+          </Body>
+          {conn.vehicle.monitors.map((m) => (
+            <Row key={m.name} label={m.name} value={m.state === 'complete' ? 'Complete' : 'Incomplete'} />
+          ))}
+        </Card>
+      ) : null}
+
+      <View style={{ gap: space.sm }}>
+        <Button label="Read again" variant="secondary" busy={busy === 'read'} disabled={!!busy} onPress={read} />
+        <Button
+          label="Clear codes and check engine light"
+          variant="danger"
+          busy={busy === 'clear'}
+          disabled={!!busy || !clearable}
+          onPress={() => setConfirm(true)}
+        />
+      </View>
+
+      <ConfirmSheet
+        visible={confirm}
+        title="Clear fault codes?"
+        lines={[
+          'Ignition on, engine off.',
+          'This also resets the readiness monitors. An emissions test (MOT) can fail until you have driven enough for them to complete.',
+          'If the fault is still there, the light comes back. Permanent codes stay until the car clears them.',
+        ]}
+        confirmLabel="Clear"
+        onConfirm={clear}
+        onCancel={() => setConfirm(false)}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.xs },
+  count: { fontSize: 20, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  code: { flexDirection: 'row', gap: space.md, paddingVertical: space.sm, borderTopWidth: StyleSheet.hairlineWidth, alignItems: 'flex-start' },
+  codeId: { width: 64, fontSize: 15, fontWeight: '700', fontFamily: 'monospace' },
+});
