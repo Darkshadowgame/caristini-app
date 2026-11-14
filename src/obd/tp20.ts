@@ -64,6 +64,10 @@ export class Tp20Session {
   // Sequence number of the last module frame read. The module repeats a frame
   // when our ACK is late (it waits 100 ms); a repeat is ACKed again, not read twice.
   private lastRx = -1;
+  // Module frames heard after the last answer was complete. Some modules send a
+  // second message after 1A 9B (the 2007 Leon's comfort and central electronics,
+  // logs of 14 Nov 2026); it must be ACKed or the module ignores the next request.
+  private carry: Frame[] = [];
 
   constructor(
     private send: Transport['send'],
@@ -77,9 +81,12 @@ export class Tp20Session {
     return raw;
   }
 
-  // Raw CAN with variable frame length, headers on (VAG Blocks recipe).
+  // Raw CAN with variable frame length, headers on (VAG Blocks recipe). The
+  // adapter listens 200 ms after each frame (ATST32): with 100 ms the 2007
+  // Leon's body modules answered after the adapter had stopped listening and
+  // the start of their long-coding answers was lost (logs of 14 Nov 2026).
   async enter(): Promise<void> {
-    for (const c of ['ATPBC001', 'ATSPB', 'ATH1', 'ATAT0', 'ATST19', 'ATCFC0']) await this.cmd(c);
+    for (const c of ['ATPBC001', 'ATSPB', 'ATH1', 'ATAT0', 'ATST32', 'ATCFC0']) await this.cmd(c);
   }
 
   async leave(): Promise<void> {
@@ -102,6 +109,7 @@ export class Tp20Session {
   async open(address: number): Promise<boolean> {
     this.txSeq = 0;
     this.lastRx = -1;
+    this.carry = [];
     await this.cmd('ATSH200');
     await this.cmd(`ATCRA${hex3(0x200 + address)}`);
     let busy = 0;
@@ -143,7 +151,33 @@ export class Tp20Session {
   }
 
   // One KWP2000 request and its complete answer, ACKing as the module asks.
+  // Asks once more when part of the answer was lost or the module dropped the
+  // request while it waited for an ACK.
   async request(payload: number[], waitMs = 5000): Promise<number[]> {
+    const first = await this.exchange(payload, waitMs);
+    if (first !== 'again') return first;
+    const second = await this.exchange(payload, waitMs);
+    if (second !== 'again') return second;
+    throw new ObdError("Part of the module's answer was lost.");
+  }
+
+  // ACKs module frames left over from the last answer and drops their data.
+  private async drain(): Promise<void> {
+    let queue = this.carry;
+    this.carry = [];
+    for (let guard = 0; queue.length && guard < 20; guard++) {
+      const f = queue.shift()!;
+      if (f.id !== this.rx || !f.data.length) continue;
+      const op = f.data[0] >> 4;
+      const seq = f.data[0] & 0x0f;
+      if (op > 3) continue;
+      this.lastRx = seq;
+      if (op === 0 || op === 1) queue = [...queue, ...(await this.frames(`B${((seq + 1) & 0x0f).toString(16).toUpperCase()}`, 600))];
+    }
+  }
+
+  private async exchange(payload: number[], waitMs: number): Promise<number[] | 'again'> {
+    await this.drain();
     // The first frame carries the length and 5 bytes, later frames 7 bytes.
     // Frames before the last (op 2) want no ACK; the last (op 1) does. A real
     // Carista adapter log paces them about 130 ms apart (replica/kwp-write-sources.md F27).
@@ -163,6 +197,11 @@ export class Tp20Session {
     }
     const body: number[] = [];
     let length = -1;
+    // A gap in the module's sequence numbers: frames went by while the adapter
+    // was not listening, so this message is incomplete.
+    let lost = false;
+    // A message that was not the answer to this request was heard.
+    let stray = false;
     let deadline = Date.now() + waitMs;
     while (Date.now() < deadline) {
       while (queue.length) {
@@ -177,16 +216,24 @@ export class Tp20Session {
           if (op === 0 || op === 1) queue.push(...(await ack()));
           continue;
         }
+        if (this.lastRx >= 0 && seq !== ((this.lastRx + 1) & 0x0f)) lost = true;
         this.lastRx = seq;
-        if (length < 0) {
-          length = ((f.data[1] << 8) | f.data[2]) & 0x0fff;
-          body.push(...f.data.slice(3));
-        } else {
-          body.push(...f.data.slice(1));
+        if (!lost) {
+          if (length < 0) {
+            length = ((f.data[1] << 8) | f.data[2]) & 0x0fff;
+            body.push(...f.data.slice(3));
+          } else {
+            body.push(...f.data.slice(1));
+          }
         }
         // ACK with the next sequence number; sending it also listens for more frames.
         if (op === 0 || op === 1) queue.push(...(await ack()));
-        if ((op === 1 || op === 3) && length >= 0 && body.length >= length) {
+        const end = op === 1 || op === 3;
+        if (end && lost) {
+          this.carry = queue;
+          return 'again';
+        }
+        if (end && length >= 0 && body.length >= length) {
           const message = body.slice(0, length);
           body.length = 0;
           length = -1;
@@ -195,14 +242,41 @@ export class Tp20Session {
             deadline = Date.now() + Math.max(waitMs, 3000);
             continue;
           }
+          // Not the answer to this request: an extra message, ACKed above.
+          if (!answers(payload, message)) {
+            stray = true;
+            deadline = Math.min(deadline, Date.now() + 1500);
+            continue;
+          }
+          this.carry = queue;
           return message;
         }
       }
       // Keep the channel alive and give the adapter a chance to hear the module.
       queue.push(...(await this.frames('A3', 600)));
     }
+    if (stray || lost) return 'again';
     throw new ObdError('The module did not finish its answer.');
   }
+}
+
+// A KWP answer belongs to a request when it is the positive answer to its
+// service or a refusal of it.
+function answers(payload: number[], message: number[]): boolean {
+  return message[0] === payload[0] + 0x40 || (message[0] === 0x7f && message[1] === payload[0]);
+}
+
+// Fault memory over KWP2000. Most modules take 18 02 FF 00; the 2007 Leon's
+// engine (MED9.1) refused that form with 7F 18 12 (log of 14 Nov 2026), so the
+// other two common forms are tried before giving up. Untested on that engine.
+export async function kwpReadFaults(s: Tp20Session): Promise<Tp20Fault[]> {
+  let r = await s.request([0x18, 0x02, 0xff, 0x00]);
+  for (const form of [[0x18, 0x00, 0xff, 0x00], [0x18, 0x02, 0x00, 0x00]]) {
+    if (!(r[0] === 0x7f && r[2] === 0x12)) break;
+    r = await s.request(form);
+  }
+  if (r[0] === 0x7f) throw new ObdError(describeKwp(r));
+  return kwpFaults(r);
 }
 
 export function kwpFaults(msg: number[]): Tp20Fault[] {
@@ -432,3 +506,20 @@ export async function tp20Identity(s: Tp20Session): Promise<string> {
   };
   return [await read(0x87), await read(0x97)].filter(Boolean).join(' ');
 }
+
+// Workshop names of VW address words, for modules the gateway lists that the
+// app has no entry for (the 2007 Leon's gateway listed 25, 62 and 72).
+export const VAG_ADDRESS_NAMES: Record<string, string> = {
+  '25': 'Immobiliser',
+  '36': "Driver's seat",
+  '47': 'Sound system',
+  '4F': 'Central electronics 2',
+  '56': 'Radio',
+  '5F': 'Infotainment',
+  '61': 'Battery regulation',
+  '62': 'Rear left door',
+  '65': 'Tyre pressure',
+  '69': 'Trailer',
+  '72': 'Rear right door',
+  '77': 'Telephone',
+};

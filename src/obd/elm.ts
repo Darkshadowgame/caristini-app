@@ -13,7 +13,7 @@ import { idsForNode, nodesFromBitmap, parseC6List, slotsFromTables } from './vag
 import type { ServiceReset } from '../service/obdReset';
 import { MAX_DIDS, soleAnswer, splitKnown } from './multiDid';
 import { MeasuringCell, parseMeasuringBlock } from './tp20';
-import { kwpFaults, parseGatewayList, parseKwpIdent, Tp20Coding, tp20Identity, tp20Name, tp20LeaveCommands, tp20ReadCoding, tp20WriteCoding, Tp20Module, Tp20Session, TP20_CANDIDATES } from './tp20';
+import { kwpFaults, kwpReadFaults, VAG_ADDRESS_NAMES, parseGatewayList, parseKwpIdent, Tp20Coding, tp20Identity, tp20Name, tp20LeaveCommands, tp20ReadCoding, tp20WriteCoding, Tp20Module, Tp20Session, TP20_CANDIDATES } from './tp20';
 import { cleanText, describeNrc, negativeCode, parseDtcReport, toHex, UdsFault } from './uds';
 
 const ERRORS = ['NO DATA', 'UNABLE TO CONNECT', 'CAN ERROR', 'BUS ERROR', 'BUS INIT', 'STOPPED', 'BUFFER FULL', 'DATA ERROR', 'LV RESET', 'ACT ALERT', 'FB ERROR', 'LP ALERT', 'BUS BUSY'];
@@ -308,7 +308,7 @@ export class ElmClient {
         const route: Route = { via: 'tp20', address };
         const def = known(code);
         if (def) this.found.set(def.id, [route]);
-        else addExtra({ id: `vag-${code.toLowerCase()}`, name: `Module ${code}`, code, tx: '', rx: '', alt: [route], groups: ['vag'], source: "Listed by the car's gateway" });
+        else addExtra({ id: `vag-${code.toLowerCase()}`, name: VAG_ADDRESS_NAMES[code] ?? `Module ${code}`, code, tx: '', rx: '', alt: [route], groups: ['vag'], source: "Listed by the car's gateway" });
       }
     };
 
@@ -1054,7 +1054,7 @@ export class ElmClient {
       let res: ModuleFaults;
       if (r.via === 'tp20') {
         const got = await this.tp20(r.address, async (s) => {
-          const faults = kwpFaults(await s.request([0x18, 0x02, 0xff, 0x00])).map(kwpFault);
+          const faults = (await kwpReadFaults(s)).map(kwpFault);
           return { def, ...withFaults(faults) } as ModuleFaults;
         }).catch((e): ModuleFaults => ({ def, state: 'error', faults: [], error: e instanceof Error ? e.message : String(e) }));
         res = got ?? { def, state: 'no-answer', faults: [] };
@@ -2272,7 +2272,7 @@ export class ElmClient {
         try {
           const start = await s.request([0x10, 0x89]);
           if (start[0] !== 0x50) throw new ObdError('The module refused a diagnostic session.');
-          m.faults = kwpFaults(await s.request([0x18, 0x02, 0xff, 0x00]));
+          m.faults = await kwpReadFaults(s);
           const id = parseKwpIdent(await s.request([0x1a, 0x9b]).catch(() => []));
           if (id) {
             m.part = id.partNumber;

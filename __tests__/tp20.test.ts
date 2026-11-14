@@ -1,6 +1,6 @@
 import { ElmClient } from '../src/obd/elm';
 import { DEMO_CARS, SimTransport } from '../src/obd/simTransport';
-import { kwpFaults, parseRawFrames, Tp20Session } from '../src/obd/tp20';
+import { kwpFaults, kwpReadFaults, parseRawFrames, Tp20Session } from '../src/obd/tp20';
 import { sensorsFor } from '../src/obd/sensors';
 
 const a6 = DEMO_CARS.find((c) => c.id === 'a6')!;
@@ -260,5 +260,79 @@ describe('deep scan links what it finds', () => {
     again.rememberDeep([{ address: 0x62 }]);
     expect(again.moduleById('vag-at62')?.name).toBeTruthy();
     expect(again.routeOf(again.moduleById('vag-at62')!)).toBe('tp20');
+  });
+});
+
+// What the 2007 Leon's comfort and central electronics did on 14 Nov 2026.
+describe('extra messages and lost frames', () => {
+  const session = (reply: (c: string) => string, sent: string[]) => {
+    const s = new Tp20Session(async (c) => {
+      sent.push(c);
+      if (c === '21C000100003011') return '22100D00003280301\r\r>';
+      if (c === 'A00F8AFF32FF1' || c === 'A3') return '300A10F8AFF4AFF\r\r>';
+      return `${reply(c) || 'NO DATA'}\r\r>`;
+    }, '6');
+    return s;
+  };
+
+  it('ACKs a second message after 1A 9B before the next request', async () => {
+    const sent: string[] = [];
+    let acked = false;
+    const s = session((c) => {
+      if (c === '1000021A9B') return '300B1\r3001000045A9B4142';
+      // ACKing the answer brings the extra message (one byte, 5A).
+      if (c === 'B1') return '3001180015A';
+      if (c === 'B2') {
+        acked = true;
+        return '';
+      }
+      // The module ignores a request while it waits for that ACK.
+      if (c === '1100021089') return acked ? '300B2\r3001200025089' : '30092';
+      return '';
+    }, sent);
+    expect(await s.open(0x21)).toBe(true);
+    expect(await s.request([0x1a, 0x9b], 2000)).toEqual([0x5a, 0x9b, 0x41, 0x42]);
+    expect(await s.request([0x10, 0x89], 2000)).toEqual([0x50, 0x89]);
+    expect(sent.indexOf('B2')).toBeLessThan(sent.indexOf('1100021089'));
+  });
+
+  it('skips an extra message heard with the next answer and asks again when the module dropped the request', async () => {
+    const sent: string[] = [];
+    const s = session((c) => {
+      if (c === '1000021A9B') return '300B1\r3001000045A9B4142';
+      if (c === '1100021089') return '30092\r3001180015A';
+      if (c === '1200021089') return '300B3\r3001200025089';
+      return '';
+    }, sent);
+    expect(await s.open(0x21)).toBe(true);
+    await s.request([0x1a, 0x9b], 2000);
+    expect(await s.request([0x10, 0x89], 2000)).toEqual([0x50, 0x89]);
+    expect(sent).toContain('B2');
+  });
+
+  it('asks again when frames of an answer were lost', async () => {
+    const sent: string[] = [];
+    const s = session((c) => {
+      if (c === '1000021089') return '300B1\r3001000025089';
+      // Frames 1 and 2 went by unheard: only 3 and 4 arrive.
+      if (c === '1100021A9A') return '300B2\r30023414243444546\r3001447';
+      if (c === '1200021A9A') return '300B3\r30025000A5A9A010203\r300160405060708';
+      return '';
+    }, sent);
+    expect(await s.open(0x21)).toBe(true);
+    await s.request([0x10, 0x89], 2000);
+    expect(await s.request([0x1a, 0x9a], 2000)).toEqual([0x5a, 0x9a, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(sent).toContain('B5');
+  });
+
+  it('tries the other fault-read forms when the engine refuses the usual one', async () => {
+    const sent: string[] = [];
+    const s = session((c) => {
+      if (c === '1000041802FF00') return '300B1\r3001000037F1812';
+      if (c === '1100041800FF00') return '300B2\r300110005580101002B';
+      return '';
+    }, sent);
+    expect(await s.open(0x21)).toBe(true);
+    expect(await kwpReadFaults(s)).toEqual([{ code: '00256', status: 0x2b }]);
   });
 });
