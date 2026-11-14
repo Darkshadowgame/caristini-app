@@ -38,3 +38,27 @@ describe('the 2007 Leon Cupra, from its 13 Nov 2026 logs', () => {
     expect(packFor('NO-VIN-REPORTED', 2007, 'BWJ', null)).toBeNull();
   });
 });
+
+describe('Cupra engine and Mazda modules, from the 14 Nov 2026 logs', () => {
+  it('waits for the engine to settle after standard OBD requests before opening it', async () => {
+    const car = { ...leon, engineBusyAfterObdMs: 4000 };
+    const c = new ElmClient(new SimTransport(car, 0));
+    await c.initialise();
+    c.setMake('vag', 'PQ35');
+    await c.readStatus();
+    const d = await c.readModuleDetails(c.moduleById('engine')!);
+    expect(d.responded).toBe(true);
+    expect(d.partNumber).toBe('1P0907115AA');
+  }, 30000);
+
+  it('reads Mazda modules, which refuse the VW part number question', async () => {
+    const mazda = DEMO_CARS.find((x) => x.id === 'mazda')!;
+    const c = new ElmClient(new SimTransport(mazda, 0));
+    await c.initialise();
+    c.setMake('mazda');
+    const d = await c.readModuleDetails(c.moduleById('engine')!);
+    expect(d.responded).toBe(true);
+    expect(d.partNumber).toBe('DEMO-18881-D');
+    expect(d.software).toContain('DEMO-18881-D');
+  }, 30000);
+});

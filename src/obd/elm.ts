@@ -193,6 +193,12 @@ const ID_DIDS: { key: 'partNumber' | 'software' | 'vin'; did: string }[] = [
   { key: 'software', did: 'F189' },
   { key: 'vin', did: 'F190' },
 ];
+const FORD_MAZDA_ID_DIDS: { key: 'partNumber' | 'software' | 'vin'; did: string }[] = [
+  { key: 'software', did: 'F188' },
+  { key: 'partNumber', did: 'F113' },
+  { key: 'partNumber', did: 'F111' },
+  { key: 'vin', did: 'F190' },
+];
 
 // The sensor search asks one value per request (see probeSensors).
 const SEARCH_LISTS = false;
@@ -395,6 +401,7 @@ export class ElmClient {
           return null;
         }
       }
+      await this.obdQuiet(address);
       if (!(await s.open(address).catch(() => false))) return null;
       try {
         if (session) {
@@ -589,7 +596,22 @@ export class ElmClient {
   }
 
   async request(cmd: string, timeoutMs = 4000): Promise<number[][]> {
+    if (!this.addressed && /^0[1-9A]/.test(cmd)) this.lastObdAt = Date.now();
     return parseMessages(await this.command(cmd, timeoutMs), cmd);
+  }
+
+  // When a standard OBD request last went to the car. A 2007 Leon's engine
+  // (Bosch MED9.1) refuses a TP2.0 channel ("temporarily not available") for a
+  // few seconds after one: in its logs of 13 and 14 Nov 2026 every refusal came
+  // 1 to 5 s after a standard request, every success after a quiet spell.
+  private lastObdAt = 0;
+  private static readonly OBD_QUIET_MS = 6000;
+  private async obdQuiet(address: number): Promise<void> {
+    if (this.make !== 'vag' || (address !== 0x01 && address !== 0x02)) return;
+    // The demo cars say how long their engine needs (none by default).
+    const need = (this.transport as { quietNeededMs?: number }).quietNeededMs ?? ElmClient.OBD_QUIET_MS;
+    const wait = need - (Date.now() - this.lastObdAt);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   }
 
   async initialise(): Promise<VehicleInfo> {
@@ -1254,16 +1276,38 @@ export class ElmClient {
     const info: ModuleDetails = { def, responded: false, partNumber: null, software: null, vin: null, hardware: null, systemName: null, serial: null, coding: null };
     try {
       await this.withModule(def, async () => {
-        for (const { key, did } of ID_DIDS) {
-          const v = await this.readDid(did);
-          if (v) {
-            info.responded = true;
-            info[key] = cleanText(v);
-          } else if (did === 'F187') {
-            // No part number: the module is not fitted or not answering.
-            return;
+        // VW group: part number F187. Ford and Mazda keep it in F113 (assembly)
+        // or F111 (core assembly) and the software number in F188
+        // (replica/focus-st-sources.md, replica/mazda6-sources.md); they
+        // answer F187 with "out of range".
+        const fm = this.make === 'ford' || this.make === 'mazda' || def.groups.includes('ford') || def.groups.includes('mazda');
+        const ids = fm ? FORD_MAZDA_ID_DIDS : ID_DIDS;
+        let present = false;
+        for (const { key, did } of ids) {
+          if (key === 'partNumber' && info.partNumber) continue;
+          const got = await this.fastDid(did, 1500).catch(() => 'silent' as const);
+          if (Array.isArray(got)) {
+            present = true;
+            const text = cleanText(got);
+            if (text) info[key] = text;
+          } else if (got === 'refused') present = true;
+          // Nothing at all to the first question: not fitted or not answering.
+          else if (did === ids[0].did) return;
+        }
+        // A module that answered but not with a part number: the other
+        // makers' part number places are tried too.
+        if (present && !info.partNumber) {
+          for (const did of fm ? ['F187'] : ['F113', 'F111']) {
+            const got = await this.fastDid(did, 1500).catch(() => 'silent' as const);
+            const text = Array.isArray(got) ? cleanText(got) : '';
+            if (text) {
+              info.partNumber = text;
+              break;
+            }
           }
         }
+        // Any answer, even a refusal, means the module is there.
+        info.responded = present;
         if (!info.responded) return;
         const hw = await this.readDid('F191');
         info.hardware = hw ? cleanText(hw) : null;
@@ -2218,6 +2262,7 @@ export class ElmClient {
         const address = addresses[i];
         let opened = false;
         try {
+          await this.obdQuiet(address);
           opened = await s.open(address);
         } catch {
           opened = false;

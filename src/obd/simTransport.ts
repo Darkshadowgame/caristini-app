@@ -24,6 +24,9 @@ export interface DemoCar {
   // TP2.0 addresses that first answer "temporarily not available" this many
   // times before opening (as the 2007 Leon's engine does); tests only.
   tp20Busy?: Record<number, number>;
+  // The engine (TP2.0 address 01) refuses a channel this long after a standard
+  // OBD request, as the 2007 Leon's MED9.1 does; tests only.
+  engineBusyAfterObdMs?: number;
 }
 
 // A module that speaks KWP2000 over VW TP2.0.
@@ -257,6 +260,11 @@ export class SimTransport implements Transport {
   readonly kind = 'simulated' as const;
   readonly label: string;
   private header = '7DF';
+  private lastObdAt = 0;
+  // How long the client must leave the engine after a standard request.
+  get quietNeededMs(): number {
+    return this.car.engineBusyAfterObdMs ?? 0;
+  }
   // Raw CAN mode (protocol B, headers on) and the open TP2.0 channel.
   private raw = false;
   private cra = '';
@@ -392,6 +400,7 @@ export class SimTransport implements Transport {
     if (this.header !== '7DF') return 'NO DATA';
 
     const mode = cmd.slice(0, 2);
+    if (/^0[1-9A]$/.test(mode)) this.lastObdAt = Date.now();
     if (mode === '01') {
       // Several PIDs in one request (up to 6 on CAN): one combined answer.
       const pids = (cmd.slice(2).match(/../g) ?? []).map((h) => parseInt(h, 16));
@@ -441,8 +450,13 @@ export class SimTransport implements Transport {
     if (extra) return extra;
     if (did === '0600') return mod.coding ? hexToBytes(mod.coding) : null;
     if (did === 'F1A5') return [0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    // Ford and Mazda (VIN JMZ / WF0) keep the part number in F113 and the
+    // software number in F188, and refuse F187.
+    const fm = /^(JMZ|WF0)/.test(this.car.vin);
     const value: Record<string, string | undefined> = {
-      F187: `${mod.part}   `,
+      F187: fm ? undefined : `${mod.part}   `,
+      F188: fm ? `${mod.part}-${mod.sw}` : undefined,
+      F113: fm ? mod.part : undefined,
       F189: mod.sw,
       F190: this.car.vin,
       F191: mod.hw,
@@ -528,6 +542,9 @@ export class SimTransport implements Transport {
       const address = data[0];
       const mods = this.car.tp20;
       if (!mods || !(address in mods) || data[1] !== 0xc0) return 'NO DATA';
+      if (address === 0x01 && this.car.engineBusyAfterObdMs && Date.now() - this.lastObdAt < this.car.engineBusyAfterObdMs) {
+        return `${(0x200 + address).toString(16).toUpperCase()}${hexOf([0x00, 0xd7, 0x00, 0x00, 0x04, 0x00, 0x07, 0x01])}`;
+      }
       const left = this.car.tp20Busy?.[address] ?? 0;
       if (left > 0) {
         this.car.tp20Busy![address] = left - 1;
