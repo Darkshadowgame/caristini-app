@@ -530,15 +530,28 @@ export class ElmClient {
     });
   }
 
-  // Reads every group from 1 to 255 once, to find values by their unit.
-  async scanMeasuringBlocks(def: ModuleDef, onGroup: (group: number, cells: MeasuringCell[]) => void, onProgress?: (p: number) => void): Promise<void> {
+  // Reads every group from 1 to 255 once (or a shorter range), to find values
+  // by their unit. stopAfterEmpty ends the scan after that many empty groups in
+  // a row once a group has answered (body modules use the low groups only).
+  async scanMeasuringBlocks(
+    def: ModuleDef,
+    onGroup: (group: number, cells: MeasuringCell[]) => void,
+    onProgress?: (p: number) => void,
+    opts: { to?: number; stopAfterEmpty?: number; cancelled?: () => boolean } = {},
+  ): Promise<void> {
     const a = this.tp20Address(def);
     if (a == null) return;
+    const to = opts.to ?? 255;
     await this.tp20(a, async (s) => {
-      for (let g = 1; g <= 255; g++) {
-        onProgress?.(g / 255);
+      let empty = 0;
+      for (let g = 1; g <= to; g++) {
+        if (opts.cancelled?.()) return;
+        onProgress?.(g / to);
         const cells = parseMeasuringBlock(await s.request([0x21, g], 1500).catch(() => []), g);
-        if (cells?.length) onGroup(g, cells);
+        if (cells?.length) {
+          empty = 0;
+          onGroup(g, cells);
+        } else if (opts.stopAfterEmpty && ++empty >= opts.stopAfterEmpty && g >= opts.stopAfterEmpty) return;
       }
     });
   }

@@ -336,3 +336,30 @@ describe('extra messages and lost frames', () => {
     expect(await kwpReadFaults(s)).toEqual([{ code: '00256', status: 0x2b }]);
   });
 });
+
+describe('value groups for Learn my car', () => {
+  it('reads a body module until 8 groups in a row are empty, and the engine to the end', async () => {
+    const leon = structuredClone(DEMO_CARS.find((c) => c.id === 'leon')!);
+    leon.tp20![0x05].groups = { 1: [0x01, 0xc8, 0x4b], 2: [0x06, 0x0a, 0x64] };
+    const t = new SimTransport(leon, 0);
+    const send = t.send.bind(t);
+    const sent: string[] = [];
+    t.send = (cmd: string) => {
+      sent.push(cmd);
+      return send(cmd);
+    };
+    const c = new ElmClient(t);
+    await c.initialise();
+    c.setMake('vag', 'PQ35');
+    const res = await c.scanAllFaults('vag');
+    const body = res.find((r) => r.def.id === 'vag-15')!.def;
+    const got: number[] = [];
+    sent.length = 0;
+    await c.scanMeasuringBlocks(body, (g) => got.push(g), undefined, { to: 64, stopAfterEmpty: 8 });
+    expect(got).toEqual([1, 2]);
+    expect(sent.filter((x) => /^1.0002210[0-9A-F]$|^1.000221[0-9A-F]{2}$/.test(x)).length).toBeLessThanOrEqual(10);
+    const engine: number[] = [];
+    await c.scanMeasuringBlocks(res.find((r) => r.def.id === 'engine')!.def, (g) => engine.push(g), undefined, { to: 255 });
+    expect(engine).toEqual([115]);
+  }, 60000);
+});

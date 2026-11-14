@@ -95,6 +95,8 @@ export default function LearnCar() {
     // Everything already asked on this car, by the sensor search or Learn my car.
     const asked = new Set([...(v.sensorsAsked ?? []), ...found]);
     const all = sensorsForCar(v, garage.vehicles);
+    // Values read from older VW modules' measuring groups on this run, sent back.
+    const groupSamples: Record<string, Record<string, string>> = {};
     let reused = 0;
     try {
       // 1. Modules: the known list for this make, plus every address that answers.
@@ -204,6 +206,35 @@ export default function LearnCar() {
           disc.modules[f.id] = mod;
           await saveDiscovery(disc);
         }
+        // Older VW modules give live values in numbered groups: the engine and
+        // gearbox are read from group 1 to 255, other modules until 8 groups
+        // in a row are empty. A module read on an earlier run is not read again.
+        const tp20 = facts.filter((f) => f.route === 'tp20' && !(garage.latest(v.vin)?.groupsScanned ?? []).includes(f.id));
+        for (const [i, f] of tp20.entries()) {
+          if (halted()) break;
+          const def = client.moduleById(f.id);
+          if (!def) continue;
+          const full = f.id === 'engine' || f.id === 'gearbox';
+          const mine: Record<string, string[]> = {};
+          const samples: Record<string, string> = {};
+          await client
+            .scanMeasuringBlocks(
+              def,
+              (g, cells) => {
+                mine[String(g)] = cells.map((c) => c.unit);
+                samples[String(g)] = cells.map((c) => `${typeof c.value === 'number' ? Math.round(c.value * 100) / 100 : c.value} ${c.unit}`).join(' | ');
+              },
+              (p) => alive.current && setProgress({ value: (i + p) / tp20.length, label: `Reading value groups in the ${f.name.toLowerCase()}` }),
+              { to: full ? 255 : 64, stopAfterEmpty: full ? undefined : 8, cancelled: halted },
+            )
+            .catch(() => undefined);
+          groupSamples[f.id] = samples;
+          const now = garage.latest(v.vin);
+          await garage.update(v.vin, {
+            groupsFound: { ...(now?.groupsFound ?? {}), [f.id]: mine },
+            groupsScanned: halted() ? now?.groupsScanned : [...new Set([...(now?.groupsScanned ?? []), f.id])],
+          });
+        }
         setDone((x) => [...x, 'values']);
         void sendLogNow('Learn my car: values', v);
       }
@@ -254,17 +285,19 @@ export default function LearnCar() {
       // 5. Save and send.
       stepStarted.current = Date.now();
       setRunning('send');
-      await garage.update(v.vin, { knowledge, aiItems, aiSensors, sensorsFound: [...found], learnRun: { at: Date.now(), modules: facts.length, sensors: sensorsCount + aiSensors.length, researched } });
-      await addHistory({ vin: v.vin, kind: 'discover', title: 'Learned this car', detail: `${facts.length} modules, ${sensorsCount + aiSensors.length} sensors${researched ? `, ${researched} researched by AI` : ''}` });
+      const groupValues = Object.values(garage.latest(v.vin)?.groupsFound ?? {}).reduce((n, m) => n + Object.values(m).reduce((k, units) => k + units.length, 0), 0);
+      const sensorTotal = sensorsCount + aiSensors.length + groupValues;
+      await garage.update(v.vin, { knowledge, aiItems, aiSensors, sensorsFound: [...found], learnRun: { at: Date.now(), modules: facts.length, sensors: sensorTotal, researched } });
+      await addHistory({ vin: v.vin, kind: 'discover', title: 'Learned this car', detail: `${facts.length} modules, ${sensorTotal} sensors${researched ? `, ${researched} researched by AI` : ''}` });
       // Always tried: a failed send is kept on the phone and sent again later.
-      const sent = await sendBack('learn', v.vin, { car: { title: vehicleTitle(v), brand: v.brand, model: v.model, year: v.year, platform: v.platform, group: v.group }, modules: facts, knowledge, aiItems, aiSensors, discovery: disc, sensorsFound: [...found] }).catch(
+      const sent = await sendBack('learn', v.vin, { car: { title: vehicleTitle(v), brand: v.brand, model: v.model, year: v.year, platform: v.platform, group: v.group }, modules: facts, knowledge, aiItems, aiSensors, discovery: disc, sensorsFound: [...found], groupsFound: garage.latest(v.vin)?.groupsFound, groupSamples }).catch(
         (e) => ({ via: 'none' as const, detail: e instanceof Error ? e.message : String(e) }),
       );
       setDone((x) => [...x, 'send']);
       success();
       setMessage({
         tone: 'ok',
-        text: `Learned ${facts.length} modules and ${sensorsCount + aiSensors.length} sensors${aiSensors.length ? ` (${aiSensors.length} named by AI)` : ''}.${aiItems.length ? ` ${aiItems.length} settings to try in Customise.` : ''} ${sent.via === 'github' ? 'Sent back, so the next version knows this car.' : sent.detail}`,
+        text: `Learned ${facts.length} modules and ${sensorTotal} sensors${aiSensors.length ? ` (${aiSensors.length} named by AI)` : ''}${groupValues ? ` (${groupValues} in value groups, under Live data)` : ''}.${aiItems.length ? ` ${aiItems.length} settings to try in Customise.` : ''} ${sent.via === 'github' ? 'Sent back, so the next version knows this car.' : sent.detail}`,
       });
     } catch (e) {
       setMessage({ tone: 'danger', text: e instanceof Error ? e.message : String(e) });

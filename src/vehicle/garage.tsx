@@ -50,6 +50,10 @@ export interface Vehicle {
   serviceSnapshot?: { date: string; module: string; values: Record<string, string> };
   // Sensor finder: maker sensor reads (header-identifier) this car answers.
   sensorsFound?: string[];
+  // Older VW modules (TP2.0): measuring groups that gave values, by module id,
+  // with the unit of each value in the group. groupsScanned lists modules done.
+  groupsFound?: Record<string, Record<string, string[]>>;
+  groupsScanned?: string[];
   // Module ids that answered a fault scan, so the next scan asks them first.
   modulesSeen?: string[];
   // How each module answered last time (protocol and address), tried first next time.

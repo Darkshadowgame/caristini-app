@@ -439,7 +439,20 @@ function MeasuringBlocks() {
     },
     [],
   );
+  // Groups Learn my car found on this car: the modules show without a search.
+  const saved = conn.vehicle?.groupsFound;
+  useEffect(() => {
+    if (modules || !saved || !client) return;
+    const list = Object.keys(saved)
+      .filter((id) => Object.keys(saved[id]).length)
+      .map((id) => client.moduleById(id))
+      .filter((d): d is ModuleDef => !!d);
+    if (!list.length) return;
+    setModules(list);
+    setModule(list.find((m) => m.id === 'engine') ?? list[0]);
+  }, [saved, client, modules]);
   if (conn.vehicle?.group !== 'vag' || !client?.supportsModules) return null;
+  const savedGroups = module && saved?.[module.id] ? Object.entries(saved[module.id]).map(([g, units]) => ({ group: Number(g), units })) : [];
 
   const find = async () => {
     setBusy('find');
@@ -544,6 +557,21 @@ function MeasuringBlocks() {
               )
             ) : null}
             {busy === 'scan' ? <ProgressBar value={pct} label="Reading groups 1 to 255" /> : null}
+            {!found.length && savedGroups.length ? (
+              <Body muted small style={{ marginTop: space.md }}>
+                {savedGroups.length} groups with values, found by Learn my car. Tap one to read it.
+              </Body>
+            ) : null}
+            {found.length
+              ? null
+              : savedGroups.map((f) => (
+                  <Pressable key={f.group} accessibilityRole="button" onPress={() => read(f.group)} style={[styles.makerRow, { borderColor: t.border }]}>
+                    <Text style={[styles.makerLabel, { color: t.text, width: 80 }]}>Group {f.group}</Text>
+                    <Text style={[styles.makerSource, { color: t.muted, flex: 1 }]} numberOfLines={2}>
+                      {(groupLabels(module?.code, f.group)?.filter(Boolean).slice(0, 2).join(', ') || f.units.filter((u) => u !== 'raw').join(' · ')) || `${f.units.length} values`}
+                    </Text>
+                  </Pressable>
+                ))}
             {found.map((f) => (
               <Pressable key={f.group} accessibilityRole="button" onPress={() => read(f.group)} style={[styles.makerRow, { borderColor: t.border }]}>
                 <Text style={[styles.makerLabel, { color: t.text, width: 80 }]}>Group {f.group}</Text>
