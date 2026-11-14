@@ -8,8 +8,16 @@ export type SecretName = 'claudeKey' | 'githubToken';
 
 const memory: Partial<Record<SecretName, string>> = {};
 
-// Nothing is built in: a key compiled into the app can be read out of the
-// update bundle by anyone, so keys come only from what the owner types here.
+// Keys the owner saved as repository secrets are built in at build time (his
+// choice, 14 Nov 2026). One typed into Settings on this phone wins over it.
+const BUILT_IN: Partial<Record<SecretName, string>> = {
+  claudeKey: process.env.EXPO_PUBLIC_CLAUDE_KEY || undefined,
+  githubToken: process.env.EXPO_PUBLIC_UPLOAD_TOKEN || undefined,
+};
+
+export function isBuiltIn(name: SecretName): boolean {
+  return !!BUILT_IN[name];
+}
 
 // Only a key typed into Settings on this phone.
 export async function getOwnSecret(name: SecretName): Promise<string | null> {
@@ -31,7 +39,7 @@ export async function getSecret(name: SecretName): Promise<string | null> {
       own = null;
     }
   }
-  return own || null;
+  return own || BUILT_IN[name] || null;
 }
 
 export async function setSecret(name: SecretName, value: string | null): Promise<void> {

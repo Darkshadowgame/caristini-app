@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Linking, Platform, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import * as Updates from 'expo-updates';
-import { getOwnSecret, SecretName, setSecret } from '../share/secrets';
+import { getOwnSecret, isBuiltIn, SecretName, setSecret } from '../share/secrets';
 import { canSendAutomatically, flushOutbox, outbox, sendBack, shareOutbox } from '../share/sendBack';
 import { useGarage } from '../vehicle/garage';
 import { sendLogNow } from '../share/sendLog';
@@ -347,6 +347,9 @@ function SecretRow({ name, label, placeholder, first }: { name: SecretName; labe
   useEffect(() => {
     getOwnSecret(name).then((v) => setSaved(!!v));
   }, [name]);
+  if (!saved && isBuiltIn(name) && !draft) {
+    return <ListRow first={first} icon="lock-outline" iconColour="green" title={label} subtitle="Built into this app. Paste one here to use your own." noChevron />;
+  }
   if (saved) {
     return (
       <>

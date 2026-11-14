@@ -54,10 +54,12 @@ defaults:
 
 env:
   NODE_VERSION: "24"
-  # No key or token is built into the app. Anything compiled in (EXPO_PUBLIC_*)
-  # ends up readable in the update bundle, and the update address is public in
-  # app.json. The Claude API key and the findings upload token are typed into
-  # the app's Settings once and kept in the phone's keychain.
+  # The owner chose (14 Nov 2026) to build his findings upload token and Claude
+  # API key into the app from repository secrets, so they need not be typed on
+  # the phone. Both end up readable inside the app and its updates. Empty
+  # secrets build an app that uses only keys typed in Settings.
+  EXPO_PUBLIC_UPLOAD_TOKEN: ${{ secrets.CARISTINI_UPLOAD_TOKEN }}
+  EXPO_PUBLIC_CLAUDE_KEY: ${{ secrets.CLAUDE_API_KEY }}
   EXPO_PUBLIC_UPLOAD_REPO: Darkshadowgame/caristini-data
   EXPO_PUBLIC_COMMIT: ${{ github.sha }}
 
