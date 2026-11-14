@@ -5,7 +5,8 @@ import { CarPack, Fact, KnownFault, packFor } from '../data/cars';
 import { SECTIONS } from '../help';
 import { MONO, space, type, useTheme } from '../theme';
 import { GlowCard, Group, Icon, ListRow, Notice, Pill, Screen } from '../ui';
-import { useGarage, vehicleTitle } from '../vehicle/garage';
+import { partsOf, useGarage, vehicleTitle } from '../vehicle/garage';
+import { vagModelFromParts } from '../vehicle/vin';
 
 // Car reference: fluids, specs, service schedule, known faults and recalls
 // researched for one car, built into the app so it reads offline.
@@ -15,7 +16,7 @@ export default function CarReference() {
   const { vin } = useLocalSearchParams<{ vin: string }>();
   const v = garage.get(vin);
   const [open, setOpen] = useState<number | null>(null);
-  const match = v ? packFor(v.vin, v.year, v.ids?.codes?.engineCode?.value) : null;
+  const match = v ? packFor(v.vin, v.year, v.ids?.codes?.engineCode?.value, vagModelFromParts(partsOf(v))?.modelCode) : null;
 
   if (!v || !match) {
     return (

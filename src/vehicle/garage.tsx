@@ -7,7 +7,7 @@ import type { LearnedSetting, Snapshot } from '../coding/learn';
 import type { ServiceReset } from '../service/obdReset';
 import type { CarIds, PartsList } from './ids';
 import type { Route } from '../obd/modules';
-import { decodeVin, MakeGroup } from './vin';
+import { decodeVin, MakeGroup, vagModelFromParts } from './vin';
 
 export interface Vehicle {
   vin: string;
@@ -105,6 +105,20 @@ interface Garage {
 }
 
 const Ctx = createContext<Garage | null>(null);
+
+// Parts read from a car's modules, for vagModelFromParts.
+export function partsOf(v: Pick<Vehicle, 'ids' | 'knowledge'>): { id: string; part?: string | null }[] {
+  return [...(v.ids?.modules ?? []).map((m) => ({ id: m.id, part: m.part })), ...Object.entries(v.knowledge ?? {}).map(([id, k]) => ({ id, part: k.part }))];
+}
+
+// A VW group car with no platform (it gave no VIN): the platform, and the model
+// unless the owner typed one, from its module part numbers. Null when nothing changes.
+export function inferredFromParts(v: Vehicle): Partial<Vehicle> | null {
+  if (v.platform || (v.group !== 'vag' && v.group !== 'other')) return null;
+  const m = vagModelFromParts(partsOf(v));
+  if (!m) return null;
+  return { group: 'vag', platform: m.platform, ...(v.model && v.edited ? {} : { model: m.model }) };
+}
 
 export function vehicleTitle(v: Pick<Vehicle, 'brand' | 'model' | 'year' | 'nickname'>): string {
   if (v.nickname) return v.nickname;

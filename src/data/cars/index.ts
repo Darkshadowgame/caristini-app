@@ -65,15 +65,18 @@ export type PackMatch = { pack: CarPack; sure: true } | { pack: CarPack; sure: f
 // The pack for a car: sure when the VIN is the owner's car or the engine code
 // on the data label matches; otherwise a possible match the owner can confirm
 // by typing the engine code.
-export function packFor(vin: string, year: number | null, engineCode?: string | null): PackMatch | null {
+// modelHint: the model code worked out from module part numbers (vagModelFromParts),
+// used when the car gave no VIN.
+export function packFor(vin: string, year: number | null, engineCode?: string | null, modelHint?: string | null): PackMatch | null {
   const v = vin.toUpperCase();
   const code = engineCode?.trim().toUpperCase() || null;
+  const noVin = !/^[A-HJ-NPR-Z0-9]{17}$/.test(v);
   for (const pack of CAR_PACKS) {
     if (pack.vins.includes(v)) {
       if (code && code !== pack.engineCode) return null;
       return { pack, sure: true };
     }
-    if (!v.startsWith(pack.wmi) || v.slice(6, 8) !== pack.modelCode) continue;
+    if (noVin ? modelHint !== pack.modelCode : !v.startsWith(pack.wmi) || v.slice(6, 8) !== pack.modelCode) continue;
     if (year != null && !pack.years.includes(year)) continue;
     if (code) return code === pack.engineCode ? { pack, sure: true } : null;
     return { pack, sure: false };

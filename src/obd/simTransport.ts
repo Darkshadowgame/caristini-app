@@ -21,6 +21,9 @@ export interface DemoCar {
   noObdVin?: boolean;
   // TP2.0 addresses that answer KWP 1A 90 with the VIN; tests only.
   vinAt?: number[];
+  // TP2.0 addresses that first answer "temporarily not available" this many
+  // times before opening (as the 2007 Leon's engine does); tests only.
+  tp20Busy?: Record<number, number>;
 }
 
 // A module that speaks KWP2000 over VW TP2.0.
@@ -525,6 +528,11 @@ export class SimTransport implements Transport {
       const address = data[0];
       const mods = this.car.tp20;
       if (!mods || !(address in mods) || data[1] !== 0xc0) return 'NO DATA';
+      const left = this.car.tp20Busy?.[address] ?? 0;
+      if (left > 0) {
+        this.car.tp20Busy![address] = left - 1;
+        return `${(0x200 + address).toString(16).toUpperCase()}${hexOf([0x00, 0xd7, 0x00, 0x00, 0x04, 0x00, 0x07, 0x01])}`;
+      }
       const tx = 0x740 + Object.keys(mods).map(Number).indexOf(address);
       this.channel = { address, tx: tx.toString(16).toUpperCase(), seq: 0 };
       return `${(0x200 + address).toString(16).toUpperCase()}${hexOf([0x00, 0xd0, 0x00, 0x03, tx & 0xff, tx >> 8, 0x01])}`;

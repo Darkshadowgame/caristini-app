@@ -128,6 +128,20 @@ export function isValidVin(vin: string): boolean {
   return /^[A-HJ-NPR-Z0-9]{17}$/.test(vin);
 }
 
+// VW group part numbers start with the model they were first made for
+// (1P0 907 115 = Leon II engine computer). For a car that gives no VIN, the
+// engine's or the instrument cluster's part number tells the model and platform
+// (parts shared across models, such as 1K0, are not used for this).
+export function vagModelFromParts(parts: { id: string; part?: string | null }[]): { modelCode: string; model: string; platform: string } | null {
+  for (const id of ['engine', 'vag-17', 'vag-01']) {
+    const p = (parts.find((x) => x.id === id)?.part ?? '').replace(/[\s-]/g, '').toUpperCase();
+    const code = p.slice(0, 2);
+    const m = /^[0-9A-Z]{2}[0-9]/.test(p) ? VAG_MODELS[code] : undefined;
+    if (m) return { modelCode: code, ...m };
+  }
+  return null;
+}
+
 // A VIN inside a module's identification reply, where it sits among other
 // bytes and text. Only a 17-character run with a known maker code is taken,
 // so a part number or immobiliser ID next to it is not mistaken for one.

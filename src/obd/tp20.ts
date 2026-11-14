@@ -104,11 +104,19 @@ export class Tp20Session {
     this.lastRx = -1;
     await this.cmd('ATSH200');
     await this.cmd(`ATCRA${hex3(0x200 + address)}`);
-    for (let attempt = 0; attempt < 2; attempt++) {
+    let busy = 0;
+    for (let attempt = 0; attempt < 2 + busy; attempt++) {
       // Trailing 1: return after the first reply frame.
       const reply = (await this.frames(`${hex2(address)}C00010000301` + '1', 800)).find((f) => f.id === 0x200 + address);
       if (!reply) continue;
       const d = reply.data;
+      // D7 "temporarily not available", D8 "no resources now": wait, ask again
+      // (up to 4 times, about 3 s in all). D6 "not supported" is final.
+      if ((d[1] === 0xd7 || d[1] === 0xd8) && busy < 4) {
+        busy++;
+        await new Promise((r) => setTimeout(r, 300 * busy));
+        continue;
+      }
       if (d[1] !== 0xd0 || (d[3] >> 4) !== 0 || (d[5] >> 4) !== 0) return false;
       this.rx = ((d[3] & 0x07) << 8) | d[2];
       this.tx = ((d[5] & 0x07) << 8) | d[4];

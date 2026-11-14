@@ -15,7 +15,7 @@ import { sendLogNow } from '../share/sendLog';
 import { useConnection } from '../state';
 import { space, type, useTheme } from '../theme';
 import { Button, GlowCard, Group, Icon, IconName, ListRow, NeedsConnection, Notice, Pill, ProgressBar, ScanPulse, Screen, success } from '../ui';
-import { useGarage, Vehicle, vehicleTitle } from '../vehicle/garage';
+import { inferredFromParts, useGarage, Vehicle, vehicleTitle } from '../vehicle/garage';
 import { SECTIONS } from '../help';
 import { mergeModuleIds } from '../vehicle/ids';
 
@@ -143,6 +143,10 @@ export default function LearnCar() {
       }
       const savedIds = garage.latest(v.vin)?.ids;
       await garage.update(v.vin, { knowledge, ids: { ...(savedIds ?? {}), modules: mergeModuleIds(savedIds?.modules, read) } });
+      // A car that gave no VIN: model and platform from its part numbers.
+      const now = garage.latest(v.vin);
+      const fill = now ? inferredFromParts(now) : null;
+      if (fill) await garage.update(v.vin, fill);
       setDone((x) => [...x, 'modules']);
       // The log goes after each step: one run writes more lines than the log holds.
       void sendLogNow('Learn my car: modules', v);

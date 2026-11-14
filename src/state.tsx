@@ -7,7 +7,7 @@ import { BleTransport } from './obd/bleTransport';
 import { ElmClient, VehicleInfo } from './obd/elm';
 import { DEMO_CARS, SimTransport } from './obd/simTransport';
 import { Transport } from './obd/transport';
-import { NO_VIN, useGarage, Vehicle } from './vehicle/garage';
+import { inferredFromParts, NO_VIN, useGarage, Vehicle } from './vehicle/garage';
 
 type Status = 'idle' | 'connecting' | 'connected' | 'error';
 // Where this connection's VIN came from: the standard OBD request, the car's
@@ -101,7 +101,12 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
           if (token !== attemptRef.current) throw new Error('Cancelled.');
           if (carVin) source = 'modules';
         }
-        const saved = await garage.upsertFromScan(carVin, result.diesel, result.milOn);
+        let saved = await garage.upsertFromScan(carVin, result.diesel, result.milOn);
+        const fill = inferredFromParts(saved);
+        if (fill) {
+          await garage.update(saved.vin, fill);
+          saved = { ...saved, ...fill };
+        }
         if (source === 'modules' && !saved.noObdVin) await garage.update(saved.vin, { noObdVin: true });
         c.setMake(makeOf(saved), saved.platform);
         c.rememberDeep(saved.deepFound);
@@ -151,11 +156,22 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
       assignVin: async (newVin) => {
         const c = clientRef.current;
         if (!c || !info || newVin === vin) return;
-        const saved = await garage.upsertFromScan(newVin, info.diesel, info.milOn);
-        await garage.update(saved.vin, { noObdVin: true });
-        // An empty placeholder is dropped; one with a saved check is kept.
-        const placeholder = garage.latest(NO_VIN);
-        if (vin === NO_VIN && placeholder && placeholder.lastCheckedAt == null) await garage.remove(NO_VIN);
+        const placeholder = vin === NO_VIN ? garage.latest(NO_VIN) : undefined;
+        const existed = !!garage.latest(newVin);
+        let saved = await garage.upsertFromScan(newVin, info.diesel, info.milOn);
+        if (placeholder && !existed) {
+          // A car first saved without a VIN: what was learned on it (modules,
+          // settings, sensors, nickname, checks) moves to the VIN the owner typed.
+          // Make, model, platform and year come from the VIN.
+          const { vin: _old, group: _g, brand: _b, platform: _p, year: _y, ...learned } = placeholder;
+          await garage.update(saved.vin, { ...learned, model: placeholder.edited && placeholder.model ? placeholder.model : saved.model, noObdVin: true });
+          await garage.remove(NO_VIN);
+          saved = garage.latest(saved.vin) ?? saved;
+        } else {
+          await garage.update(saved.vin, { noObdVin: true });
+          // An empty placeholder is dropped; one with a saved check is kept.
+          if (placeholder && placeholder.lastCheckedAt == null) await garage.remove(NO_VIN);
+        }
         c.setMake(makeOf(saved), saved.platform);
         c.rememberDeep(saved.deepFound);
         c.rememberRoutes(saved.routes);

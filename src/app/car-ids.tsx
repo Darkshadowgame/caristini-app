@@ -8,9 +8,9 @@ import { packFor } from '../data/cars';
 import { SECTIONS } from '../help';
 import { MONO, radius, space, type, useTheme } from '../theme';
 import { Button, GlowCard, Group, Icon, IconName, ListRow, Notice, Pill, Screen, success, tap } from '../ui';
-import { useGarage, vehicleTitle } from '../vehicle/garage';
+import { partsOf, useGarage, vehicleTitle } from '../vehicle/garage';
 import { catalogueLinks, CODE_FIELDS, CodeKey, idsText, labelHint, ModuleId, PartItem } from '../vehicle/ids';
-import { decodeVin } from '../vehicle/vin';
+import { decodeVin, vagModelFromParts } from '../vehicle/vin';
 
 // Parts and IDs: one car's identity numbers and codes, every module's part
 // number, software and coding, and a parts list, all kept on the phone so
@@ -51,7 +51,7 @@ export default function CarIds() {
   const latest = modules.reduce((n, m) => Math.max(n, m.at), 0);
   const parts = v.partsList;
   const groups = [...new Set((parts?.items ?? []).map((p) => p.group))];
-  const match = packFor(v.vin, v.year ?? decoded.year, ids.codes?.engineCode?.value);
+  const match = packFor(v.vin, v.year ?? decoded.year, ids.codes?.engineCode?.value, vagModelFromParts(partsOf(v))?.modelCode);
   const packParts = match?.sure ? match.pack.parts : [];
   const packGroups = [...new Set(packParts.map((p) => p.group))];
 
