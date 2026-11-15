@@ -101,7 +101,7 @@ export default function Modules() {
               <Icon name="chip" size={30} color="#FFFFFF" />
             </View>
             <Text style={[type.title3, { color: t.text, marginTop: space.md, textAlign: 'center' }]}>
-              {result ? `${found.length} of ${result.length} modules answered` : `${defs.length} modules to read`}
+              {result ? `${found.length} of ${result.length} module${result.length === 1 ? '' : 's'} answered` : `${defs.length} module${defs.length === 1 ? '' : 's'} to read`}
             </Text>
             <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: space.xs }]}>
               Part number, software, hardware and coding. Read-only, and the coding is kept on this phone as a backup.

@@ -68,6 +68,10 @@ export class Tp20Session {
   // second message after 1A 9B (the 2007 Leon's comfort and central electronics,
   // logs of 14 Nov 2026); it must be ACKed or the module ignores the next request.
   private carry: Frame[] = [];
+  // The module sent A8 (disconnect): the channel is gone and every later
+  // request on this session fails at once (2007 Leon log of 15 Nov 2026,
+  // 20:47:08: keep-alives and reads went on for seconds on a dead link).
+  closed = false;
 
   constructor(
     private send: Transport['send'],
@@ -82,11 +86,13 @@ export class Tp20Session {
   }
 
   // Raw CAN with variable frame length, headers on (VAG Blocks recipe). The
-  // adapter listens 200 ms after each frame (ATST32): with 100 ms the 2007
-  // Leon's body modules answered after the adapter had stopped listening and
-  // the start of their long-coding answers was lost (logs of 14 Nov 2026).
+  // adapter listens 100 ms after each frame (ATST19). The modules want an ACK
+  // within about 100 ms: with 200 ms (ATST32, 1.0.36 and 1.0.37) the 2007
+  // Leon's modules repeated each answer 3 times and closed the channel before
+  // the ACK went out (logs of 15 Nov 2026). Answers that start after the
+  // adapter stops listening are caught by the resend in request().
   async enter(): Promise<void> {
-    for (const c of ['ATPBC001', 'ATSPB', 'ATH1', 'ATAT0', 'ATST32', 'ATCFC0']) await this.cmd(c);
+    for (const c of ['ATPBC001', 'ATSPB', 'ATH1', 'ATAT0', 'ATST19', 'ATCFC0']) await this.cmd(c);
   }
 
   async leave(): Promise<void> {
@@ -110,6 +116,7 @@ export class Tp20Session {
     this.txSeq = 0;
     this.lastRx = -1;
     this.carry = [];
+    this.closed = false;
     await this.cmd('ATSH200');
     await this.cmd(`ATCRA${hex3(0x200 + address)}`);
     let busy = 0;
@@ -141,19 +148,29 @@ export class Tp20Session {
   async idle(ms: number): Promise<void> {
     const end = Date.now() + ms;
     while (Date.now() < end) {
-      await this.frames('A3', 400);
+      this.checkOpen(await this.frames('A3', 400));
       await new Promise((r) => setTimeout(r, Math.min(500, Math.max(0, end - Date.now()))));
     }
   }
 
   async close(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
     await this.frames('A8', 500);
+  }
+
+  // Throws once the module has sent A8 (disconnect), so nothing more is sent
+  // on a channel the module has closed.
+  private checkOpen(frames: Frame[] = []): void {
+    if (frames.some((f) => f.id === this.rx && f.data[0] === 0xa8)) this.closed = true;
+    if (this.closed) throw new ObdError('The module closed the connection (TP2.0 disconnect).');
   }
 
   // One KWP2000 request and its complete answer, ACKing as the module asks.
   // Asks once more when part of the answer was lost or the module dropped the
   // request while it waited for an ACK.
   async request(payload: number[], waitMs = 5000): Promise<number[]> {
+    this.checkOpen();
     const first = await this.exchange(payload, waitMs);
     if (first !== 'again') return first;
     const second = await this.exchange(payload, waitMs);
@@ -168,6 +185,7 @@ export class Tp20Session {
     for (let guard = 0; queue.length && guard < 20; guard++) {
       const f = queue.shift()!;
       if (f.id !== this.rx || !f.data.length) continue;
+      this.checkOpen([f]);
       const op = f.data[0] >> 4;
       const seq = f.data[0] & 0x0f;
       if (op > 3) continue;
@@ -207,6 +225,8 @@ export class Tp20Session {
       while (queue.length) {
         const f = queue.shift()!;
         if (f.id !== this.rx || !f.data.length) continue;
+        // A8: the module closed the channel; no answer will come.
+        this.checkOpen([f]);
         const op = f.data[0] >> 4;
         const seq = f.data[0] & 0x0f;
         // ACKs, channel tests and parameter frames carry no message data.

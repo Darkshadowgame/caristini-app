@@ -9,7 +9,7 @@ export interface FoundDid {
   samples: string[];
   // True once two samples differ: a live value.
   moves?: boolean;
-  // The owner's own name for it, or the AI's guess.
+  // The owner's own name for it; guess is kept from data saved by older versions.
   label?: string;
   guess?: string;
 }
@@ -25,6 +25,10 @@ export interface DiscoverModule {
   silent?: boolean;
   // The quick explore (blocks around known values) has run on this module.
   quickDone?: boolean;
+  // Where Learn my car's quick sweep stopped short; the next run carries on.
+  learnNext?: number;
+  // The ranges learnNext belongs to; a resume point from other ranges is not used.
+  learnRanges?: string;
   found: Record<string, FoundDid>;
 }
 

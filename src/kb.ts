@@ -1,5 +1,5 @@
-// Caristini knowledge base: what the AI researched (fuse layouts, modifications,
-// coding settings, procedures, notes) and what owners added, per make, model
+// Caristini knowledge base: entries saved by earlier versions (fuse layouts,
+// modifications, coding settings, procedures, notes) and what owners added, per make, model
 // and platform. Kept on the phone for offline use and shared through the
 // caristini repo (kb/entries/<make>/<id>.json), so it reaches every install
 // on its next start and can be folded into the app's own lists later.
@@ -134,8 +134,8 @@ export function kbForCar(list: KbEntry[], v: { brand: string; model: string; pla
   });
 }
 
-// Settings saved in the knowledge base with an exact module/byte/bit become
-// unconfirmed Customise settings (offered through Try mode).
+// Settings saved in the knowledge base with a module/byte/bit. Unconfirmed:
+// Customise shows them as read-only notes and never offers them as switches.
 export function kbSettings(list: KbEntry[]): CodingItem[] {
   return list
     .filter((e) => e.kind === 'setting' && e.data && typeof e.data.module === 'string' && typeof e.data.byte === 'number' && Array.isArray(e.data.bits))
@@ -149,7 +149,7 @@ export function kbSettings(list: KbEntry[]): CodingItem[] {
       byte: e.data!.byte as number,
       bits: (e.data!.bits as number[]).filter((b) => b >= 0 && b <= 7),
       confidence: 'low' as const,
-      note: 'From the shared knowledge base (AI research). Unconfirmed: try it, and Caristini puts it back if nothing changes.',
+      note: 'From the shared knowledge base. Not confirmed on a car, so not offered as a switch.',
       sources: e.sources,
     }));
 }

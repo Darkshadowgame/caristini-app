@@ -2,7 +2,6 @@ import { router, useFocusEffect } from 'expo-router';
 import { chargeVerdict, restVerdict } from '../../../obd/battery';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { hasClaude } from '../../../ai/claude';
 import { codingItemsFor } from '../../../coding/items';
 import { modsForVehicle } from '../../../mods/catalogue';
 import { modulesFor } from '../../../obd/modules';
@@ -19,7 +18,8 @@ import { Arrive, Button, GlowCard, Group, HeaderButton, Icon, IconName, ListRow,
 import { GUIDES } from '../../../help';
 import { WhichCar } from '../../../components/WhichCar';
 import { YourCars } from '../../../components/YourCars';
-import { useGarage, vehicleTitle } from '../../../vehicle/garage';
+import { quickCheckDue, useGarage, vehicleTitle } from '../../../vehicle/garage';
+import { useLastScan } from '../../../components/LastScan';
 import { GROUP_LABEL } from '../../../vehicle/vin';
 
 export default function Home() {
@@ -92,14 +92,20 @@ function Connected() {
   );
 
   const mods = modsForVehicle(v.group, v.platform);
-  const settings = conn.client?.supportsModules ? codingItemsFor(v.group, v.platform).length + (v.aiItems?.length ?? 0) : 0;
+  const settings = conn.client?.supportsModules ? codingItemsFor(v.group, v.platform).length : 0;
   const customCount = settings + mods.length;
   const methods = v.group !== 'other' ? methodsFor(v.group, v.platform).length : 0;
-  const moduleCount = conn.client?.supportsModules && v.group !== 'other' ? modulesFor(v.group).length : 0;
+  // The health check asks only the car's known modules once two full checks
+  // found them; before that the number depends on the car, so none is given.
+  const withModules = !!conn.client?.supportsModules && v.group !== 'other';
+  const knownModules = withModules && quickCheckDue(v) ? (v.modulesSeen?.filter((id) => modulesFor(v.group).some((m) => m.id === id)).length ?? 0) : 0;
   const incomplete = info.monitors.filter((m) => m.state === 'incomplete').length;
-  const checked = v.lastCheckedAt != null;
-  const faults = v.lastCodes.length;
-  const alert = (checked && faults > 0) || info.milOn;
+  // The last check is the one History holds, the same one "See faults" opens.
+  const last = useLastScan(v.vin);
+  const checkedAt = last?.at ?? v.lastCheckedAt;
+  const checked = checkedAt != null;
+  const faults = last ? (last.faults?.length ?? 0) : v.lastCodes.length;
+  const alert = (checked && faults > 0) || info.milOn || !!last?.noAnswer;
   const demo = conn.client?.transport.kind === 'simulated';
   // Above 13.3 V the alternator is charging (engine running): judge the
   // charging voltage; below, judge the resting battery (Battery test bands).
@@ -131,7 +137,7 @@ function Connected() {
         <GlowCard tone={!checked && !info.milOn ? 'brand' : alert ? 'fault' : 'ok'} style={{ padding: space.xl }}>
           <View style={styles.healthTop}>
             <View style={{ flex: 1 }}>
-              <Text style={[type.small, { color: t.muted }]}>{checked ? `Last health check, ${when(v.lastCheckedAt!)}` : 'Health check'}</Text>
+              <Text style={[type.small, { color: t.muted }]}>{checked ? `Last health check, ${when(checkedAt!)}${last?.complete === false ? ' (stopped early)' : ''}` : 'Health check'}</Text>
               {checked ? (
                 <View style={styles.bigRow}>
                   <Text style={[styles.big, type.number, { color: faults ? t.danger : t.ok }]}>{faults}</Text>
@@ -140,6 +146,7 @@ function Connected() {
               ) : (
                 <Text style={[type.title, { color: t.text, marginVertical: space.sm }]}>Not checked yet</Text>
               )}
+              {last?.noAnswer ? <Text style={[type.small, { color: t.danger, fontWeight: '600' }]}>No control module answered</Text> : null}
             </View>
             <Mascot mood={alert ? 'worried' : checked ? 'happy' : 'scanning'} size={92} />
           </View>
@@ -160,7 +167,7 @@ function Connected() {
             <Button label={checked ? 'Check again' : 'Run health check'} icon="heart-pulse" variant={checked && faults ? 'secondary' : 'primary'} onPress={() => router.push('/diagnostics')} />
           </View>
           <Text style={[type.small, { color: t.muted, textAlign: 'center', marginTop: space.sm }]}>
-            {moduleCount ? `Checks up to ${moduleCount} control modules and the engine light` : 'Reads the engine computer and its light'}
+            {knownModules ? `Checks this car's ${knownModules} control modules and the engine light` : withModules ? 'Checks the control modules and the engine light' : 'Reads the engine computer and its light'}
           </Text>
         </GlowCard>
       </Arrive>
@@ -171,10 +178,10 @@ function Connected() {
           icon="tune-variant"
           colour="purple"
           title="Customise"
-          value={settings ? 'Change settings' : mods.length ? `${mods.length} guides` : 'Learn my car first'}
+          value={settings ? 'Change settings' : mods.length ? `${mods.length} guide${mods.length === 1 ? '' : 's'}` : 'Learn my car first'}
           onPress={() => router.push(customCount ? '/customise' : '/learn-car')}
         />
-        <Tile icon="chart-timeline-variant" colour="blue" title="Live data" value={liveCount == null ? '…' : sensorCount ? `${sensorCount} sensors` : `${sensorTotal} values`} onPress={() => router.push('/live')} />
+        <Tile icon="chart-timeline-variant" colour="blue" title="Live data" value={liveCount == null ? '…' : sensorCount ? `${sensorCount} sensor${sensorCount === 1 ? '' : 's'}` : `${sensorTotal} value${sensorTotal === 1 ? '' : 's'}`} onPress={() => router.push('/live')} />
         <Tile icon="wrench-clock" colour="green" title="Service" value={v.service ? (serviceDue(v.service, v.odometerKm).overdue ? 'Overdue' : describeDue(serviceDue(v.service, v.odometerKm), prefs.speed === 'mph').split(' or ')[0]) : 'Reminder and reset'} onPress={() => router.push('/service')} />
         <Tile icon="progress-clock" colour="red" title="History" value="Checks and changes" onPress={() => router.push({ pathname: '/history', params: { vin: v.vin } })} />
       </View>
@@ -192,16 +199,15 @@ function Connected() {
         </Pressable>
       ) : null}
 
-      <AiCard name={v.model || v.brand} />
 
       {!learned ? (
         <Pressable accessibilityRole="button" onPress={() => router.push('/learn-car')} style={({ pressed }) => [styles.learn, { backgroundColor: t.surface, opacity: pressed ? 0.85 : 1 }]}>
           <View style={[styles.learnIcon, { backgroundColor: t.indigo }]}>
-            <Icon name={'brain' as IconName} size={22} color="#FFFFFF" />
+            <Icon name="school-outline" size={22} color="#FFFFFF" />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[type.heading, { color: t.text }]}>Learn my car</Text>
-            <Text style={[type.small, { color: t.muted, marginTop: 1 }]}>Once per car: finds its modules, sensors and settings.</Text>
+            <Text style={[type.small, { color: t.muted, marginTop: 1 }]}>Once per car: finds its modules, sensors and values.</Text>
           </View>
           <Icon name="chevron-right" size={13} color={t.faint} />
         </Pressable>
@@ -213,7 +219,7 @@ function Connected() {
         <ListRow icon="flash-outline" iconColour="teal" title="Fuses and manuals" onPress={() => router.push('/fuses')} />
         <ListRow icon="car-battery" iconColour="green" title="Battery test" onPress={() => router.push('/battery')} />
         <ListRow icon="file-document-outline" iconColour="indigo" title="Health report" value="PDF" onPress={() => router.push('/report')} />
-        <ListRow icon={'book-open-variant' as IconName} iconColour="purple" title="Research notes" value="From the AI" onPress={() => router.push('/knowledge')} />
+        <ListRow icon={'book-open-variant' as IconName} iconColour="purple" title="Research notes" onPress={() => router.push('/knowledge')} />
         <ListRow icon="pencil-outline" iconColour="grey" title={v.model ? 'Edit details' : 'Add model details'} onPress={() => router.push(`/vehicle?vin=${encodeURIComponent(v.vin)}`)} />
       </Group>
 
@@ -222,11 +228,11 @@ function Connected() {
         <ListRow icon="timer-outline" iconColour="red" title="Performance" value="0 to 60" onPress={() => router.push('/performance')} />
       </Group>
 
-      <Group header="Expert" footer="Optional. Health check finds faults, Live data watches values, and Learn my car finds a car's modules, sensors and settings.">
+      <Group header="Expert" footer="Optional. Health check finds faults, Live data watches values, and Learn my car finds a car's modules, sensors and values.">
         <ListRow first icon="wrench-outline" iconColour="orange" title="Workshop" value="Every module" onPress={() => router.push('/workshop')} />
         <ListRow icon="radar" iconColour="blue" title="Sensor search" value={sensorCount ? `${sensorCount} found` : undefined} onPress={() => router.push('/sensors')} />
         {learned ? (
-          <ListRow icon={'brain' as IconName} iconColour="indigo" title="Learn my car" value={`${learned.modules} modules, ${learned.sensors} sensors`} onPress={() => router.push('/learn-car')} />
+          <ListRow icon="school-outline" iconColour="indigo" title="Learn my car" value={`${learned.modules} module${learned.modules === 1 ? '' : 's'}, ${learned.sensors} maker sensor${learned.sensors === 1 ? '' : 's'}`} onPress={() => router.push('/learn-car')} />
         ) : null}
         <ListRow icon={'telescope' as IconName} iconColour="indigo" title="Unknown values" value="Explore a module" onPress={() => router.push('/discover')} />
         <ListRow icon="ear-hearing" iconColour="grey" title="Listen mode" value="Record another tool" onPress={() => router.push('/listen')} />
@@ -282,63 +288,6 @@ function Tile({ icon, colour, title, value, onPress }: { icon: IconName; colour:
   );
 }
 
-// Caristini AI on Home: ask anything, or tap a suggestion.
-function AiCard({ name }: { name: string }) {
-  const t = useTheme();
-  const [ready, setReady] = useState<boolean | null>(null);
-  // Checked each time Home comes back into view, so a key added in Settings shows at once.
-  useFocusEffect(
-    useCallback(() => {
-      hasClaude()
-        .then(setReady)
-        .catch(() => setReady(false));
-    }, []),
-  );
-  if (ready === false) {
-    return (
-      <Pressable accessibilityRole="button" onPress={() => router.push('/settings')} style={({ pressed }) => [styles.ai, { borderColor: t.purple + '66', opacity: pressed ? 0.85 : 1 }]}>
-        <LinearGradient colors={[t.purple + '40', t.accent + '1A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-          <Icon name={'creation' as IconName} size={20} color={t.purple} />
-          <Text style={[type.heading, { color: t.text, flex: 1 }]}>Set up Caristini AI</Text>
-          <Icon name="chevron-right" size={13} color={t.faint} />
-        </View>
-        <Text style={[type.sub, { color: t.muted, marginTop: space.sm }]}>
-          Explains faults and changes settings when you ask. Needs a Claude API key: add it in Settings.
-        </Text>
-      </Pressable>
-    );
-  }
-  const ask = (q?: string) => {
-    tap();
-    router.push(q ? { pathname: '/ask', params: { q } } : '/ask');
-  };
-  return (
-    <View style={[styles.ai, { borderColor: t.purple + '66' }]}>
-      <LinearGradient colors={[t.purple + '40', t.accent + '1A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-        <Icon name={'creation' as IconName} size={20} color={t.purple} />
-        <Text style={[type.heading, { color: t.text }]}>Caristini AI</Text>
-      </View>
-      <Pressable accessibilityRole="button" onPress={() => ask()} style={[styles.aiInput, { backgroundColor: t.bg + 'CC' }]}>
-        <Text style={[type.body, { color: t.muted, flex: 1 }]} numberOfLines={1}>
-          Ask anything about your {name}
-        </Text>
-        <View style={[styles.aiSend, { backgroundColor: t.accent }]}>
-          <Icon name={'arrow-up' as IconName} size={16} color={t.onAccent} />
-        </View>
-      </Pressable>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: space.sm }}>
-        {['How is my car running?', 'What can I customise?', 'Explain my faults'].map((q) => (
-          <Pressable key={q} accessibilityRole="button" onPress={() => ask(q)} style={({ pressed }) => [styles.aiChip, { backgroundColor: pressed ? t.raised : t.surface }]}>
-            <Text style={[type.small, { color: t.text }]}>{q}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 // "Today, 21:40" / "Yesterday, 08:15" / "9 Nov, 17:02"
 function when(ms: number): string {
   const d = new Date(ms);
@@ -364,10 +313,6 @@ const styles = StyleSheet.create({
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginBottom: space.lg },
   tile: { flexBasis: '47%', flexGrow: 1, borderRadius: radius.lg, padding: space.lg, overflow: 'hidden', minHeight: 116 },
   tileIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  ai: { borderRadius: radius.lg, padding: space.lg, marginBottom: space.lg, overflow: 'hidden', borderWidth: 1 },
-  aiInput: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: 22, paddingLeft: space.lg, paddingRight: 5, paddingVertical: 5, marginTop: space.md },
-  aiSend: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  aiChip: { borderRadius: 999, paddingHorizontal: space.md, paddingVertical: 6 },
   learn: { flexDirection: 'row', alignItems: 'center', gap: space.md, borderRadius: radius.lg, padding: space.lg, marginBottom: space.xl },
   learnIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
 });

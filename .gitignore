@@ -58,3 +58,9 @@ captures/
 *api key*.txt
 *api_key*
 *.secret
+
+# Screen recordings of Carista and Caristini, kept on this PC only.
+Recordings/
+
+# Worker copies made by Claude Code.
+.claude/worktrees/

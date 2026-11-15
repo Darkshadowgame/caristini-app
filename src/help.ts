@@ -25,7 +25,6 @@ export type GuideId =
   | 'service'
   | 'carIds'
   | 'serviceReset'
-  | 'ai'
   | 'knowledge'
   | 'fuses'
   | 'diary'
@@ -74,16 +73,15 @@ export const GUIDES: Record<GuideId, Help> = {
   },
   carIds: {
     title: 'Parts and IDs',
-    what: 'Everything needed to buy parts for one car, readable without the adapter: the VIN, the codes from the data label, every module’s part number, software and coding, and a list of service part numbers.',
+    what: 'Everything needed to buy parts for one car, readable without the adapter: the VIN, the codes from the data label, every module’s part number, software and coding, and links to parts catalogues.',
     how: [
       'Module details are saved each time you read part numbers here, open a module in Workshop, or run Learn my car.',
       'Type the engine, gearbox, paint and option codes from the car’s data label once; they stay on this phone.',
       'For a car Caristini has been researched for (the 2007 to 2009 SEAT Leon Cupra, engine BWJ), Built-in for this car shows part numbers and a Car reference with known faults, fluids and the service schedule, all offline.',
-      'Find service part numbers asks the AI to search the web for the maker part numbers for this car, each with the page it came from.',
       'Parts diagrams by VIN opens a parts catalogue with exploded diagrams for this exact car.',
       'Share all IDs sends everything as text, for a parts counter or a garage.',
     ],
-    note: 'AI part numbers are a starting point: check each against a catalogue by VIN before ordering.',
+    note: 'Check part numbers against a catalogue by VIN before ordering.',
   },
   vehicle: {
     title: 'Vehicle details',
@@ -107,7 +105,7 @@ export const GUIDES: Record<GuideId, Help> = {
       'Tap Stop and keep results to end after the module being read. The time left shows after a few modules.',
       'Tap any fault for what it means, the likely causes and how to fix it.',
       'Clear one module or Clear all faults. Faults that come straight back mean the cause is still there.',
-      'Under the result: Clear all faults, Ask the AI about these faults, Make a PDF health report.',
+      'Under the result: Clear all faults, Make a PDF health report.',
       'Each check is saved to History. From the Car tab, See faults opens the last check with no new one. With no adapter, this page shows the last check saved on this phone.',
     ],
     note: 'Clear faults with the engine off and the ignition on: Caristini refuses while the engine runs. Clearing also resets the emissions self-tests, so an MOT can fail until you have driven enough for them to complete.',
@@ -119,7 +117,6 @@ export const GUIDES: Record<GuideId, Help> = {
       'Most likely causes and How to fix it are listed cheapest and most likely first.',
       'Where it was found shows the module and the fault status, for example stored or pending.',
       'Reading the code splits it into system, type and area.',
-      'Explain this fault asks Caristini AI for a plain-words explanation for your car, including whether it is safe to drive. It needs a Claude API key.',
       'Search the web for this code opens a web search. On VW group cars you can also search the Ross-Tech wiki.',
     ],
     note: 'The explanation is a guide, not a diagnosis.',
@@ -271,23 +268,10 @@ export const GUIDES: Record<GuideId, Help> = {
     note: 'Nothing is guessed: only steps learned on this car or published for it are sent.',
   },
 
-  ai: {
-    title: 'Caristini AI',
-    what: 'A chat assistant that can read your car: sensors, faults, modules and settings. It explains them for your car and can change a setting when you ask.',
-    how: [
-      'Type a question or tap a suggestion.',
-      'With the adapter connected it reads the car as it answers. Without it, it answers from the last health check and History.',
-      'Any change to the car waits for you to tap Allow, and uses the same safe write as Customise: backup, read-back and automatic restore.',
-      'Tap the stop button to end an answer early.',
-      'Each car has its own conversation while the app is open.',
-    ],
-    note: 'It needs your own Claude API key, pasted once in Settings.',
-  },
   knowledge: {
     title: 'Research notes',
-    what: 'What Caristini AI has researched and saved for your kind of car, such as fuse layouts, common faults and published settings. It is shared with every Caristini install.',
+    what: 'Notes saved for your kind of car, such as fuse layouts, common faults and published settings. They are shared with every Caristini install.',
     how: [
-      'Tap a research button to ask the AI to look something up and save it.',
       'Search the saved entries, and tap one to see its sources.',
       'New knowledge arrives by itself when the app opens, or tap Check for new knowledge.',
     ],
@@ -354,15 +338,15 @@ export const GUIDES: Record<GuideId, Help> = {
   },
   learnCar: {
     title: 'Learn my car',
-    what: 'One button that finds every module and sensor on your car and, with a Claude key, has the AI work out what they are.',
+    what: 'One button that finds every module and sensor on your car and sends what it found back, to be built into the next update.',
     how: [
       'Run a health check first: Learn my car then asks the modules that check found, which is quicker. Without one it asks every diagnostic address (about 2 minutes more).',
       'Step 1 reads each module’s part number, software and coding. If the car is not answering, or fewer than half its known modules answer, it stops and keeps your earlier results.',
       'Step 2 asks the sensors other cars of your make answered first; the full list is on Sensors.',
-      'Step 3 sweeps each module for values no list knows yet and reads them twice to see which ones move.',
-      'Step 4 has the AI look up each part, name the unknown values and find settings owners have published. These show in Customise and Sensors.',
-      'Step 5 saves what was learned and, if automatic sending is set up, sends it back to be built in.',
-      'It takes 10 to 30 minutes. Stop any time and keep what was learned.',
+      'Step 3 sweeps each module near the values already known for it for ones no list knows yet, and reads them twice to see which ones move. On older VW modules it reads the value groups, named groups first.',
+      'On VW PQ35 cars it uses the gateway’s list of modules and skips the newer-protocol address search and sensor list.',
+      'Step 4 saves what was learned and, if automatic sending is set up, sends it back to be built in.',
+      'It usually takes 5 to 20 minutes: the value step stops after 8 minutes. Stop any time and keep what was learned.',
     ],
     note: 'Read-only: nothing is changed in the car. Keep the ignition on; running the engine keeps the battery up.',
   },
@@ -374,7 +358,7 @@ export const GUIDES: Record<GuideId, Help> = {
       'Both skip numbers already asked on this car. Open one module to explore it alone.',
       'Pause any time and carry on later from where it stopped.',
       'Open a module to see what it found. Sample again shows which values move: rev the engine, switch something on or drive, then sample again.',
-      'Tap a value to name it, or ask the AI what it is.',
+      'Tap a value to name it.',
       'Send findings to build them into Caristini for every car of this kind.',
     ],
     note: 'Read-only: nothing is written to the car.',
@@ -392,12 +376,11 @@ export const GUIDES: Record<GuideId, Help> = {
   },
   settings: {
     title: 'Settings',
-    what: 'Speed and distance, temperature, connecting, the adapter check, app updates, Caristini AI, sending findings, the adapter log and help.',
+    what: 'Speed and distance, temperature, connecting, the adapter check, app updates, sending findings, the adapter log and help.',
     how: [
       'Speed and distance: miles or kilometres. Temperature: Celsius or Fahrenheit.',
       'Connecting: connect when the app opens, and run a health check straight after.',
       'Adapter: check what the adapter is and how fast it answers.',
-      'AI: paste your Claude API key. It stays in this phone’s keychain.',
       'Troubleshooting: keep an adapter log and share it when something does not work.',
     ],
   },
@@ -409,7 +392,7 @@ export const GUIDE_GROUPS: { title: string; ids: GuideId[] }[] = [
   { title: 'Find faults', ids: ['diagnostics', 'code', 'lookup', 'history', 'report'] },
   { title: 'Read the car', ids: ['live', 'sensors', 'dashboard', 'battery', 'performance'] },
   { title: 'Change settings', ids: ['customise', 'learnSetting', 'customiseGuide', 'service', 'serviceReset'] },
-  { title: 'Tools', ids: ['ai', 'knowledge', 'fuses', 'diary', 'diaryAdd'] },
+  { title: 'Tools', ids: ['knowledge', 'fuses', 'diary', 'diaryAdd'] },
   { title: 'Expert', ids: ['workshop', 'module', 'partNumbers', 'learnCar', 'discover', 'listen'] },
   { title: 'App', ids: ['settings'] },
 ];
@@ -442,7 +425,7 @@ export const SECTIONS: Record<string, Help> = {
     title: 'Fault memory',
     what: 'The faults this module has stored.',
     how: [
-      'Tap a fault for what it means and the likely causes; with AI, whether it is safe to drive.',
+      'Tap a fault for what it means and the likely causes.',
       'Read again asks the module once more.',
       'Clear these faults wipes this module’s fault memory, then reads it again. Faults still present come back.',
       'Clearing is saved to History and your diary.',
@@ -479,7 +462,7 @@ export const SECTIONS: Record<string, Help> = {
     how: [
       'Flip a switch to change the draft. Changed shows which ones differ from the car.',
       'Nothing changes in the car until you tap Save to the car.',
-      'Not tested on this car means it comes from a single source or the AI.',
+      'Not tested on this car means it comes from a single source.',
     ],
   },
   moduleBytes: {
@@ -557,12 +540,12 @@ export const SECTIONS: Record<string, Help> = {
   lastScan: {
     title: 'Last health check',
     what: 'The faults found in the last health check of this car, saved on this phone.',
-    how: ['Readable with no adapter.', 'Tap a fault for what it means and what to do.', 'Stopped early means the check did not finish.'],
+    how: ['Readable with no adapter.', 'Tap a fault for what it means and what to do.', 'Stopped early means the check did not finish.', 'No control module answered means only the engine’s standard codes were read, so it is not a clean result.'],
   },
   // Customise
   customiseSettings: {
     title: 'Settings',
-    what: 'Settings documented by public sources for your car’s platform, plus ones the AI found.',
+    what: 'Settings documented by public sources for your car’s platform.',
     how: [
       'Tap a name for details, the byte and bit, and the source.',
       'Reported by owners means one community source. Check the result in the car.',
@@ -649,7 +632,7 @@ export const SECTIONS: Record<string, Help> = {
     title: 'Find sensors',
     what: 'Two ways to look for the sensors your car answers, on the modules you choose.',
     how: [
-      'Quick search: first the sensors your other cars and other owners of the same make found, then only what this car has not been asked yet. Values asked before are skipped.',
+      'Quick search: only the sensors your other cars and other owners of the same make already found, not yet asked on this car. It shows only when there are some.',
       'Full search: every sensor on the chosen modules again, slower. Use it to confirm earlier results; a value that answered before and does not now is taken off.',
       'Modules to search: switch off any module you do not want asked, for example the engine, which holds most values.',
       'What is found is sent back, so the next car of the same make is quicker.',
@@ -660,7 +643,6 @@ export const SECTIONS: Record<string, Help> = {
     what: 'Sensors in this system or matching your search, with live values.',
     how: [
       'The line under each name is the module and the value number.',
-      'Named by AI: Learn my car named it. A list name: it comes from a close relative of your car.',
       'Check: may not apply means the reading looks wrong for that sensor.',
       'Tap the star to pin a value to Live data.',
     ],
@@ -717,14 +699,14 @@ export const SECTIONS: Record<string, Help> = {
     how: [
       'Named values are already in Caristini’s lists.',
       'Moves means it changed between samples, so it is most likely a sensor.',
-      'Tap a value to see its samples and possible readings, name it, or ask the AI.',
+      'Tap a value to see its samples and possible readings, or name it.',
     ],
   },
   // Learn my car
   learnCarSteps: {
     title: 'What happens',
-    what: 'The 5 steps of Learn my car, in order.',
-    how: ['The step running now is marked Now; finished steps turn green.', 'The AI step needs a Claude API key; the other steps run without it.'],
+    what: 'The 4 steps of Learn my car, in order.',
+    how: ['The step running now is marked Now; finished steps turn green.', 'What it finds is sent back and built into the next update.'],
   },
   learnCarKnows: {
     title: 'What Caristini knows',
@@ -796,15 +778,6 @@ export const SECTIONS: Record<string, Help> = {
     title: 'App updates',
     what: 'New versions of Caristini arrive over the air.',
     how: ['They download by themselves when the app opens and apply the next time it starts.', 'Check for updates looks now; Restart to update applies one straight away.'],
-  },
-  settingsAi: {
-    title: 'AI',
-    what: 'Caristini AI uses your own Claude API key from console.anthropic.com.',
-    how: [
-      'Paste the key once. It stays in this phone’s keychain and is sent only to Anthropic.',
-      'It explains faults, guesses unknown values and answers questions about your car.',
-      'Anthropic charges for each question, pay as you go.',
-    ],
   },
   settingsSending: {
     title: 'Sending findings',
@@ -889,8 +862,8 @@ export const SECTIONS: Record<string, Help> = {
     what: 'Codes parts counters ask for that the car does not send over the OBD port.',
     how: [
       'Type each code as printed on the car’s data label. They are kept on this phone.',
-      'Codes marked Found by AI came from a web search, with the page shown under them. Check them against the label.',
-      'Your own entry always replaces one found by AI.',
+      'Codes marked Found by AI were saved by an earlier version from a web search, with the page shown under them. Check them against the label.',
+      'Your own entry always replaces a saved one.',
     ],
   },
   idsModules: {
@@ -902,16 +875,6 @@ export const SECTIONS: Record<string, Help> = {
       'The part number is what to quote when buying a replacement module.',
     ],
     note: 'A replacement module usually needs coding to match: keep the coding shown here.',
-  },
-  idsParts: {
-    title: 'Service parts',
-    what: 'Maker part numbers for the usual service parts for this car, found by AI on the web.',
-    how: [
-      'Needs the internet and a Claude API key, not the car.',
-      'The search uses the VIN, the engine and gearbox codes and the engine computer’s part number, so fill those in first for the best match.',
-      'Each number shows the page it came from. Tap a number to copy it.',
-    ],
-    note: 'Check each number against a catalogue by VIN before ordering: fitment can change during a model year.',
   },
   idsPack: {
     title: 'Built-in for this car',
@@ -974,7 +937,7 @@ export const SECTIONS: Record<string, Help> = {
   },
   knowledgeEntries: {
     title: 'Saved knowledge',
-    what: 'Entries researched by the AI or added by owners, for your make, model or platform.',
+    what: 'Entries saved for your make, model or platform, by earlier versions or by owners.',
     how: ['Tap an entry for the full text, who added it and its sources.'],
   },
   codeWhere: {
@@ -986,12 +949,6 @@ export const SECTIONS: Record<string, Help> = {
     title: 'Extra data for a workshop',
     what: 'Extra data the module stored with this fault.',
     how: ['Tap Read details.', 'The layout is the maker’s own and not public, so it is shown raw.'],
-  },
-  codeAi: {
-    title: 'Explained by AI',
-    what: 'A plain-words explanation for your car: meaning, causes, whether it is safe to drive and a rough cost.',
-    how: ['It needs a Claude API key in Settings.'],
-    note: 'A guide, not a diagnosis.',
   },
   codeReading: {
     title: 'Reading the code',

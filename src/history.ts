@@ -22,6 +22,8 @@ export interface HistoryEntry {
   faults?: HistoryFault[];
   modules?: number;
   complete?: boolean;
+  // Scans: the car has control modules but none of them answered.
+  noAnswer?: boolean;
   // Changes: before and after, for the record.
   before?: string;
   after?: string;

@@ -2,7 +2,6 @@ import { Stack } from 'expo-router';
 import { allowSleep, stayAwake } from '../keepAwake';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { askClaude, hasClaude } from '../ai/claude';
 import { addSample, DISCOVER_RANGES, DiscoverModule, Discovery, knownName, loadDiscovery, quickRanges, rangeSize, readings, saveDiscovery } from '../discover';
 import { sharedSensorKeys } from '../obd/sharedSensors';
 import { sendLogNow } from '../share/sendLog';
@@ -52,7 +51,6 @@ export default function Discover() {
   const [progress, setProgress] = useState<{ done: number; total: number; did: number } | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'danger' | 'info'; text: string } | null>(null);
-  const [ai, setAi] = useState(false);
   const stop = useRef(false);
   const alive = useRef(true);
   const discRef = useRef<Discovery | null>(null);
@@ -60,7 +58,6 @@ export default function Discover() {
 
   useEffect(() => {
     alive.current = true;
-    hasClaude().then(setAi);
     return () => {
       alive.current = false;
       stop.current = true;
@@ -136,7 +133,7 @@ export default function Discover() {
         await saveDiscovery(next);
         const count = Object.keys(next.modules[def.id]?.found ?? {}).length;
         if (res.finished) {
-          await addHistory({ vin: v.vin, kind: 'discover', title: `${def.name}: ${count} values found`, detail: 'Discover sweep finished' });
+          await addHistory({ vin: v.vin, kind: 'discover', title: `${def.name}: ${count} value${count === 1 ? '' : 's'} found`, detail: 'Discover sweep finished' });
           if (await canSendAutomatically()) {
             const r = await sendBack('discover', v.vin, { car: { title: vehicleTitle(v), brand: v.brand, model: v.model, year: v.year, platform: v.platform }, module: next.modules[def.id] });
             if (r.via === 'github') update((d) => ({ ...d, sentAt: Date.now() }));
@@ -171,28 +168,7 @@ export default function Discover() {
       });
       await saveDiscovery(next);
       const moving = Object.values(next.modules[def.id]?.found ?? {}).filter((f) => f.moves).length;
-      setMessage({ tone: 'info', text: `${moving} values have changed so far. Rev the engine, switch something on or drive, then sample again.` });
-    } finally {
-      if (alive.current) setRunning(null);
-    }
-  };
-
-  const guess = async (def: ModuleDef, did: string) => {
-    const f = moduleOf(def).found[did];
-    if (!f) return;
-    setRunning(`ai-${did}`);
-    try {
-      const answer = await askClaude(
-        `A ${vehicleTitle(v)} (${v.year ?? 'year unknown'}, ${v.platform ?? v.brand}) answered UDS ReadDataByIdentifier 22 ${did} on module "${def.name}" (request ID ${def.tx}). Samples, oldest first, hex: ${f.samples.join(', ')}. ${f.moves ? 'The value changes.' : 'The value did not change between samples.'} In one line, say what this most likely is and how to decode it (byte positions, scale, offset, unit). Say "Unknown" if there is no reasonable guess. Do not invent certainty.`,
-        { maxTokens: 160 },
-      );
-      const next = update((d) => {
-        const mod = d.modules[def.id];
-        return { ...d, modules: { ...d.modules, [def.id]: { ...mod, found: { ...mod.found, [did]: { ...mod.found[did], guess: answer.trim() } } } } };
-      });
-      await saveDiscovery(next);
-    } catch (e) {
-      setMessage({ tone: 'danger', text: e instanceof Error ? e.message : String(e) });
+      setMessage({ tone: 'info', text: `${moving} ${moving === 1 ? 'value has' : 'values have'} changed so far. Rev the engine, switch something on or drive, then sample again.` });
     } finally {
       if (alive.current) setRunning(null);
     }
@@ -227,7 +203,7 @@ export default function Discover() {
       <Stack.Screen options={{ title: 'Unknown values' }} />
       {message ? <Notice tone={message.tone} icon={message.tone === 'danger' ? 'alert-circle-outline' : 'information-outline'} text={message.text} /> : null}
 
-      {running && !running.startsWith('sample') && !running.startsWith('ai') && running !== 'send' ? (
+      {running && !running.startsWith('sample') && running !== 'send' ? (
         <GlowCard tone="brand" style={{ alignItems: 'center' }}>
           <ScanPulse active size={120} />
           <Text style={[type.title3, { color: t.text, marginTop: space.md }]}>Exploring {defs?.find((d) => d.id === running)?.name ?? 'the module'}</Text>
@@ -277,7 +253,7 @@ export default function Discover() {
           const m = disc?.modules[def.id];
           const n = Object.keys(m?.found ?? {}).length;
           const moving = Object.values(m?.found ?? {}).filter((f) => f.moves).length;
-          const status = m?.finished ? `${n} values, ${moving} moving` : m?.silent ? 'Did not answer' : m?.nextDid != null ? `${n} found, paused` : 'Not explored yet';
+          const status = m?.finished ? `${n} value${n === 1 ? '' : 's'}, ${moving} moving` : m?.silent ? 'Did not answer' : m?.nextDid != null ? `${n} found, paused` : 'Not explored yet';
           const shown = open === def.id;
           const mod = shown ? moduleOf(def) : null;
           const entries = mod ? Object.entries(mod.found).sort(([a], [b]) => a.localeCompare(b)) : [];
@@ -307,7 +283,7 @@ export default function Discover() {
                     )}
                   </View>
                   {entries.map(([did, f]) => (
-                    <FoundRow key={did} did={did} f={f} known={knownName(group, def.tx, did)} ai={ai} busy={running === `ai-${did}`} onAsk={() => guess(def, did)} onName={(l) => rename(def, did, l)} />
+                    <FoundRow key={did} did={did} f={f} known={knownName(group, def.tx, did)} onName={(l) => rename(def, did, l)} />
                   ))}
                 </View>
               ) : null}
@@ -321,7 +297,7 @@ export default function Discover() {
   );
 }
 
-function FoundRow({ did, f, known, ai, busy, onAsk, onName }: { did: string; f: { samples: string[]; moves?: boolean; label?: string; guess?: string }; known: string | null; ai: boolean; busy: boolean; onAsk: () => void; onName: (l: string) => void }) {
+function FoundRow({ did, f, known, onName }: { did: string; f: { samples: string[]; moves?: boolean; label?: string; guess?: string }; known: string | null; onName: (l: string) => void }) {
   const t = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [name, setName] = useState(f.label ?? '');
@@ -345,7 +321,6 @@ function FoundRow({ did, f, known, ai, busy, onAsk, onName }: { did: string; f: 
       <Text selectable style={[type.small, { color: t.muted, fontFamily: MONO, marginTop: 2 }]} numberOfLines={expanded ? undefined : 1}>
         {(last.match(/../g) ?? []).join(' ') || '(empty)'}
       </Text>
-      {f.guess ? <Text style={[type.small, { color: t.accentText, marginTop: 4 }]}>AI guess: {f.guess}</Text> : null}
       {expanded ? (
         <View style={{ marginTop: space.sm, gap: 4 }}>
           {f.samples.length > 1 ? <Text style={[type.small, { color: t.muted }]}>Samples: {f.samples.join(' · ')}</Text> : null}
@@ -361,7 +336,6 @@ function FoundRow({ did, f, known, ai, busy, onAsk, onName }: { did: string; f: 
             placeholderTextColor={t.muted}
             style={[type.body, styles.input, { backgroundColor: t.sunken, color: t.text }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
           />
-          {ai ? <Button label="Ask AI what it is" icon="creation" variant="ghost" busy={busy} onPress={onAsk} /> : null}
         </View>
       ) : null}
     </Pressable>

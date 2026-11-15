@@ -152,6 +152,9 @@ export const MODULES: ModuleDef[] = [
   mazda('ssu', 'Start and stop unit', '731', '739', 'MIA (CX-5, Mazda3, MX-5)'),
   mazda('radar', 'Front radar', '764', '76C', 'opendbc (fitted cars only)'),
   mazda('camera', 'Front camera', '706', '70E', 'opendbc (fitted cars only)'),
+  // Both answered with Mazda part numbers on a 2016 Mazda6 GJ (Learn my car scan of 14 Nov 2026).
+  mazda('hvac', 'Heating and air conditioning', '733', '73B', 'Mazda6 GJ 2016 scan (part G46G-61190)'),
+  mazda('rcm', 'Airbags', '737', '73F', 'Mazda6 GJ 2016 scan (part GMC8-57K30)'),
 ];
 
 export function modulesFor(group: 'vag' | 'ford' | 'mazda' | 'other'): ModuleDef[] {

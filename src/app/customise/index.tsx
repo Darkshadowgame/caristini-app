@@ -44,7 +44,8 @@ export default function Customise() {
   const garage = useGarage();
   const v = conn.vehicle;
   const client = conn.client;
-  // Settings saved in the shared knowledge base (AI research), loaded once.
+  // Settings saved in the shared knowledge base, loaded once. They are not
+  // confirmed on a car, so they show as read-only notes, never as switches.
   const [kbItems, setKbItems] = useState<CodingItem[]>([]);
   useEffect(() => {
     if (!v) return;
@@ -53,12 +54,14 @@ export default function Customise() {
     loadKb().then((l) => setKbItems(kbSettings(kbForCar(l, v)).filter((i) => !!plat && i.platforms.some((x) => x.toLowerCase() === plat))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v?.vin, v?.platform]);
-  // Sourced settings for this platform, plus any the AI found for this car.
+  // Sourced settings for this platform.
   const items = v
-    ? [...codingItemsFor(v.group, v.platform), ...(v.aiItems ?? []), ...kbItems].filter(
+    ? codingItemsFor(v.group, v.platform).filter(
         (i, k, all) => all.findIndex((x) => x.module === i.module && x.byte === i.byte && x.bits.join() === i.bits.join()) === k,
       )
     : [];
+  // Knowledge base notes not already a sourced setting.
+  const kbNotes = kbItems.filter((n) => !items.some((i) => i.module === n.module && i.byte === n.byte && i.bits.join() === n.bits.join()));
   const learned = v?.learned ?? [];
   // Settings learned on the owner's other cars that have the same module.
   const borrowed = v ? sharedLearned(v, garage.vehicles) : [];
@@ -515,9 +518,17 @@ export default function Customise() {
         {client?.supportsModules ? (
           <ListRow first icon="compare-horizontal" iconColour="purple" title="Learn from Carista" subtitle="Change settings in Carista; Caristini learns what changed" onPress={() => router.push('/customise/learn')} />
         ) : null}
-        <ListRow first={!client?.supportsModules} icon="school-outline" iconColour="teal" title="Learn my car" subtitle="Finds every module and has the AI look up its settings" onPress={() => router.push('/learn-car')} />
+        <ListRow first={!client?.supportsModules} icon="school-outline" iconColour="teal" title="Learn my car" subtitle="Finds every module and reads its part number and coding" onPress={() => router.push('/learn-car')} />
         <ListRow icon="refresh" iconColour="blue" title="Read settings again" subtitle="Settings are kept while connected; this reads them fresh" disabled={reading} onPress={() => read(true)} />
       </Group>
+
+      {kbNotes.length ? (
+        <Group header="Notes from the knowledge base" footer="Not confirmed on a car, so Caristini does not offer these as switches.">
+          {kbNotes.map((n, i) => (
+            <ListRow key={n.id} first={i === 0} icon="note-text-outline" iconColour="grey" title={n.title} subtitle={n.summary} noChevron />
+          ))}
+        </Group>
+      ) : null}
 
       {restorable.length ? (
         <Group header="Backups" help={SECTIONS.customiseBackups} footer="The coding each module had before Caristini first changed it.">

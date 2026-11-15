@@ -15,7 +15,7 @@ import { useConnection } from '../state';
 import { MONO, radius, space, type, useTheme } from '../theme';
 import { Mascot } from '../brand/Mascot';
 import { Arrive, Button, ConfirmSheet, GlowCard, Group, Icon, IconName, ListRow, ModuleRing, NeedsConnection, Notice, Pill, ScanPulse, Screen, success, tap } from '../ui';
-import { useGarage, vehicleTitle } from '../vehicle/garage';
+import { quickCheckDue, useGarage, vehicleTitle } from '../vehicle/garage';
 import { sendLogNow } from '../share/sendLog';
 import { extrasFor } from '../obd/extras';
 import { LastScan, useLastScan } from '../components/LastScan';
@@ -78,7 +78,7 @@ export default function Diagnostics() {
     // After 2 complete full checks the car's modules are known: ask only those,
     // and every address again after 30 days or when asked.
     const fresh = garage.latest(vehicle?.vin ?? '');
-    const quick = !everyAddress && (fresh?.fullChecks ?? 0) >= 2 && Date.now() - (fresh?.fullCheckAt ?? 0) < 30 * 86400000 && (fresh?.modulesSeen?.length ?? 0) >= 3;
+    const quick = !everyAddress && quickCheckDue(fresh);
     setMode(quick ? 'quick' : 'full');
     setBusy('scan');
     setError(null);
@@ -139,18 +139,29 @@ export default function Diagnostics() {
           await garage.update(vehicle.vin, { odometerKm: odoKm, odometerAt: Date.now() });
         }
       }
+      // No control module answered: saved like any other check, but marked, so
+      // it is not read as "no faults".
+      const noAnswer = withModules && answered === 0 && !stop.current;
+      const light = conn.info?.milOn ? '; engine light on' : '';
       if (vehicle)
         await addHistory({
           vin: vehicle.vin,
           kind: 'scan',
-          title: logged.length ? `${logged.length} fault${logged.length === 1 ? '' : 's'} found` : 'No faults found',
-          detail: `${answered || 1} module${answered === 1 ? '' : 's'} answered${conn.info?.milOn ? '; engine light on' : ''}`,
+          title: logged.length ? `${logged.length} fault${logged.length === 1 ? '' : 's'} found` : noAnswer ? 'No control module answered' : 'No faults found',
+          detail: noAnswer
+            ? `No control module answered; only the engine's standard codes were read${light}`
+            : withModules
+              ? `${answered} module${answered === 1 ? '' : 's'} answered${light}`
+              : `Engine computer only${light}`,
           faults: logged,
           modules: answered,
           complete: !stop.current,
+          noAnswer,
           odometerKm: odoKm,
         });
-      // A stopped scan does not replace the saved result (it read only part of the car).
+      // A check that ran to the end replaces the saved result; one stopped early
+      // stays in History only, so leaving the screen part-way never hides
+      // faults an earlier full check found.
       if (vehicle)
         await garage.update(vehicle.vin, {
           ...(stop.current ? {} : { lastCodes: all, lastMilOn: conn.info?.milOn ?? false, lastCheckedAt: Date.now() }),
@@ -444,7 +455,7 @@ export default function Diagnostics() {
                 </View>
                 <Text style={[type.sub, { color: info.milOn ? t.danger : t.ok, fontWeight: '600' }]}>Engine light {info.milOn ? 'on' : 'off'}</Text>
                 <Text style={[type.sub, { color: t.muted }]}>
-                  {withModules ? `${answered} of ${defs.length} modules answered` : 'Engine computer only'}
+                  {withModules ? (answered ? `${answered} of ${defs.length} module${defs.length === 1 ? '' : 's'} answered` : 'No control module answered') : 'Engine computer only'}
                 </Text>
                 {volts != null ? (
                   <Text style={[type.sub, type.number, { color: volts < 12.2 ? t.danger : t.muted }]}>
@@ -461,21 +472,19 @@ export default function Diagnostics() {
 
       {error ? <Notice tone="danger" icon="alert-circle-outline" text={error} /> : null}
       {message ? <Notice tone="ok" icon="check" text={message} /> : null}
+      {!scanning && obd && withModules && answered === 0 ? (
+        <Notice
+          tone="danger"
+          icon="alert-circle-outline"
+          text="No control module answered, so this is not a clean result: only the engine's standard codes were read. Ignition on, then tap Check again."
+        />
+      ) : null}
 
       {/* What to do next, straight under the result. */}
       {!scanning ? (
         <Group>
           {anyToClear ? <ListRow first icon="broom" iconColour="red" title="Clear all faults" disabled={!!busy} onPress={() => setConfirm({ kind: 'all' })} /> : null}
-          {total > 0 ? (
-            <ListRow
-              first={!anyToClear}
-              icon={'creation' as IconName}
-              iconColour="purple"
-              title="Ask the AI about these faults"
-              onPress={() => router.push({ pathname: '/ask', params: { q: 'Explain the faults from my last health check, the most serious first, and what to do about each' } })}
-            />
-          ) : null}
-          <ListRow first={!anyToClear && total === 0} icon="file-document-outline" iconColour="indigo" title="Make a PDF health report" onPress={() => router.push('/report')} />
+          <ListRow first={!anyToClear} icon="file-document-outline" iconColour="indigo" title="Make a PDF health report" onPress={() => router.push('/report')} />
           <ListRow icon="refresh" iconColour="blue" title="Check again" disabled={!!busy} onPress={() => scan()} />
           {withModules && mode === 'quick' ? (
             <ListRow icon="radar" iconColour="grey" title="Check every address" subtitle="This was a quick check of the modules your car has. A full check runs by itself every 30 days." disabled={!!busy} onPress={() => scan(true)} />

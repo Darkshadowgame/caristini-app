@@ -35,7 +35,7 @@ export function WhichCar() {
 
   if (!open && current) {
     return (
-      <Group header="Which car is this?" footer="This car does not report its VIN, so Caristini used the car you picked last time.">
+      <Group header="Which car is this?" footer="This car does not send its VIN over OBD, so the VIN shown is the one saved for this car. Tap Change if this is a different car.">
         <ListRow first icon="car-side" iconColour="grey" title={vehicleTitle(current)} subtitle="Picked last time" value="Change" onPress={() => setOpen(true)} />
       </Group>
     );

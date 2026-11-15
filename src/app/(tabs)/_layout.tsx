@@ -14,10 +14,6 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Car</NativeTabs.Trigger.Label>
         {conn.info?.milOn ? <NativeTabs.Trigger.Badge>!</NativeTabs.Trigger.Badge> : null}
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(ai)">
-        <NativeTabs.Trigger.Icon sf="sparkles" md="auto_awesome" />
-        <NativeTabs.Trigger.Label>AI</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="(lookup)">
         <NativeTabs.Trigger.Icon sf="magnifyingglass" md="search" />
         <NativeTabs.Trigger.Label>Lookup</NativeTabs.Trigger.Label>

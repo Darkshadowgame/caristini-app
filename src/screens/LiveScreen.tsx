@@ -188,10 +188,15 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
           return (
             <View key={p.pid} style={[styles.tile, { backgroundColor: t.surface, borderColor: t.border }]}>
               <Text numberOfLines={1} style={[styles.tileLabel, { color: t.muted }]}>{p.label}</Text>
-              <Text style={[styles.tileValue, { color: t.text }]} accessibilityLabel={s?.last == null ? 'No reading' : undefined}>
-                {s?.last == null ? '–' : toUserUnits(s.last, p.unit, settings).value.toFixed(p.decimals)}
-                <Text style={[styles.unit, { color: t.muted }]}> {toUserUnits(0, p.unit, settings).unit}</Text>
-              </Text>
+              {s && s.last == null ? (
+                // Read, but the car sent no value (an O2 sensor's 1.275 V means none).
+                <Text style={[styles.tileValue, styles.noReading, { color: t.faint }]}>No reading</Text>
+              ) : (
+                <Text style={[styles.tileValue, { color: t.text }]} accessibilityLabel={s?.last == null ? 'No reading' : undefined}>
+                  {s?.last == null ? '–' : toUserUnits(s.last, p.unit, settings).value.toFixed(p.decimals)}
+                  <Text style={[styles.unit, { color: t.muted }]}> {toUserUnits(0, p.unit, settings).unit}</Text>
+                </Text>
+              )}
               <Spark points={s?.points ?? []} />
               <Text style={[styles.minmax, { color: t.muted }]}>
                 {s && s.points.length
@@ -255,7 +260,7 @@ function SensorHub({ active: shown }: { active: boolean }) {
       on = false;
     };
   }, [conn.client, active, pinned]);
-  if (!v || !conn.client?.supportsModules || (v.group === 'other' && !v.aiSensors?.length)) return null;
+  if (!v || !conn.client?.supportsModules || v.group === 'other') return null;
   const imperial = { speed: settings.speed === 'mph', temp: settings.temp === '°F' };
   const counts = CATEGORY_ORDER.map((c) => ({ c, n: mine.filter((r) => categoryOf(r) === c).length })).filter((x) => x.n);
 
@@ -297,7 +302,7 @@ function SensorHub({ active: shown }: { active: boolean }) {
           })}
         </View>
       ) : null}
-      <Group header={`${mine.length} sensors on this car`} help={SECTIONS.liveHub} footer={chosen.length ? undefined : 'Open a system and tap the star on a value to pin your own here.'}>
+      <Group header={`${mine.length} sensor${mine.length === 1 ? '' : 's'} on this car`} help={SECTIONS.liveHub} footer={chosen.length ? undefined : 'Open a system and tap the star on a value to pin your own here.'}>
         {counts.map(({ c, n }, i) => (
           <ListRow key={c} first={i === 0} icon={CATEGORY_ICON[c] as IconName} iconColour={CATEGORY_COLOUR[c]} title={c} value={String(n)} onPress={() => router.push({ pathname: '/sensors', params: { cat: c } })} />
         ))}
@@ -492,7 +497,7 @@ function MeasuringBlocks() {
     setBusy('scan');
     setFound([]);
     try {
-      await client.scanMeasuringBlocks(module, (g, c) => setFound((old) => [...old, { group: g, cells: c }]), setPct);
+      await client.scanMeasuringBlocks(module, (g, c) => setFound((old) => [...old, { group: g, cells: c }].sort((x, y) => x.group - y.group)), setPct);
     } finally {
       setBusy(null);
     }
@@ -559,7 +564,7 @@ function MeasuringBlocks() {
             {busy === 'scan' ? <ProgressBar value={pct} label="Reading groups 1 to 255" /> : null}
             {!found.length && savedGroups.length ? (
               <Body muted small style={{ marginTop: space.md }}>
-                {savedGroups.length} groups with values, found by Learn my car. Tap one to read it.
+                {savedGroups.length} {savedGroups.length === 1 ? 'group' : 'groups'} with values, found by Learn my car. Tap one to read it.
               </Body>
             ) : null}
             {found.length
@@ -568,7 +573,7 @@ function MeasuringBlocks() {
                   <Pressable key={f.group} accessibilityRole="button" onPress={() => read(f.group)} style={[styles.makerRow, { borderColor: t.border }]}>
                     <Text style={[styles.makerLabel, { color: t.text, width: 80 }]}>Group {f.group}</Text>
                     <Text style={[styles.makerSource, { color: t.muted, flex: 1 }]} numberOfLines={2}>
-                      {(groupLabels(module?.code, f.group)?.filter(Boolean).slice(0, 2).join(', ') || f.units.filter((u) => u !== 'raw').join(' · ')) || `${f.units.length} values`}
+                      {(groupLabels(module?.code, f.group)?.filter(Boolean).slice(0, 2).join(', ') || f.units.filter((u) => u !== 'raw').join(' · ')) || `${f.units.length} value${f.units.length === 1 ? '' : 's'}`}
                     </Text>
                   </Pressable>
                 ))}
@@ -626,7 +631,8 @@ function RecordingSummary({ rows, pids }: { rows: { t: number; pid: number; v: n
 }
 
 function push(old: Series | undefined, v: number | null): Series {
-  if (v == null) return old ?? { last: null, min: Infinity, max: -Infinity, points: [] };
+  // Only answers reach here: a null is the car saying it has no value now.
+  if (v == null) return { ...(old ?? { min: Infinity, max: -Infinity, points: [] }), last: null };
   const points = [...(old?.points ?? []), v].slice(-HISTORY);
   return { last: v, min: Math.min(old?.min ?? Infinity, v), max: Math.max(old?.max ?? -Infinity, v), points };
 }
@@ -667,6 +673,7 @@ function Picker({
   onClose: (next: number[]) => void;
 }) {
   const t = useTheme();
+  const { settings } = useSettings();
   const [draft, setDraft] = useState<number[]>(selected);
   useEffect(() => {
     if (visible) setDraft(selected);
@@ -711,8 +718,7 @@ function Picker({
                       key={p.pid}
                       first={i === 0}
                       title={p.label}
-                      value={p.unit}
-                      right={<Icon name="check" size={18} color={on ? t.accentText : 'transparent'} />}
+                      value={toUserUnits(0, p.unit, settings).unit}
                       onPress={() => toggle(p.pid)}
                       noChevron
                       selected={on}
@@ -740,6 +746,7 @@ const styles = StyleSheet.create({
   tileLabel: { fontSize: 13, fontWeight: '600', marginBottom: space.xs },
   tileValue: { fontSize: 26, fontWeight: '700', letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
   unit: { fontSize: 14, fontWeight: '500' },
+  noReading: { fontSize: 17, lineHeight: 31 },
   spark: { height: 28, flexDirection: 'row', alignItems: 'flex-end', marginTop: space.sm },
   minmax: { fontSize: 12, marginTop: space.xs, fontVariant: ['tabular-nums'] },
   scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },

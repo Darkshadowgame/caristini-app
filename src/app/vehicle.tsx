@@ -48,7 +48,7 @@ export default function VehicleDetails() {
       <Group header="Records" footer="Kept on this phone, readable without the adapter.">
         <ListRow first icon={'barcode' as IconName} iconColour="indigo" title="Parts and IDs" subtitle="VIN, codes, module part numbers, service parts" onPress={() => router.push({ pathname: '/car-ids', params: { vin: v.vin } })} />
         <ListRow icon="progress-clock" iconColour="blue" title="History" subtitle="Every health check and its faults, clears and setting changes" onPress={() => router.push({ pathname: '/history', params: { vin: v.vin } })} />
-        <ListRow icon={'book-open-variant' as IconName} iconColour="purple" title="Knowledge" subtitle="What the AI researched for this car" onPress={() => router.push('/knowledge')} />
+        <ListRow icon={'book-open-variant' as IconName} iconColour="purple" title="Research notes" subtitle="Notes saved for this kind of car" onPress={() => router.push('/knowledge')} />
         <ListRow icon="notebook-outline" iconColour="orange" title="Diary" subtitle="Services, repairs and notes" onPress={() => router.push('/diary')} />
       </Group>
 

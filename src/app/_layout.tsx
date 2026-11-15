@@ -14,7 +14,7 @@ import { GarageProvider } from '../vehicle/garage';
 export default function RootLayout() {
   const t = useTheme();
   const dark = useIsDark();
-  // New knowledge (from any install or the AI) arrives when the app opens.
+  // New knowledge (from any install) arrives when the app opens.
   useEffect(() => {
     syncKb().catch(() => undefined);
     // Findings that could not be sent before go now.
@@ -59,7 +59,6 @@ export default function RootLayout() {
             <Stack.Screen name="sensors" options={{ title: 'Sensors', headerRight: () => <GuideButton id="sensors" /> }} />
             <Stack.Screen name="discover" options={{ title: 'Unknown values', headerRight: () => <GuideButton id="discover" /> }} />
             <Stack.Screen name="history" options={{ title: 'History', headerRight: () => <GuideButton id="history" /> }} />
-            <Stack.Screen name="ask" options={{ title: 'Caristini AI', headerRight: () => <GuideButton id="ai" /> }} />
             <Stack.Screen name="learn-car" options={{ title: 'Learn my car', headerRight: () => <GuideButton id="learnCar" /> }} />
             <Stack.Screen name="knowledge" options={{ title: 'Research notes', headerRight: () => <GuideButton id="knowledge" /> }} />
             <Stack.Screen name="workshop/[id]" options={{ title: 'Control module', headerRight: () => <GuideButton id="module" /> }} />

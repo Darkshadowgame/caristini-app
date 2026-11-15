@@ -1,5 +1,4 @@
-// One setting change with every safety step, shared by Customise and the AI
-// assistant: read the module's coding now, keep the first coding ever seen as
+// One setting change with every safety step, used by Customise: read the module's coding now, keep the first coding ever seen as
 // the original, write, read back (the client puts the original back when the
 // module does not keep the change), and log it.
 import { addDiary, today } from '../diary';

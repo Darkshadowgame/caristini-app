@@ -357,9 +357,49 @@ describe('value groups for Learn my car', () => {
     sent.length = 0;
     await c.scanMeasuringBlocks(body, (g) => got.push(g), undefined, { to: 64, stopAfterEmpty: 8 });
     expect(got).toEqual([1, 2]);
-    expect(sent.filter((x) => /^1.0002210[0-9A-F]$|^1.000221[0-9A-F]{2}$/.test(x)).length).toBeLessThanOrEqual(10);
+    // Its 3 named groups (21, 27, 31) first, then 1 to 10.
+    expect(sent.filter((x) => /^1.0002210[0-9A-F]$|^1.000221[0-9A-F]{2}$/.test(x)).length).toBeLessThanOrEqual(13);
     const engine: number[] = [];
     await c.scanMeasuringBlocks(res.find((r) => r.def.id === 'engine')!.def, (g) => engine.push(g), undefined, { to: 255 });
     expect(engine).toEqual([115]);
   }, 60000);
+});
+
+describe('listen time on older VW modules (Leon logs of 15 Nov 2026)', () => {
+  it('listens 100 ms after each frame, so the ACK goes out before the module repeats itself', async () => {
+    const sent: string[] = [];
+    const s = new Tp20Session(async (c) => {
+      sent.push(c);
+      return 'OK\r\r>';
+    }, '6');
+    await s.enter();
+    expect(sent).toContain('ATST19');
+    expect(sent).not.toContain('ATST32');
+  });
+
+  it('stops a value-group scan when the module stops answering', async () => {
+    const leon = structuredClone(DEMO_CARS.find((c) => c.id === 'leon')!);
+    const t = new SimTransport(leon, 0);
+    const send = t.send.bind(t);
+    let groupsAsked = 0;
+    t.send = (cmd: string) => {
+      // Every measuring-group request from group 3 on gets no answer at all.
+      const m = /^1.00022(1)([0-9A-F]{2})$/.exec(cmd);
+      if (m) {
+        groupsAsked++;
+        if (parseInt(m[2], 16) >= 3) return Promise.resolve('NO DATA\r\r>');
+      }
+      return send(cmd);
+    };
+    const c = new ElmClient(t);
+    await c.initialise();
+    c.setMake('vag', 'PQ35');
+    const res = await c.scanAllFaults('vag');
+    groupsAsked = 0;
+    const started = Date.now();
+    await c.scanMeasuringBlocks(res.find((r) => r.def.id === 'engine')!.def, () => undefined, undefined, { to: 255 });
+    expect(groupsAsked).toBeGreaterThan(3);
+    expect(groupsAsked).toBeLessThan(20);
+    expect(Date.now() - started).toBeLessThan(60000);
+  }, 120000);
 });

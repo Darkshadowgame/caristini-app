@@ -5,7 +5,7 @@
 // first byte after the data identifier, most significant bit first.
 import { fordSensors, mazdaSensors, vagSensors } from '../data/sensors';
 import type { ToolColour } from '../theme';
-import type { ModuleGroup } from './modules';
+import { modulesFor, type ModuleGroup } from './modules';
 
 export interface SensorRow {
   h: string; // request header
@@ -27,24 +27,19 @@ export interface SensorRow {
   u: string;
   map?: Record<string, string>;
   src: string;
-  // Named by the AI from values found on this car (Discover), not from a list.
+  // Set on rows saved by older versions that named values found on this car
+  // (Discover); never set now. Such rows are not asked in a search.
   ai?: 1;
 }
 
-// The car's own list: the shared lists plus anything the AI named on this car
-// or on the owner's other cars of the same family (see sameFamily). Each is
-// still asked on this car before it is shown.
+// The car's own list: the shared lists for its maker group. Each is still
+// asked on this car before it is shown.
 export function sensorsForCar(
-  v: { group: ModuleGroup | 'other'; brand?: string; aiSensors?: SensorRow[] } | null | undefined,
-  others: { group: ModuleGroup | 'other'; brand?: string; aiSensors?: SensorRow[] }[] = [],
+  v: { group: ModuleGroup | 'other'; brand?: string } | null | undefined,
+  _others: { group: ModuleGroup | 'other'; brand?: string }[] = [],
 ): SensorRow[] {
   if (!v) return [];
-  const base = sensorsFor(v.group);
-  const extra: SensorRow[] = [];
-  for (const a of [...(v.aiSensors ?? []), ...others.filter((o) => o !== v && sameFamily(o, v)).flatMap((o) => o.aiSensors ?? [])]) {
-    if (!base.some((b) => b.h === a.h && b.d === a.d && b.b === a.b) && !extra.some((b) => b.h === a.h && b.d === a.d && b.b === a.b)) extra.push(a);
-  }
-  return [...base, ...extra];
+  return sensorsFor(v.group);
 }
 
 // Cars whose modules and value IDs are likely to repeat: the VW group makes
@@ -270,6 +265,20 @@ export const HEADER_NAMES: Record<string, string> = {
   '703': 'Body',
   '7D0': 'Infotainment',
 };
+
+// A module's name by request ID on one car: the names its own modules gave
+// (health check, Learn my car), then the module list for its make, then the
+// fixed list above (VW group and unknown makes only: on a Mazda, 744 is not
+// a parking aid).
+export function moduleNamer(v: { group: ModuleGroup | 'other'; ids?: { modules?: { id: string; name: string; tx?: string }[] }; knowledge?: Record<string, { plainName: string }> } | null | undefined): (tx: string) => string {
+  const names = new Map<string, string>();
+  if (v) {
+    for (const m of modulesFor(v.group === 'all' ? 'other' : v.group)) if (m.tx && !names.has(m.tx)) names.set(m.tx, m.name);
+    for (const m of v.ids?.modules ?? []) if (m.tx) names.set(m.tx, v.knowledge?.[m.id]?.plainName || m.name);
+  }
+  const fixed = !v || v.group === 'vag' || v.group === 'other';
+  return (tx) => names.get(tx) ?? (fixed ? HEADER_NAMES[tx] : undefined) ?? `Module ${tx}`;
+}
 
 // Converts to the driver's units. Returns the value and its unit.
 // The unit, filled in for temperatures some lists leave blank (an offset

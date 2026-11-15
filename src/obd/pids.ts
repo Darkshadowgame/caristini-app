@@ -8,12 +8,16 @@ export interface LivePid {
   group: PidGroup;
   bytes: number;
   decimals: number;
-  decode: (d: number[]) => number;
+  // null: the car answered but sent no value (see o2 below).
+  decode: (d: number[]) => number | null;
 }
 
 const pct = (a: number) => (a * 100) / 255;
 const trim = (a: number) => ((a - 128) * 100) / 128;
 const word = (a: number, b: number) => a * 256 + b;
+// Narrowband O2 sensor volts (PIDs 0x14 to 0x1B, byte A / 200). A of 0xFF
+// (1.275 V) is above any real reading and means the sensor gave none.
+export const o2Volts = (a: number): number | null => (a === 0xff ? null : a / 200);
 
 export const LIVE_PIDS: LivePid[] = [
   // Engine
@@ -50,10 +54,10 @@ export const LIVE_PIDS: LivePid[] = [
   { pid: 0x10, label: 'Air flow (MAF)', unit: 'g/s', group: 'Air and exhaust', bytes: 2, decimals: 1, decode: ([a, b]) => word(a, b) / 100 },
   { pid: 0x0b, label: 'Intake pressure (MAP)', unit: 'kPa', group: 'Air and exhaust', bytes: 1, decimals: 0, decode: ([a]) => a },
   { pid: 0x33, label: 'Barometric pressure', unit: 'kPa', group: 'Air and exhaust', bytes: 1, decimals: 0, decode: ([a]) => a },
-  { pid: 0x14, label: 'O2 sensor B1S1', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => a / 200 },
-  { pid: 0x15, label: 'O2 sensor B1S2', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => a / 200 },
-  { pid: 0x18, label: 'O2 sensor B2S1', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => a / 200 },
-  { pid: 0x19, label: 'O2 sensor B2S2', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => a / 200 },
+  { pid: 0x14, label: 'O2 sensor B1S1', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => o2Volts(a) },
+  { pid: 0x15, label: 'O2 sensor B1S2', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => o2Volts(a) },
+  { pid: 0x18, label: 'O2 sensor B2S1', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => o2Volts(a) },
+  { pid: 0x19, label: 'O2 sensor B2S2', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => o2Volts(a) },
   { pid: 0x2c, label: 'EGR commanded', unit: '%', group: 'Air and exhaust', bytes: 1, decimals: 0, decode: ([a]) => pct(a) },
   { pid: 0x2d, label: 'EGR error', unit: '%', group: 'Air and exhaust', bytes: 1, decimals: 1, decode: ([a]) => trim(a) },
 

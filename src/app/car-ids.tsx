@@ -2,8 +2,6 @@ import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
-import { researchParts } from '../ai/parts';
-import { hasClaude } from '../ai/claude';
 import { packFor } from '../data/cars';
 import { SECTIONS } from '../help';
 import { MONO, radius, space, type, useTheme } from '../theme';
@@ -22,13 +20,10 @@ export default function CarIds() {
   const v = garage.get(vin);
   const [open, setOpen] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'danger' | 'info'; text: string } | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [ai, setAi] = useState(false);
   const [drafts, setDrafts] = useState<Partial<Record<CodeKey | 'notes', string>>>({});
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
-    hasClaude().then((x) => alive.current && setAi(x));
     return () => {
       alive.current = false;
     };
@@ -68,28 +63,6 @@ export default function CarIds() {
     if (value.trim()) codes[key] = { value: value.trim().toUpperCase().replace(/\s+/g, ' '), from: 'owner' };
     else delete codes[key];
     garage.update(v.vin, { ids: { ...now, codes } });
-  };
-
-  const findParts = async () => {
-    setSearching(true);
-    setMessage(null);
-    try {
-      const res = await researchParts(
-        { title: vehicleTitle(v), year: v.year, fuel: v.fuel, vin: v.vin, platform: v.platform },
-        { engineCode: ids.codes?.engineCode?.value, gearboxCode: ids.codes?.gearboxCode?.value, modules },
-      );
-      const latestIds = garage.latest(v.vin)?.ids ?? {};
-      const codes = { ...(latestIds.codes ?? {}) };
-      // AI codes fill gaps only; the owner's own entries always win.
-      for (const [k, val] of Object.entries(res.codes) as [CodeKey, NonNullable<(typeof res.codes)[CodeKey]>][]) if (!codes[k]) codes[k] = val;
-      await garage.update(v.vin, { partsList: { at: Date.now(), items: res.items, basis: res.basis }, ids: { ...latestIds, codes } });
-      success();
-      if (alive.current) setMessage({ tone: res.items.length ? 'ok' : 'info', text: res.items.length ? `${res.items.length} part numbers found, each with its source.` : 'No part numbers with a source were found. Try again after adding the engine code.' });
-    } catch (e) {
-      if (alive.current) setMessage({ tone: 'danger', text: e instanceof Error ? e.message : String(e) });
-    } finally {
-      if (alive.current) setSearching(false);
-    }
   };
 
   const moduleRow = (m: ModuleId, i: number) => {
@@ -235,32 +208,6 @@ export default function CarIds() {
       >
         {modules.length ? modules.map(moduleRow) : <ListRow first title="Nothing read yet" noChevron />}
         <ListRow icon="chip" iconColour="indigo" title="Read part numbers from the car" subtitle="Needs the adapter connected" onPress={() => router.push('/modules')} />
-      </Group>
-
-      <Group
-        header="Service parts"
-        help={SECTIONS.idsParts}
-        footer={
-          parts
-            ? `Found by AI on ${new Date(parts.at).toLocaleDateString('en-GB')} for: ${parts.basis}. Each number links to its source. Check it against a catalogue by VIN before ordering.`
-            : 'Caristini AI searches the web for the maker part numbers for this car, each with its source, and keeps them here.'
-        }
-      >
-        {groups.map((g, gi) => (
-          <View key={g}>
-            <Text style={[type.label, { color: t.muted, paddingHorizontal: space.lg, paddingTop: gi ? space.md : space.sm }]}>{g.toUpperCase()}</Text>
-            {parts!.items.filter((p) => p.group === g).map(partRow)}
-          </View>
-        ))}
-        <ListRow
-          first={!groups.length}
-          icon="magnify"
-          iconColour="purple"
-          title={searching ? 'Searching the web…' : parts ? 'Search again' : 'Find service part numbers'}
-          subtitle={ai ? 'About 1 to 2 minutes, needs the internet, not the car' : 'Needs a Claude API key (Settings > AI)'}
-          disabled={searching || !ai}
-          onPress={findParts}
-        />
       </Group>
 
       <Group header="Parts diagrams by VIN" help={SECTIONS.idsCatalogues} footer="Opening a catalogue sends the VIN to that site. The VIN is copied first, ready to paste.">

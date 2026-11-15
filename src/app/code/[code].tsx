@@ -1,5 +1,4 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { askClaude, hasClaude } from '../../ai/claude';
 import React, { useEffect, useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 import { codeAnatomy, genericAdvice, lookupDtc } from '../../data/dtcLibrary';
@@ -66,7 +65,6 @@ export default function CodeDetail() {
       <ListRow first={!details && !detailError} icon="database-search-outline" iconColour="blue" title={detailBusy ? 'Reading…' : 'Read details'} disabled={detailBusy} onPress={readDetails} />
     </Group>
   ) : null;
-  const aiBlock = <AiExplain code={code} module={module ? String(module) : undefined} title={entry?.title} />;
   const wikiButton = vag ? <Button label="Search the Ross-Tech wiki" icon="open-in-new" variant="ghost" onPress={wiki} /> : null;
   const model = conn.vehicle?.model;
   const search = () =>
@@ -85,8 +83,8 @@ export default function CodeDetail() {
           {vwNumber && vagFaultText(code) ? <Text style={[type.sub, { color: t.muted, marginTop: 4 }]}>VW fault number {code}</Text> : null}
           <Text style={[type.sub, { color: t.muted, marginTop: space.sm }]}>
             {vwNumber && vagFaultText(code)
-              ? "The meaning comes from public VW fault number lists; the module's own wording may differ slightly. Tap Explain this fault below for causes and whether it is safe to drive."
-              : "This module reports faults in the maker's own numbering, not as a standard code, so Caristini has no description for it. A dealer or specialist tool shows the text. Tap Explain this fault for a best guess."}
+              ? "The meaning comes from public VW fault number lists; the module's own wording may differ slightly."
+              : "This module reports faults in the maker's own numbering, not as a standard code, so Caristini has no description for it. A dealer or specialist tool shows the text."}
           </Text>
         </Card>
         <Group header="Where it was found" help={SECTIONS.codeWhere}>
@@ -94,7 +92,6 @@ export default function CodeDetail() {
           {state ? <ListRow first={!module} title="Status" value={String(state)} /> : null}
           <ListRow first={!module && !state} title="Raw code" value={code} mono />
         </Group>
-        {aiBlock}
       {detailBlock}
         <View style={{ gap: space.sm }}>
           <Button label="Search the web for this code" icon="open-in-new" variant="secondary" onPress={search} />
@@ -167,18 +164,12 @@ export default function CodeDetail() {
         </Group>
       ) : null}
 
-      {aiBlock}
 
-      <Group header="Next steps">
-        <ListRow
-          first
-          icon={'creation' as IconName}
-          iconColour="purple"
-          title="Ask Caristini AI about this fault"
-          onPress={() => router.push({ pathname: '/ask', params: { q: `Tell me about fault ${code}${module ? ` in the ${String(module)}` : ''} on my car: likely cause, whether it is safe to drive, and what to check first` } })}
-        />
-        {def ? <ListRow icon="wrench-outline" iconColour="orange" title={`Open ${def.name} in Workshop`} onPress={() => router.push({ pathname: '/workshop/[id]', params: { id: def.id } })} /> : null}
-      </Group>
+      {def ? (
+        <Group header="Next steps">
+          <ListRow first icon="wrench-outline" iconColour="orange" title={`Open ${def.name} in Workshop`} onPress={() => router.push({ pathname: '/workshop/[id]', params: { id: def.id } })} />
+        </Group>
+      ) : null}
 
       {anatomy ? (
         <Group header="Reading the code" help={SECTIONS.codeReading}>
@@ -202,60 +193,6 @@ export default function CodeDetail() {
         General guidance for owners, not a substitute for a garage diagnosis. If the light is flashing or the car runs badly, stop and get it checked.
       </Text>
     </Screen>
-  );
-}
-
-// Plain-words explanation from Claude, for this car: meaning, causes, whether
-// it is safe to drive, urgency, next steps and a rough UK cost.
-const cache = new Map<string, string>();
-function AiExplain({ code, module, title }: { code: string; module?: string; title?: string }) {
-  const t = useTheme();
-  const conn = useConnection();
-  const v = conn.vehicle;
-  const key = `${v?.vin ?? ''}|${module ?? ''}|${code}`;
-  const [ready, setReady] = useState<boolean | null>(null);
-  const [text, setText] = useState<string | null>(cache.get(key) ?? null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    hasClaude().then(setReady);
-  }, []);
-  const run = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const car = v ? `${v.brand} ${v.model}${v.year ? ` ${v.year}` : ''}${v.fuel ? ` ${v.fuel}` : ''}${v.platform ? ` (${v.platform})` : ''}` : 'a car';
-      const answer = await askClaude(
-        `Fault ${code}${title ? ` (${title})` : ''}${module ? ` from the ${module} module` : ''} on ${car}. Explain for the owner in these short sections, each a heading line then 1 to 3 sentences: What it means; Most likely causes (most likely first); Can I keep driving?; How urgent; What to check first; Rough UK cost (a range, say it is an estimate). If the code is a maker-specific number you cannot identify, say so plainly.`,
-        { effort: 'low', maxTokens: 1200 },
-      );
-      cache.set(key, answer);
-      setText(answer);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  if (ready === null) return null;
-  return (
-    <Group header="Explained by AI" help={SECTIONS.codeAi} footer={text ? 'Written by AI for your car. A guide, not a diagnosis.' : undefined}>
-      {text ? (
-        <View style={{ padding: space.lg }}>
-          <Text selectable style={[type.body, { color: t.text }]}>
-            {text.replace(/\*\*/g, '').replace(/^#+\s*/gm, '')}
-          </Text>
-        </View>
-      ) : null}
-      {error ? <ListRow first={!text} title="Could not explain" subtitle={error} noChevron /> : null}
-      {!text ? (
-        ready ? (
-          <ListRow first={!error} icon="creation" iconColour="purple" title={busy ? 'Thinking…' : 'Explain this fault'} subtitle="Meaning, causes, safe to drive, cost" disabled={busy} onPress={run} />
-        ) : (
-          <ListRow first={!error} icon="creation" iconColour="grey" title="Explain this fault" subtitle="Needs a Claude key in Settings" onPress={() => router.push('/settings')} />
-        )
-      ) : null}
-    </Group>
   );
 }
 

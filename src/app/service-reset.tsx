@@ -94,7 +94,7 @@ export default function ServiceResetScreen() {
       }
       await garage.update(v.vin, { serviceSnapshot: { date: new Date().toISOString(), module: cluster.id, values } });
       success();
-      setMessage({ tone: 'ok', text: `${Object.keys(values).length} values saved. Now reset the service with the other tool.` });
+      setMessage({ tone: 'ok', text: `${Object.keys(values).length} value${Object.keys(values).length === 1 ? '' : 's'} saved. Now reset the service with the other tool.` });
     } catch (e) {
       if (alive.current) setMessage({ tone: 'danger', text: e instanceof Error ? e.message : String(e) });
     } finally {

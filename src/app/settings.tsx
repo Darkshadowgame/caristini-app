@@ -104,15 +104,6 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
 
       <UpdatesGroup />
 
-      <Group
-        header="AI"
-        help={SECTIONS.settingsAi}
-        footer="Explains faults and answers questions. Your key stays in this phone's keychain and goes only to Anthropic."
-      >
-        <SecretRow name="claudeKey" label="Claude API key" placeholder="sk-ant-..." first />
-        <ListRow icon="open-in-new" iconColour="purple" title="Get a key" onPress={() => Linking.openURL('https://console.anthropic.com/settings/keys')} />
-      </Group>
-
       <Group header="Troubleshooting" help={SECTIONS.settingsTroubleshooting} footer="The log holds the last 4,000 adapter commands and replies. With automatic sending on, new lines are sent after each health check or search, so a problem can be looked at without sharing anything.">
         {toggle('Keep an adapter log', settings.debugLog, (v) => set({ debugLog: v }), undefined, true)}
         {toggle('Send the log automatically', settings.autoSendLog !== false, (v) => set({ autoSendLog: v }), 'After each health check, sensor search, Learn my car or failed connect')}
@@ -307,8 +298,6 @@ function OutboxRows() {
                   car: { brand: v.brand, model: v.model, year: v.year, platform: v.platform, group: v.group },
                   learnRun: v.learnRun,
                   knowledge: v.knowledge,
-                  aiItems: v.aiItems,
-                  aiSensors: v.aiSensors,
                   sensorsFound: v.sensorsFound,
                   sensorScan: v.sensorScan,
                   modulesSeen: v.modulesSeen,

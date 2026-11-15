@@ -203,7 +203,7 @@ export default function Learn() {
         help={SECTIONS.learnSave}
         footer={
           saved
-            ? `${Object.keys(saved.codings).length} values from ${new Date(saved.date).toLocaleString('en-GB')}. Each compare moves this on, so there is no need to save again between rounds.`
+            ? `${Object.keys(saved.codings).length} value${Object.keys(saved.codings).length === 1 ? '' : 's'} from ${new Date(saved.date).toLocaleString('en-GB')}. Each compare moves this on, so there is no need to save again between rounds.`
             : 'Reads the modules your car answered on before. Ignition on.'
         }
       >

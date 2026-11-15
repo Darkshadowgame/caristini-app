@@ -20,16 +20,8 @@ const KIND_ICON: Record<KbKind, IconName> = {
   note: 'note-outline',
 };
 
-const RESEARCH = [
-  { label: 'Fuse box layout', q: 'Find the fuse box layouts for my car and save them' },
-  { label: 'Popular modifications', q: 'What are the most popular modifications for my car? Research and save the useful ones with sources' },
-  { label: 'Hidden settings', q: 'Research coding settings owners have published for my car and save the ones with exact bytes and bits' },
-  { label: 'Common faults', q: 'What are the common faults on my car and how are they fixed? Save the useful ones' },
-  { label: 'Service schedule', q: 'What is the service schedule for my car, with oil grade and capacities? Save it' },
-];
-
-// Everything Caristini knows about this car beyond the built-in lists: what
-// the AI researched and saved, shared through the repo with every install.
+// Everything Caristini knows about this car beyond the built-in lists, shared
+// through the repo with every install.
 export default function Knowledge() {
   const t = useTheme();
   const conn = useConnection();
@@ -81,7 +73,7 @@ export default function Knowledge() {
   return (
     <Screen>
       <Text style={[type.sub, { color: t.muted, marginBottom: space.md }]}>
-        {v ? `${vehicleTitle(v)}: ` : ''}what the AI researched and saved, shared with every Caristini install. It grows each time you ask.
+        {v ? `${vehicleTitle(v)}: ` : ''}notes saved for this kind of car, shared with every Caristini install. Each entry links to its sources.
       </Text>
 
       {garage.vehicles.length ? (
@@ -97,7 +89,6 @@ export default function Knowledge() {
           <ListRow first icon="radar" iconColour="blue" title="Sensors found" value={String(v.sensorsFound?.length ?? 0)} onPress={() => router.push('/sensors')} />
           <ListRow icon={'telescope' as IconName} iconColour="purple" title="Unknown values found" value={values.toLocaleString('en-GB')} onPress={() => router.push('/discover')} />
           <ListRow icon="chip" iconColour="indigo" title="Older modules found" value={String(v.deepFound?.length ?? 0)} onPress={() => router.push('/diagnostics')} />
-          <ListRow icon="tune-variant" iconColour="green" title="Settings found by the AI" value={String(v.aiItems?.length ?? 0)} onPress={() => router.push('/customise')} />
           {learned.map(([id, k]) => (
             <ListRow
               key={id}
@@ -108,27 +99,9 @@ export default function Knowledge() {
               onPress={() => router.push(`/workshop/${id}`)}
             />
           ))}
-          {!learned.length ? <ListRow icon="school-outline" iconColour="teal" title="Learn my car" subtitle="Finds every module and has the AI say what each one is" onPress={() => router.push('/learn-car')} /> : null}
+          {!learned.length ? <ListRow icon="school-outline" iconColour="teal" title="Learn my car" subtitle="Finds every module and value on this car" onPress={() => router.push('/learn-car')} /> : null}
         </Group>
       ) : null}
-
-      <Text style={[type.label, { color: t.muted, marginBottom: space.sm, marginLeft: space.xs }]}>Ask the AI to research</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm, paddingBottom: space.lg }}>
-        {RESEARCH.map((r) => (
-          <Pressable
-            key={r.label}
-            accessibilityRole="button"
-            onPress={() => {
-              tap();
-              router.push({ pathname: '/ask', params: { q: r.q } });
-            }}
-            style={({ pressed }) => [styles.chip, { backgroundColor: pressed ? t.raised : t.surface }]}
-          >
-            <Icon name={'creation' as IconName} size={15} color={t.accent} />
-            <Text style={[type.sub, { color: t.text, fontWeight: '600' }]}>{r.label}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
 
       <SearchField value={query} onChange={setQuery} placeholder="Search saved knowledge" />
       <View style={{ height: space.lg }} />
@@ -138,7 +111,7 @@ export default function Knowledge() {
         <View style={{ alignItems: 'center', paddingVertical: space.xxl }}>
           <Icon name={'book-open-variant' as IconName} size={40} color={t.faint} />
           <Text style={[type.heading, { color: t.text, marginTop: space.md }]}>Nothing saved yet</Text>
-          <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: 4 }]}>Tap one of the research buttons above, or ask Caristini AI anything about your car.</Text>
+          <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: 4 }]}>Notes for your kind of car arrive here when the app opens.</Text>
         </View>
       ) : null}
 
@@ -192,7 +165,6 @@ export default function Knowledge() {
 
       <Group footer="New knowledge also arrives by itself each time the app opens.">
         <ListRow first icon="refresh" iconColour="blue" title="Check for new knowledge" onPress={refresh} />
-        <ListRow icon={'creation' as IconName} iconColour="purple" title="Ask Caristini AI" onPress={() => router.push('/ask')} />
       </Group>
     </Screen>
   );

@@ -1,5 +1,5 @@
 // Small GitHub contents client for the Caristini repo: the knowledge base and
-// findings live there, so what one car or one AI search learns reaches every
+// findings live there, so what one car learns reaches every
 // install without a new build. Uses the repo-scoped token (built in from the
 // CARISTINI_UPLOAD_TOKEN secret, or pasted in Settings).
 import { getSecret } from './secrets';

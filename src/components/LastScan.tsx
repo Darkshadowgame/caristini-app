@@ -9,7 +9,13 @@ export function useLastScan(vin: string | undefined): HistoryEntry | null {
   const [last, setLast] = useState<HistoryEntry | null>(null);
   useEffect(() => {
     if (!vin) return;
-    const load = () => loadHistory(vin).then((l) => setLast(l.find((e) => e.kind === 'scan') ?? null));
+    // The newest check that ran to the end; a check stopped early (leaving the
+    // screen part-way) shows only when there is no finished one.
+    const load = () =>
+      loadHistory(vin).then((l) => {
+        const scans = l.filter((e) => e.kind === 'scan');
+        setLast(scans.find((e) => e.complete !== false) ?? scans[0] ?? null);
+      });
     load();
     return onHistory(load);
   }, [vin]);
@@ -32,17 +38,27 @@ export function LastScan({ vin, entry, limit = 12 }: { vin: string; entry: Histo
       footer={faults.length ? 'Tap a fault for what it means and what to do.' : undefined}
       help={SECTIONS.lastScan}
     >
+      {entry.noAnswer ? (
+        <ListRow
+          first
+          icon="alert-circle-outline"
+          iconColour="orange"
+          title="No control module answered"
+          subtitle="Only the engine's standard codes were read, so this is not a clean result."
+          noChevron
+        />
+      ) : null}
       {faults.length ? (
         faults.slice(0, limit).map((f, i) => (
           <ListRow
             key={`${f.module}-${f.code}-${i}`}
-            first={i === 0}
+            first={i === 0 && !entry.noAnswer}
             title={f.text ?? 'Meaning not in the library yet'}
             subtitle={`${shortCode(f.code)} · ${f.module}`}
             onPress={() => router.push({ pathname: '/code/[code]', params: { code: f.code, module: f.module } })}
           />
         ))
-      ) : (
+      ) : entry.noAnswer ? null : (
         <ListRow first icon="check-circle-outline" iconColour="green" title="No faults found" subtitle={entry.detail} noChevron />
       )}
       {faults.length > limit ? <ListRow title={`${faults.length - limit} more in History`} onPress={() => router.push({ pathname: '/history', params: { vin } })} /> : null}

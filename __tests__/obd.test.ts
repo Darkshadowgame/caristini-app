@@ -78,6 +78,12 @@ describe('pids', () => {
     expect(get(0x42).decode([0x36, 0xb0])).toBeCloseTo(14.0, 1);
   });
 
+  it('reads an O2 sensor byte of 0xFF as no reading, not 1.275 V', () => {
+    const get = (pid: number) => LIVE_PIDS.find((p) => p.pid === pid)!;
+    expect(get(0x15).decode([0xff, 0xff])).toBeNull();
+    expect(get(0x14).decode([0x5a, 0x80])).toBeCloseTo(0.45, 2);
+  });
+
   it('reads readiness for petrol and diesel', () => {
     const petrol = decodeReadiness(0x07, 0x65, 0x04);
     expect(petrol.diesel).toBe(false);

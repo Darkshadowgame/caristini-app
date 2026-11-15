@@ -141,7 +141,7 @@ export default function ControlModule() {
   const original = v.codingOriginal?.[def.id];
   const changed = !!coding && !!draft && toHex(coding) !== toHex(draft);
   const knowledge = v.knowledge?.[def.id];
-  const items: CodingItem[] = [...codingItemsFor(v.group, v.platform), ...(v.aiItems ?? [])].filter(
+  const items: CodingItem[] = [...codingItemsFor(v.group, v.platform)].filter(
     (i) => i.module === def.id && !!draft && style !== 'short' && (i.length ? draft.length === i.length : draft.length > i.byte),
   );
   const bitName = (byte: number, bit: number) => items.find((i) => i.byte === byte && (i.bits.includes(bit) || (!!i.field && ((i.field.mask >> bit) & 1) === 1)))?.title;
@@ -276,7 +276,7 @@ export default function ControlModule() {
           </View>
 
           {tab === 'faults' ? (
-            <Group header="Fault memory" help={SECTIONS.moduleFaults} footer="Tap a fault for what it means and the likely causes; with AI, whether it is safe to drive.">
+            <Group header="Fault memory" help={SECTIONS.moduleFaults} footer="Tap a fault for what it means and the likely causes.">
               {faults?.faults.map((f, i) => (
                 <ListRow
                   key={`${f.code}-${i}`}
@@ -402,7 +402,7 @@ export default function ControlModule() {
             coding && draft ? (
               <>
                 {items.length ? (
-                  <Group header="Settings in this coding" help={SECTIONS.moduleSettings} footer="Switches change nothing in the car until you tap Save to the car. 'Not tested on this car' ones come from a single source or the AI.">
+                  <Group header="Settings in this coding" help={SECTIONS.moduleSettings} footer="Switches change nothing in the car until you tap Save to the car. 'Not tested on this car' ones come from a single source.">
                     {items.map((i, k) => {
                       const on = isOn(i, draft);
                       const was = isOn(i, coding);

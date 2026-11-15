@@ -1,17 +1,16 @@
-// Keys the owner types into the app (a Claude API key, a GitHub token) are kept
+// Keys the owner types into the app (a GitHub token) are kept
 // in the phone's keychain, never in app storage or logs. On the web preview the
 // keychain is missing, so they live for the session only.
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-export type SecretName = 'claudeKey' | 'githubToken';
+export type SecretName = 'githubToken';
 
 const memory: Partial<Record<SecretName, string>> = {};
 
 // Keys the owner saved as repository secrets are built in at build time (his
 // choice, 14 Nov 2026). One typed into Settings on this phone wins over it.
 const BUILT_IN: Partial<Record<SecretName, string>> = {
-  claudeKey: process.env.EXPO_PUBLIC_CLAUDE_KEY || undefined,
   githubToken: process.env.EXPO_PUBLIC_UPLOAD_TOKEN || undefined,
 };
 

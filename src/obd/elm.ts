@@ -13,6 +13,7 @@ import { idsForNode, nodesFromBitmap, parseC6List, slotsFromTables } from './vag
 import type { ServiceReset } from '../service/obdReset';
 import { MAX_DIDS, soleAnswer, splitKnown } from './multiDid';
 import { MeasuringCell, parseMeasuringBlock } from './tp20';
+import { GROUP_LABELS } from '../data/groupLabels';
 import { kwpFaults, kwpReadFaults, VAG_ADDRESS_NAMES, parseGatewayList, parseKwpIdent, Tp20Coding, tp20Identity, tp20Name, tp20LeaveCommands, tp20ReadCoding, tp20WriteCoding, Tp20Module, Tp20Session, TP20_CANDIDATES } from './tp20';
 import { cleanText, describeNrc, negativeCode, parseDtcReport, toHex, UdsFault } from './uds';
 
@@ -21,6 +22,10 @@ const ERRORS = ['NO DATA', 'UNABLE TO CONNECT', 'CAN ERROR', 'BUS ERROR', 'BUS I
 const ERROR_PATTERNS = [/^ERR\d+/i, /<\s*\w+\s*ERROR/i];
 
 export class ObdError extends Error {}
+
+// A part number as shown in a module name: Mazda pads it with a trailing dash
+// ("GML8-5102X-").
+const partText = (s: string) => s.replace(/[-\s]+$/, '');
 
 // What each body module calls itself, to make sure a write over TP2.0 reaches
 // the module meant (part number families and component names seen on VW cars).
@@ -349,7 +354,7 @@ export class ElmClient {
           }
           if (def || !slot.tx) continue;
           const tx = parseInt(slot.tx, 16);
-          addExtra({ id: `vag-${slot.code.toLowerCase()}`, name: `Module ${slot.code}`, code: slot.code, tx: slot.tx, rx: (tx + 0x6a).toString(16).toUpperCase(), groups: ['vag'], source: "Listed by the car's gateway (2A2A, 2A2C)" });
+          addExtra({ id: `vag-${slot.code.toLowerCase()}`, name: VAG_ADDRESS_NAMES[slot.code.toUpperCase()] ?? `Module ${slot.code}`, code: slot.code, tx: slot.tx, rx: (tx + 0x6a).toString(16).toUpperCase(), groups: ['vag'], source: "Listed by the car's gateway (2A2A, 2A2C)" });
         }
       }
       if (t.c6) tp20Routes(parseC6List(t.c6));
@@ -457,6 +462,20 @@ export class ElmClient {
     });
   }
 
+  // The module at a request and reply ID: the car's own make list first (a
+  // Mazda's 720 is the Mazda cluster, not the Ford one at the same address),
+  // then modules the gateway reported, then any make.
+  moduleAt(tx: string, rx: string): ModuleDef | undefined {
+    const at = (m: ModuleDef) => m.tx === tx && m.rx === rx;
+    return modulesFor(this.make).find(at) ?? this.extraDefs.find(at) ?? MODULES.find(at);
+  }
+
+  // A module's name by request ID, for progress labels: the make's list
+  // first; the fixed VW list only on VW group cars.
+  moduleNameAt(tx: string): string {
+    return modulesFor(this.make).find((m) => m.tx === tx)?.name ?? this.extraDefs.find((m) => m.tx === tx)?.name ?? (this.make === 'vag' || this.make === 'other' ? HEADER_NAMES[tx] : undefined) ?? `Module ${tx}`;
+  }
+
   // A module by id, including ones the car's gateway reported.
   moduleById(id: string): ModuleDef | undefined {
     return MODULES.find((m) => m.id === id) ?? this.extraDefs.find((m) => m.id === id);
@@ -526,34 +545,79 @@ export class ElmClient {
     const a = this.tp20Address(def);
     if (a == null) return;
     await this.tp20(a, async (s) => {
-      while (keepGoing()) onCells(parseMeasuringBlock(await s.request([0x21, group]).catch(() => []), group));
+      // A closed channel (A8) fails at once, so the loop ends there; spinning
+      // on it would freeze the app.
+      while (keepGoing() && !s.closed) {
+        let answer: number[] = [];
+        try {
+          answer = await s.request([0x21, group]);
+        } catch {
+          if (s.closed) break;
+        }
+        onCells(parseMeasuringBlock(answer, group));
+      }
     });
   }
 
-  // Reads every group from 1 to 255 once (or a shorter range), to find values
-  // by their unit. stopAfterEmpty ends the scan after that many empty groups in
-  // a row once a group has answered (body modules use the low groups only).
+  // Reads every group from 1 to 255 once (or 1 to `to`), to find values by
+  // their unit. Groups that have names (src/data/groupLabels.ts) go first, so
+  // a time limit never cuts them off; see measuringOrder for the order and the
+  // resume point. stopAfterEmpty ends the second pass after that many empty
+  // groups in a row (body modules use the low groups only).
   async scanMeasuringBlocks(
     def: ModuleDef,
     onGroup: (group: number, cells: MeasuringCell[]) => void,
     onProgress?: (p: number) => void,
-    opts: { to?: number; stopAfterEmpty?: number; cancelled?: () => boolean } = {},
-  ): Promise<void> {
+    opts: { fromIndex?: number; to?: number; stopAfterEmpty?: number; cancelled?: () => boolean } = {},
+  ): Promise<{ complete: boolean; nextIndex?: number }> {
+    const start = Math.max(0, opts.fromIndex ?? 0);
     const a = this.tp20Address(def);
-    if (a == null) return;
-    const to = opts.to ?? 255;
-    await this.tp20(a, async (s) => {
+    if (a == null) return { complete: false, nextIndex: start };
+    const named = Object.keys((def.code && GROUP_LABELS[def.code]) || {}).map(Number);
+    const isNamed = new Set(named);
+    // The resume point is a position in this order (named groups, then the
+    // rest), so a later run carries on exactly where this one stopped.
+    const order = measuringOrder(named, opts.to ?? 255);
+    // complete: every group in the order was read (or the run of empty groups
+    // that ends a body module came). nextIndex: where a later run carries on.
+    let next = start;
+    const done = await this.tp20(a, async (s) => {
       let empty = 0;
-      for (let g = 1; g <= to; g++) {
-        if (opts.cancelled?.()) return;
-        onProgress?.(g / to);
-        const cells = parseMeasuringBlock(await s.request([0x21, g], 1500).catch(() => []), g);
+      // Requests that got no answer at all in a row: the module or channel has
+      // gone, so the rest of the range would only wait out timeouts.
+      let silent = 0;
+      for (let i = start; i < order.length; i++) {
+        const g = order[i];
+        next = i;
+        if (opts.cancelled?.()) return false;
+        onProgress?.((i - start + 1) / (order.length - start));
+        let answer: number[] = [];
+        try {
+          answer = await s.request([0x21, g], 1500);
+          silent = 0;
+        } catch {
+          // The module closed the channel on this group: stop now and carry on
+          // after it next time, so one group that upsets the module cannot
+          // stop the scan from ever finishing.
+          if (s.closed) {
+            next = i + 1;
+            return false;
+          }
+          // The module went quiet: start again a little before this group.
+          if (++silent >= 4) {
+            next = Math.max(start, i - 3);
+            return false;
+          }
+        }
+        const cells = parseMeasuringBlock(answer, g);
         if (cells?.length) {
           empty = 0;
           onGroup(g, cells);
-        } else if (opts.stopAfterEmpty && ++empty >= opts.stopAfterEmpty && g >= opts.stopAfterEmpty) return;
+        } else if (!isNamed.has(g) && opts.stopAfterEmpty && ++empty >= opts.stopAfterEmpty && g >= opts.stopAfterEmpty) return true;
       }
+      return true;
     });
+    return done === true || next >= order.length ? { complete: true } : { complete: false, nextIndex: next };
   }
 
   // Runs fn on the medium-speed bus (STN adapters), then returns to the main bus.
@@ -698,9 +762,8 @@ export class ElmClient {
       const cmd = `02${pid.toString(16).padStart(2, '0').toUpperCase()}00`;
       try {
         for (const m of await this.request(cmd)) {
-          if (m[0] === 0x42 && m[1] === pid && m.length >= 3 + p.bytes) {
-            values.push({ pid, label: p.label, unit: p.unit, decimals: p.decimals, value: p.decode(m.slice(3)) });
-          }
+          const value = m[0] === 0x42 && m[1] === pid && m.length >= 3 + p.bytes ? p.decode(m.slice(3)) : null;
+          if (value != null) values.push({ pid, label: p.label, unit: p.unit, decimals: p.decimals, value });
         }
       } catch {
         // Not every value is stored in every freeze frame.
@@ -893,7 +956,8 @@ export class ElmClient {
       }
     }
     for (const p of list) {
-      if (out.get(p.pid) != null) continue;
+      // Answered already (a null answer is an O2 sensor with no reading).
+      if (out.has(p.pid)) continue;
       if (this.addressed) break;
       out.set(p.pid, await this.readLive(p));
     }
@@ -929,7 +993,7 @@ export class ElmClient {
     });
   }
 
-  // One module conversation at a time: a second screen (or the AI) waits
+  // One module conversation at a time: a second screen waits
   // instead of re-pointing the adapter mid-sequence, which could send a
   // request, or a write, to the wrong module. Single commands stay queued
   // as before; this guards whole sequences.
@@ -1251,17 +1315,38 @@ export class ElmClient {
       let info: ModuleDetails | null;
       if (r.via === 'tp20') {
         info = await this.tp20(r.address, async (s) => {
-          const id = parseKwpIdent(await s.request([0x1a, 0x9b]).catch(() => []));
-          const d: ModuleDetails = { ...empty, responded: true };
+          // An open channel is not an answer: the module counts as answered
+          // only when identification or a read gets a reply (a refusal
+          // counts). A lost link or a closed channel (A8) ends the reads at
+          // once, so no fallback reads go out on a dead link.
+          let answered = false;
+          let linkLost = false;
+          const ask = async (payload: number[], waitMs?: number): Promise<number[]> => {
+            if (linkLost) return [];
+            try {
+              const m = await s.request(payload, waitMs);
+              if (m.length) answered = true;
+              return m;
+            } catch (e) {
+              // Only a closed channel ends the reads. A reply with lost frames
+              // still proves the module is there; a timeout on one request
+              // leaves the fallback reads to try.
+              if (e instanceof Error && /answer was lost/.test(e.message)) answered = true;
+              linkLost = s.closed;
+              return [];
+            }
+          };
+          const id = parseKwpIdent(await ask([0x1a, 0x9b]));
+          const d: ModuleDetails = { ...empty };
           if (id) {
             d.partNumber = id.partNumber;
             d.software = id.software;
             d.systemName = id.component;
             d.coding = id.coding != null ? id.coding.toString().padStart(7, '0') : null;
-          } else {
+          } else if (!linkLost) {
             // Newer modules on the old channel answer the UDS identification numbers instead.
             const read = async (hi: number, lo: number) => {
-              const m = await s.request([0x22, hi, lo], 2000).catch(() => [] as number[]);
+              const m = await ask([0x22, hi, lo], 2000);
               return m[0] === 0x62 && m[1] === hi && m[2] === lo ? cleanText(m.slice(3)) || null : null;
             };
             d.partNumber = await read(0xf1, 0x87);
@@ -1269,6 +1354,7 @@ export class ElmClient {
             d.hardware = await read(0xf1, 0x91);
             d.systemName = await read(0xf1, 0x97);
           }
+          d.responded = answered;
           return d;
         }).catch(() => null);
       } else if (r.via === 'mscan') {
@@ -1547,7 +1633,7 @@ export class ElmClient {
           async () => {
             let silent = 0;
             let answered = false;
-            const name = HEADER_NAMES[h] ?? `Module ${h}`;
+            const name = this.moduleNameAt(h);
             const keep = (did: string, data: number[]) => {
               found.push(`${h}-${did}`);
               opts.onFound?.(`${h}-${did}`, data);
@@ -1732,13 +1818,23 @@ export class ElmClient {
     });
     for (const { tx, rx } of hits) {
       if (opts.cancelled?.()) break;
-      const known = MODULES.find((m) => m.tx === tx && m.rx === rx) ?? this.extraDefs.find((m) => m.tx === tx && m.rx === rx);
+      const known = this.moduleAt(tx, rx);
       let def: ModuleDef = known ?? { id: `hdr-${tx}`, name: `Module ${tx}`, tx, rx, groups: [], source: 'Found by probing' };
       if (!known) {
-        // Ask its name: system name, then part number.
-        const name = await this.withModule(def, async () => (await this.readDid('F197', 1200)) ?? (await this.readDid('F187', 1200))).catch(() => null);
-        const text = name ? cleanText(name) : '';
-        def = { ...def, name: text ? `${text} (${tx})` : def.name };
+        // Ask its name: system name, then part number (VW F187, Ford and
+        // Mazda F113 or F111, which refuse F187).
+        const name = await this.withModule(def, async () => {
+          const sys = await this.readDid('F197', 1200);
+          const system = sys ? cleanText(sys) : null;
+          if (system) return { text: system, part: false };
+          for (const did of ['F187', 'F113', 'F111']) {
+            const got = await this.readDid(did, 1200);
+            const text = got ? partText(cleanText(got) ?? '') : '';
+            if (text) return { text, part: true };
+          }
+          return null;
+        }).catch(() => null);
+        def = { ...def, name: !name ? def.name : name.part ? `Module ${tx} · ${name.text}` : `${name.text} (${tx})` };
         if (!this.extraDefs.some((d) => d.id === def.id)) this.extraDefs.push(def);
       }
       out.push(def);
@@ -2451,6 +2547,23 @@ export class ElmClient {
 }
 
 // The 3 bytes a module uses for a fault code: 'P0011B5' or maker-numbered '0000F3'.
+// Order of a value-group scan: groups with names first (ascending), then the
+// other groups from 1 to `to`. Named groups up to 255 are read even past `to`.
+// A resume point (from) is a group number: a named group means the named pass
+// stopped there, so it carries on with the named groups from it and then every
+// other group; any other group means the named pass was done and the second
+// pass carries on from it. So a scan cut short and resumed reads every group
+// exactly once. No from: the whole order.
+export function measuringOrder(named: number[], to: number, from?: number): number[] {
+  const first = [...new Set(named)].filter((g) => g >= 1 && g <= 255).sort((a, b) => a - b);
+  const isNamed = new Set(first);
+  const rest: number[] = [];
+  for (let g = 1; g <= Math.min(to, 255); g++) if (!isNamed.has(g)) rest.push(g);
+  if (from == null) return [...first, ...rest];
+  if (isNamed.has(from)) return [...first.filter((g) => g >= from), ...rest];
+  return rest.filter((g) => g >= from);
+}
+
 export function dtcBytes(code: string): number[] | null {
   if (/^[0-9A-F]{6}$/.test(code)) return code.match(/../g)!.map((h) => parseInt(h, 16));
   const m = /^([PCBU])([0-3])([0-9A-F])([0-9A-F]{2})([0-9A-F]{2})$/.exec(code);

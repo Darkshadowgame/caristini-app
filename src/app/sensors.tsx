@@ -3,7 +3,7 @@ import { allowSleep, stayAwake } from '../keepAwake';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { addHistory } from '../history';
-import { CATEGORY_COLOUR, CATEGORY_ICON, CATEGORY_ORDER, categoryOf, displaySensor, isPlausible, HEADER_NAMES, readKey, SensorCategory, sensorId, SensorRow, sensorsForCar, SensorValue } from '../obd/sensors';
+import { CATEGORY_COLOUR, CATEGORY_ICON, CATEGORY_ORDER, categoryOf, displaySensor, isPlausible, moduleNamer, readKey, SensorCategory, sensorId, SensorRow, sensorsForCar, SensorValue } from '../obd/sensors';
 import { byUsefulness, searchSensors } from '../obd/sensorSearch';
 import { useSettings } from '../settings';
 import { sendBack } from '../share/sendBack';
@@ -30,6 +30,8 @@ export default function Sensors() {
   const client = conn.client;
   const v = conn.vehicle;
   const all = useMemo(() => sensorsForCar(v, garage.vehicles), [v, garage.vehicles]);
+  // Module names from this car's own modules, then its make's list.
+  const nameOf = useMemo(() => moduleNamer(v), [v]);
   // Already asked on this car (answered or not), and sensors the owner's other
   // cars of the same family answered (asked first in a quick scan).
   const asked = useMemo(() => new Set([...(v?.sensorsAsked ?? []), ...(v?.sensorsFound ?? [])]), [v?.sensorsAsked, v?.sensorsFound]);
@@ -73,9 +75,9 @@ export default function Sensors() {
   // category lists the values people check most first.
   const shown = useMemo(() => {
     const q = query.trim();
-    if (q) return searchSensors(mine, q, (r) => HEADER_NAMES[r.h] ?? '');
+    if (q) return searchSensors(mine, q, (r) => nameOf(r.h));
     return cat ? byUsefulness(mine.filter((r) => categoryOf(r) === cat)) : mine;
-  }, [mine, cat, query]);
+  }, [mine, cat, query, nameOf]);
   // Only the rows on screen are read live, so values refresh quickly.
   const PAGE = 25;
   const [limit, setLimit] = useState(PAGE);
@@ -109,11 +111,11 @@ export default function Sensors() {
     );
   }
 
-  // quick: the sensors other cars taught Caristini first, then everything not
+  // quick: only the sensors other cars of this family already answered, not
   // yet asked on this car. full: every sensor again, to confirm or correct.
   // Either way only the modules switched on are asked.
   const picked = (rows: SensorRow[]) => rows.filter((r) => !off.has(r.h));
-  const quickList = picked([...quickRows(all, shared, asked), ...remainingRows(all, asked).filter((r) => !shared.has(readKey(r)))]);
+  const quickList = picked(quickRows(all, shared, asked));
   const fullList = picked(all.filter((r) => !r.ai));
   const mins = (n: number) => Math.max(1, Math.round((n * 0.12) / 60));
 
@@ -157,9 +159,9 @@ export default function Sensors() {
       const count = all.filter((r) => keys.has(readKey(r))).length;
       const gone = mode === 'full' ? [...before].filter((k) => scope.has(k) && tried.has(k) && !keys.has(k)).length : 0;
       const what = mode === 'quick' ? 'Quick search' : 'Full search';
-      await addHistory({ vin: v.vin, kind: 'sensors', title: `${count} sensors found`, detail: stopped ? `${what} stopped early` : what, complete });
+      await addHistory({ vin: v.vin, kind: 'sensors', title: `${count} sensor${count === 1 ? '' : 's'} found`, detail: stopped ? `${what} stopped early` : what, complete });
       success();
-      const note = `${count} sensors found on this car.${gone ? ` ${gone} that answered before did not answer this time and were taken off.` : ''}${!complete && !stopped && left ? ` ${left} not asked yet (modules switched off).` : ''}`;
+      const note = `${count} sensor${count === 1 ? '' : 's'} found on this car.${gone ? ` ${gone} that answered before did not answer this time and were taken off.` : ''}${!complete && !stopped && left ? ` ${left} not asked yet (modules switched off).` : ''}`;
       if (alive.current) setMessage({ tone: 'ok', text: note });
       // Send what was found back, so other cars and the next version know it.
       // Always tried: a failed send is kept on the phone and sent again later.
@@ -185,18 +187,20 @@ export default function Sensors() {
       <Group
         header="Find sensors"
         help={SECTIONS.sensorsScan}
-        footer="Quick asks what other cars found first, then only what this car has not been asked. Full asks everything again."
+        footer={quickList.length ? 'Quick asks only the sensors other cars like this one already answered. Full asks every sensor again.' : 'Full asks every sensor the lists know for this car.'}
       >
+        {quickList.length ? (
+          <ListRow
+            first
+            icon="lightning-bolt"
+            iconColour="green"
+            title="Quick search"
+            subtitle={`${quickList.length.toLocaleString('en-GB')} to ask, about ${mins(quickList.length)} min`}
+            onPress={() => search('quick')}
+          />
+        ) : null}
         <ListRow
-          first
-          icon="lightning-bolt"
-          iconColour="green"
-          title="Quick search"
-          subtitle={quickList.length ? `${quickList.length.toLocaleString('en-GB')} to ask, about ${mins(quickList.length)} min` : 'Nothing left to ask on the chosen modules'}
-          disabled={!quickList.length}
-          onPress={() => search('quick')}
-        />
-        <ListRow
+          first={!quickList.length}
           icon="radar"
           iconColour="blue"
           title="Full search"
@@ -217,11 +221,11 @@ export default function Sensors() {
           {modules.map(([h, n], i) => (
             <View key={h} style={[styles.moduleRow, { borderColor: t.border, borderTopWidth: i ? StyleSheet.hairlineWidth : 0 }]}>
               <View style={{ flex: 1 }}>
-                <Text style={[type.body, { color: t.text }]}>{HEADER_NAMES[h] ?? `Module ${h}`}</Text>
-                <Text style={[type.small, { color: t.muted }]}>{`${n.toLocaleString('en-GB')} sensors · ${h}`}</Text>
+                <Text style={[type.body, { color: t.text }]}>{nameOf(h)}</Text>
+                <Text style={[type.small, { color: t.muted }]}>{`${n.toLocaleString('en-GB')} sensor${n === 1 ? '' : 's'} · ${h}`}</Text>
               </View>
               <Switch
-                accessibilityLabel={`Search ${HEADER_NAMES[h] ?? h}`}
+                accessibilityLabel={`Search ${nameOf(h)}`}
                 value={!off.has(h)}
                 onValueChange={(on) =>
                   setOff((old) => {
@@ -264,7 +268,7 @@ export default function Sensors() {
         <View style={{ flex: 1 }}>
           <Text style={[type.body, { color: t.text }]}>{r.n}</Text>
           <Text style={[type.small, { color: t.muted }]}>
-            {HEADER_NAMES[r.h] ?? `Module ${r.h}`} · <Text style={{ fontFamily: MONO }}>{r.d}</Text>
+            {nameOf(r.h)} · <Text style={{ fontFamily: MONO }}>{r.d}</Text>
             {r.ai ? <Text style={{ color: t.accentText }}> · named by AI</Text> : !ownList(r.src) ? <Text> · {r.src.replace(/-/g, ' ')} list</Text> : null}
           </Text>
         </View>
@@ -310,7 +314,7 @@ export default function Sensors() {
             <View style={{ flex: 1 }}>
               <Text style={[type.title3, { color: t.text }]}>Find my car’s sensors</Text>
               <Text style={[type.sub, { color: t.muted, marginTop: 2 }]}>
-                Caristini asks each module about known maker sensors and keeps the ones your car answers.{shared.size ? ' Sensors your other cars and other owners found are asked first.' : ''}
+                Caristini asks each module about known maker sensors and keeps the ones your car answers.{quickList.length ? ' A quick search asks only the sensors other cars like this one answered.' : ''}
               </Text>
             </View>
           </View>
@@ -357,7 +361,7 @@ export default function Sensors() {
       ) : null}
 
       {(cat || query.trim()) && !searching ? (
-        <Group header={query.trim() ? `${shown.length} matches in every system` : `${shown.length} sensors, most useful first`} help={SECTIONS.sensorsResults} footer="Values refresh while this page is open. Tap the star to pin a value to the top of Live data.">
+        <Group header={query.trim() ? `${shown.length} match${shown.length === 1 ? '' : 'es'} in every system` : `${shown.length} sensor${shown.length === 1 ? '' : 's'}, most useful first`} help={SECTIONS.sensorsResults} footer="Values refresh while this page is open. Tap the star to pin a value to the top of Live data.">
           {shown.length ? visible.map(row) : <ListRow first title={query.trim() ? 'No sensor matches' : 'Nothing here yet'} subtitle={query.trim() ? 'Try another word, for example temp, pressure or gearbox.' : 'Run the search again to look for more.'} noChevron />}
           {shown.length > visible.length ? <ListRow icon="chevron-down" iconColour="blue" title={`Show ${Math.min(PAGE, shown.length - visible.length)} more`} subtitle={`${shown.length - visible.length} not shown`} onPress={() => setLimit((n) => n + PAGE)} noChevron /> : null}
         </Group>

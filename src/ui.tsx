@@ -148,6 +148,9 @@ export function useReduceMotion(): boolean {
 
 // The web preview draws the tab bar across the top; leave room for it.
 const WEB_TAB_BAR = Platform.OS === 'web' ? 56 : 0;
+// The phone's floating tab bar sits over the end of every tab page: about
+// 70 pt above the home indicator. The last row must scroll clear of it.
+const TAB_BAR_CLEARANCE = 100;
 
 // Scrolling page. Tab roots pass a large title, drawn in the content the way
 // iOS draws it, below the safe area.
@@ -185,7 +188,7 @@ export function Screen({
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: t.bg }}
-      contentContainerStyle={[padded && { paddingHorizontal: space.lg, paddingTop: inPage ? insets.top + space.sm + WEB_TAB_BAR : title ? space.sm : space.lg, paddingBottom: 120 }]}
+      contentContainerStyle={[padded && { paddingHorizontal: space.lg, paddingTop: inPage ? insets.top + space.sm + WEB_TAB_BAR : title ? space.sm : space.lg, paddingBottom: Math.max(120, insets.bottom + TAB_BAR_CLEARANCE) }]}
       keyboardShouldPersistTaps="handled"
       contentInsetAdjustmentBehavior="automatic"
     >

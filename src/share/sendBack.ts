@@ -169,7 +169,7 @@ export async function sendBack(kind: string, vin: string, data: unknown, opts: {
     const r = await MailComposer.composeAsync({
       recipients: opts.email ? [opts.email] : [],
       subject: `Caristini findings: ${kind} (${vin})`,
-      body: 'Findings from Caristini, attached. Send this to Claude to build them into the app.',
+      body: 'Findings from Caristini, attached, to be built into the next version.',
       attachments: [uri],
     });
     return { via: 'email', detail: r.status === 'sent' ? 'Email sent.' : 'Email not sent.' };

@@ -54,6 +54,13 @@ export interface Vehicle {
   // with the unit of each value in the group. groupsScanned lists modules done.
   groupsFound?: Record<string, Record<string, string[]>>;
   groupsScanned?: string[];
+  // Where a module's group scan stopped short (time limit or no answer): the
+  // next Learn my car carries on from this group.
+  groupsNext?: Record<string, number>;
+  // Since 1.0.38: position in the scan order (named groups first) where a
+  // module's group scan stopped short. groupsNext above is from an older order
+  // and is no longer used.
+  groupsResume?: Record<string, number>;
   // Module ids that answered a fault scan, so the next scan asks them first.
   modulesSeen?: string[];
   // How each module answered last time (protocol and address), tried first next time.
@@ -76,13 +83,12 @@ export interface Vehicle {
   pinnedSensors?: string[];
   // Photo of the car chosen by the owner (local file URI).
   photo?: string;
-  // Learn my car: what each module is (from its identification and AI research),
-  // and settings the AI found on the web (unconfirmed, offered through Try mode).
+  // Learn my car: what each module is, from its identification.
   knowledge?: Record<string, { plainName: string; what: string; notes?: string; part?: string | null; at: number }>;
+  // Kept only so data saved by older versions still loads; nothing writes them.
   aiItems?: CodingItem[];
-  // Values found on this car that no list knew, named and decoded by the AI.
   aiSensors?: SensorRow[];
-  learnRun?: { at: number; modules: number; sensors: number; researched: number };
+  learnRun?: { at: number; modules: number; sensors: number; researched?: number };
   // The car does not report its VIN over the standard OBD request; it came from
   // its modules or the owner, so a later connect without one can pick this car.
   noObdVin?: boolean;
@@ -122,6 +128,12 @@ export function inferredFromParts(v: Vehicle): Partial<Vehicle> | null {
   const m = vagModelFromParts(partsOf(v));
   if (!m) return null;
   return { group: 'vag', platform: m.platform, ...(v.model && v.edited ? {} : { model: m.model }) };
+}
+
+// After 2 complete full checks the car's modules are known: the health check
+// asks only those, and every address again after 30 days.
+export function quickCheckDue(v: Pick<Vehicle, 'fullChecks' | 'fullCheckAt' | 'modulesSeen'> | undefined): boolean {
+  return (v?.fullChecks ?? 0) >= 2 && Date.now() - (v?.fullCheckAt ?? 0) < 30 * 86400000 && (v?.modulesSeen?.length ?? 0) >= 3;
 }
 
 export function vehicleTitle(v: Pick<Vehicle, 'brand' | 'model' | 'year' | 'nickname'>): string {
