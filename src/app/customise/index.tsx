@@ -1,17 +1,18 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Mascot } from '../../brand/Mascot';
-import { bitsLabel, CodingItem, codingItemsFor, isOn, withItem } from '../../coding/items';
+import { bitsLabel, CodingItem, codingItemsFor, isOn, stateText, withItem } from '../../coding/items';
 import { LearnedSetting, learnedIsOn, learnedKeys, learnedModules, learnedReady, splitKey, withLearned } from '../../coding/learn';
 import { sharedFits, sharedLearned } from '../../coding/shared';
-import { addDiary, today } from '../../diary';
+import { addDiary, SETTING_CHANGED, today } from '../../diary';
 import { addHistory } from '../../history';
 import { kbForCar, kbSettings, loadKb } from '../../kb';
 import { categoriesFor, modsForVehicle, STATUS_LABEL } from '../../mods/catalogue';
 import { MODULES } from '../../obd/modules';
 import { preflightCheck } from '../../coding/preflight';
 import { toHex } from '../../obd/uds';
+import { cacheAfterWrite } from '../../diag/timeline';
 import { useConnection } from '../../state';
 import { space, type, useTheme } from '../../theme';
 import { ConfirmSheet, GlowCard, Group, Icon, ListRow, NeedsConnection, Notice, Pill, Screen, success, tap } from '../../ui';
@@ -44,6 +45,9 @@ export default function Customise() {
   const garage = useGarage();
   const v = conn.vehicle;
   const client = conn.client;
+  // Put back from the change timeline: the module to restore, when it has a backup.
+  const params = useLocalSearchParams<{ restore?: string }>();
+  const wantRestore = params.restore && v?.codingOriginal?.[params.restore] ? params.restore : null;
   // Settings saved in the shared knowledge base, loaded once. They are not
   // confirmed on a car, so they show as read-only notes, never as switches.
   const [kbItems, setKbItems] = useState<CodingItem[]>([]);
@@ -66,7 +70,7 @@ export default function Customise() {
   // Settings learned on the owner's other cars that have the same module.
   const borrowed = v ? sharedLearned(v, garage.vehicles) : [];
   // Keys are module ids (long coding) or "moduleId:DID" (learned adaptation values).
-  const moduleIds = [...new Set([...items.map((i) => i.module), ...learned.flatMap(learnedKeys), ...borrowed.flatMap(learnedKeys)])];
+  const moduleIds = [...new Set([...items.map((i) => i.module), ...learned.flatMap(learnedKeys), ...borrowed.flatMap(learnedKeys), ...(wantRestore ? [wantRestore] : [])])];
   const defOf = (key: string) => {
     const id = splitKey(key).module;
     return MODULES.find((m) => m.id === id) ?? client?.moduleById(id);
@@ -89,6 +93,8 @@ export default function Customise() {
   // Category chip in view (null: all) and the setting whose details are open.
   const [cat, setCat] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  // The setting whose Technical details (source notes, byte, bits) are open.
+  const [techId, setTechId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'danger'; text: string; id?: string } | null>(null);
   // Try mode: after a change to an untested setting, ask whether it worked.
   const [ask, setAsk] = useState<{ id: string; title: string; done: { key: string; before: number[]; after: number[] }[]; login?: number } | null>(null);
@@ -138,6 +144,20 @@ export default function Customise() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [read]);
 
+  // Put back from the change timeline: once the module has been read, the
+  // usual restore confirmation opens (or a note when it is original already).
+  const restoreAsked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!wantRestore || reading || !checked.has(wantRestore) || restoreAsked.current === wantRestore) return;
+    restoreAsked.current = wantRestore;
+    const now = codings[wantRestore];
+    const name = defOf(wantRestore)?.name ?? wantRestore;
+    if (!now) setMessage({ tone: 'danger', text: `${name} did not answer, so its coding could not be read. Check the ignition is on, then tap Read settings again.` });
+    else if (toHex(now) === v?.codingOriginal?.[wantRestore]) setMessage({ tone: 'ok', text: `${name} already has its original coding. Nothing to put back.` });
+    else setPending({ kind: 'restore', module: wantRestore });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantRestore, reading, checked]);
+
   if (!v) {
     return (
       <Screen>
@@ -179,10 +199,20 @@ export default function Customise() {
         if (res.coding) written.current.add(d.key);
         if (res.coding) client.sessionValues.set(d.key, res.coding);
         if (res.coding && alive.current) setCodings((old) => ({ ...old, [d.key]: res.coding }));
+        // The saved coding follows each write, so Put back decides from what the module holds now.
+        if (res.coding) await garage.update(v.vin, { codingCache: cacheAfterWrite(garage.latest(v.vin)?.codingCache, [{ key: d.key, hex: toHex(res.coding) }]) });
       }
       await mark(a.id, 'no-effect');
-      await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: 'Other', mileage: null, notes: `Tried ${a.title}: no effect seen, put back.` });
-      await addHistory({ vin: v.vin, kind: 'change', title: `${a.title} put back`, detail: 'No effect seen in Try mode' });
+      await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: `Tried ${a.title}: no effect seen, put back.` });
+      const backups = garage.latest(v.vin)?.codingOriginal ?? {};
+      await addHistory({
+        vin: v.vin,
+        kind: 'change',
+        title: `${a.title} put back`,
+        detail: 'No effect seen in Try mode',
+        odometerKm: v.odometerKm,
+        changes: [...a.done].reverse().map((d) => ({ module: defOf(d.key)?.name ?? d.key, key: d.key, setting: a.title, from: 'On', to: 'Off', before: toHex(d.after), after: toHex(d.before), backup: backups[d.key], source: 'Try mode' })),
+      });
       if (alive.current) setMessage({ tone: 'ok', text: `${a.title} put back. Marked as no effect on this car.` });
     } catch (e) {
       if (alive.current) setMessage({ tone: 'danger', text: e instanceof Error ? e.message : String(e) });
@@ -218,7 +248,8 @@ export default function Customise() {
       // The first coding ever seen for each module is kept as the original.
       const saved = garage.latest(v.vin)?.codingOriginal ?? {};
       const fresh = ids.filter((id) => !saved[id]);
-      if (fresh.length) await garage.update(v.vin, { codingOriginal: { ...saved, ...Object.fromEntries(fresh.map((id) => [id, toHex(codings[id]!)])) } });
+      const backups = { ...saved, ...Object.fromEntries(fresh.map((id) => [id, toHex(codings[id]!)])) };
+      if (fresh.length) await garage.update(v.vin, { codingOriginal: backups });
       const what =
         p.kind === 'item'
           ? `${p.item.title} ${p.on ? 'on' : 'off'}`
@@ -245,6 +276,8 @@ export default function Customise() {
           written.current.add(moduleId);
           client.sessionValues.set(moduleId, res.coding);
           setCodings((old) => ({ ...old, [moduleId]: res.coding }));
+          // The saved coding follows each write, so Put back decides from what the module holds now.
+          await garage.update(v.vin, { codingCache: cacheAfterWrite(garage.latest(v.vin)?.codingCache, [{ key: moduleId, hex: toHex(res.coding) }]) });
         }
         if (!res.ok) {
           if (settingId && p.kind !== 'restore' && p.on) await mark(settingId, 'refused');
@@ -261,8 +294,20 @@ export default function Customise() {
         done.push({ key: moduleId, before, after });
       }
       success();
-      await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: 'Other', mileage: null, notes: p.kind === 'restore' ? `${what}.` : `Changed: ${what}. Undo it in Customise > Backups.` });
-      await addHistory({ vin: v.vin, kind: 'change', title: what.charAt(0).toUpperCase() + what.slice(1), detail: done.map((d) => defOf(d.key)?.name).join(', '), before: done.map((d) => toHex(d.before)).join(' '), after: done.map((d) => toHex(d.after)).join(' '), odometerKm: v.odometerKm });
+      await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: p.kind === 'restore' ? `${what}.` : `Changed: ${what}. Undo it in Customise > Backups.` });
+      // One line per module for the change timeline, with the backup each came from.
+      const setting = p.kind === 'item' ? p.item.title : p.kind === 'learned' ? p.setting.title : 'Restore original';
+      const value = p.kind === 'restore' ? undefined : { from: p.on ? 'Off' : 'On', to: p.on ? 'On' : 'Off' };
+      await addHistory({
+        vin: v.vin,
+        kind: 'change',
+        title: what.charAt(0).toUpperCase() + what.slice(1),
+        detail: done.map((d) => defOf(d.key)?.name).join(', '),
+        before: done.map((d) => toHex(d.before)).join(' '),
+        after: done.map((d) => toHex(d.after)).join(' '),
+        odometerKm: v.odometerKm,
+        changes: done.map((d) => ({ module: defOf(d.key)?.name ?? d.key, key: d.key, setting, ...value, before: toHex(d.before), after: toHex(d.after), backup: backups[d.key], source: 'Customise' })),
+      });
       setMessage({ id: runId, tone: 'ok', text: `${what}. Switch the ignition off and on to see it. Saved to your Diary.` });
       // Try mode: a setting not yet confirmed on this car asks whether it worked.
       if (settingId && p.kind !== 'restore' && p.on && tried[settingId] !== 'works') {
@@ -277,6 +322,9 @@ export default function Customise() {
 
   const mods = modsForVehicle(v.group, v.platform);
   const cats = categoriesFor(mods);
+  // Modules with settings (a module with adaptation values counts once).
+  const modulesWithSettings = new Set(moduleIds.map((k) => splitKey(k).module)).size;
+  const checkedModules = new Set([...checked].map((k) => splitKey(k).module).filter((m) => moduleIds.every((k) => splitKey(k).module !== m || checked.has(k)))).size;
   const confirmed = available.filter((i) => i.confidence !== 'low');
   const unconfirmed = available.filter((i) => i.confidence === 'low');
   const groups = [...new Set(confirmed.map((i) => i.category))];
@@ -304,7 +352,7 @@ export default function Customise() {
         <View style={styles.loading}>
           <ActivityIndicator color={t.muted} />
           <Text style={[type.sub, { color: t.muted, flex: 1 }]}>
-            Checking the current settings ({checked.size} of {moduleIds.length} modules). Each switch unlocks when its module has answered.
+            Checking the current settings ({checkedModules} of {modulesWithSettings} module{modulesWithSettings === 1 ? '' : 's'} with settings). Each switch unlocks when its module has answered.
           </Text>
         </View>
       ) : null}
@@ -330,7 +378,8 @@ export default function Customise() {
                 style={[styles.chip, { backgroundColor: on ? t.accent : t.surface }]}
               >
                 <Text style={[type.sub, { color: on ? t.onAccent : t.text, fontWeight: '600' }]}>{c.label}</Text>
-                <Text style={[type.small, type.number, { color: on ? t.onAccent : t.muted }]}>{c.n}</Text>
+                {/* Counts show once every module has answered, so they do not jump. */}
+                {!reading ? <Text style={[type.small, type.number, { color: on ? t.onAccent : t.muted }]}>{c.n}</Text> : null}
               </Pressable>
             );
           })}
@@ -358,26 +407,37 @@ export default function Customise() {
                     onPress={() => setOpenId(openId === i.id ? null : i.id)}
                     style={{ flex: 1 }}
                   >
-                    <View style={styles.titleRow}>
-                      <Text style={[type.body, { color: t.text }]}>{i.title}</Text>
-                      {tried[i.id] ? <TriedPill r={tried[i.id]} /> : i.confidence === 'medium' ? <Pill text="Reported by owners" /> : null}
-                    </View>
+                    <Text style={[type.body, { color: t.text }]}>{i.title}</Text>
+                    {tried[i.id] || i.confidence === 'medium' ? (
+                      <View style={styles.badge}>{tried[i.id] ? <TriedPill r={tried[i.id]} /> : <Pill text="Reported by owners" />}</View>
+                    ) : null}
                     {openId === i.id ? (
                       <>
-                        <Text style={[type.sub, { color: t.muted, marginTop: 2 }]}>
-                          {i.summary}
-                          {i.note ? ` ${i.note}` : ''}
-                        </Text>
-                        <Text style={[type.small, { color: t.faint, marginTop: 4 }]}>
-                          {defOf(i.module)?.name ?? i.module}, byte {i.byte}, {bitsLabel(i)}
-                        </Text>
-                        <Pressable accessibilityRole="link" hitSlop={6} onPress={() => Linking.openURL(i.sources[0].url)} style={{ marginTop: 6 }}>
-                          <Text style={[type.small, { color: t.accentText }]}>Source: {i.sources[0].label}</Text>
+                        <Text style={[type.sub, { color: t.muted, marginTop: 2 }]}>{stateText(i, on)}</Text>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityState={{ expanded: techId === i.id }}
+                          hitSlop={6}
+                          onPress={() => setTechId(techId === i.id ? null : i.id)}
+                          style={{ marginTop: 4, minHeight: 32, justifyContent: 'center', alignSelf: 'flex-start' }}
+                        >
+                          <Text style={[type.small, { color: t.accentText }]}>{techId === i.id ? 'Hide technical' : 'Technical'}</Text>
                         </Pressable>
+                        {techId === i.id ? (
+                          <>
+                            {i.note ? <Text style={[type.small, { color: t.muted }]}>{i.note}</Text> : null}
+                            <Text style={[type.small, { color: t.faint, marginTop: 4 }]}>
+                              {defOf(i.module)?.name ?? i.module}, byte {i.byte}, {bitsLabel(i)}
+                            </Text>
+                            <Pressable accessibilityRole="link" hitSlop={6} onPress={() => Linking.openURL(i.sources[0].url)} style={{ marginTop: 6 }}>
+                              <Text style={[type.small, { color: t.accentText }]}>Source: {i.sources[0].label}</Text>
+                            </Pressable>
+                          </>
+                        ) : null}
                       </>
                     ) : (
-                      <Text style={[type.small, { color: t.muted, marginTop: 1 }]} numberOfLines={1}>
-                        {i.summary}
+                      <Text style={[type.small, { color: t.muted, marginTop: 1 }]} numberOfLines={2}>
+                        {stateText(i, on)}
                       </Text>
                     )}
                     {message?.id === i.id ? <Text style={[type.small, { color: message.tone === 'ok' ? t.ok : t.danger, marginTop: 4 }]}>{message.text}</Text> : null}
@@ -436,10 +496,8 @@ export default function Customise() {
             return (
               <View key={s.id} style={[styles.item, { borderColor: t.border, borderTopWidth: n ? StyleSheet.hairlineWidth : 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <View style={styles.titleRow}>
-                    <Text style={[type.body, { color: t.text }]}>{s.title}</Text>
-                    {tried[s.id] ? <TriedPill r={tried[s.id]} /> : <Pill text="Try it" tone="accent" />}
-                  </View>
+                  <Text style={[type.body, { color: t.text }]}>{s.title}</Text>
+                  <View style={styles.badge}>{tried[s.id] ? <TriedPill r={tried[s.id]} /> : <Pill text="Try it" tone="accent" />}</View>
                   <Text style={[type.sub, { color: t.muted, marginTop: 2 }]}>
                     {learnedModules(s)
                       .map((id) => defOf(id)?.name ?? id)
@@ -476,10 +534,8 @@ export default function Customise() {
             return (
               <View key={s.id} style={[styles.item, { borderColor: t.border, borderTopWidth: n ? StyleSheet.hairlineWidth : 0 }]}>
                 <View style={{ flex: 1 }}>
-                  <View style={styles.titleRow}>
-                    <Text style={[type.body, { color: t.text }]}>{s.title}</Text>
-                    {tried[s.id] ? <TriedPill r={tried[s.id]} /> : null}
-                  </View>
+                  <Text style={[type.body, { color: t.text }]}>{s.title}</Text>
+                  {tried[s.id] ? <View style={styles.badge}><TriedPill r={tried[s.id]} /></View> : null}
                   <Text style={[type.sub, { color: t.muted, marginTop: 2 }]}>
                     {learnedModules(s)
                       .map((id) => defOf(id)?.name ?? id)
@@ -549,6 +605,17 @@ export default function Customise() {
           })}
         </Group>
       ) : null}
+
+      <Group>
+        <ListRow
+          first
+          icon="timeline-text-outline"
+          iconColour="purple"
+          title="Change timeline"
+          subtitle={Object.keys(originals).length ? 'Every change made to this car, with old and new values. Put one back or share the list.' : 'No changes yet. Each setting you change is listed here.'}
+          onPress={() => router.push({ pathname: '/customise/timeline', params: { vin: v.vin } })}
+        />
+      </Group>
 
       {unreachable.length ? (
         <Group
@@ -669,7 +736,8 @@ const styles = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg },
   loading: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.lg },
   item: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
+  // A badge always sits on its own line under the setting's name.
+  badge: { flexDirection: 'row', marginTop: 4 },
   chips: { gap: space.sm, paddingBottom: space.lg },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: space.md + 2, paddingVertical: 7, borderRadius: 999 },
 });

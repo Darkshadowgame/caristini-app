@@ -3,9 +3,10 @@
 import { lookupDtc } from '../data/dtcLibrary';
 import { vagFaultText } from '../data/vagFaults';
 import { describeDtc } from './dtc';
+import { sentenceCase } from '../diag/faults';
 
 export function faultText(code: string): string | undefined {
-  if (/^\d{5}$/.test(code)) return vagFaultText(code);
-  const d = describeDtc(code);
-  return d.known ? d.text : lookupDtc(code)?.title;
+  const t = /^\d{5}$/.test(code) ? vagFaultText(code) : describeDtc(code).known ? describeDtc(code).text : lookupDtc(code)?.title;
+  // Sentence case, as every fault list shows it.
+  return t ? sentenceCase(t) : undefined;
 }

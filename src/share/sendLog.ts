@@ -21,3 +21,9 @@ export async function sendLogNow(reason: string, car: { vin?: string | null; bra
   const r = await sendBack('log', car?.vin || 'NO-VIN', { reason, lines: fresh, text }).catch((e) => ({ via: 'none' as const, detail: e instanceof Error ? e.message : String(e) }));
   return r.detail;
 }
+
+// A run the owner chose not to send (Learn my car's switch): its lines are
+// treated as sent, so a later automatic send does not carry them.
+export function skipUnsentLog(): void {
+  trafficLog.markSent();
+}

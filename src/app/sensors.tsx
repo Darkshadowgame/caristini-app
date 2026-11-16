@@ -15,6 +15,8 @@ import { useGarage } from '../vehicle/garage';
 import { quickRows, remainingRows, sharedSensorKeys } from '../obd/sharedSensors';
 import { Switch } from 'react-native';
 import { SECTIONS } from '../help';
+import { aboutRange } from '../timeText';
+import { groupValuesText, sensorCount } from '../vehicle/counts';
 
 
 // Every maker sensor the car answers: a one-time search, then live values by
@@ -117,7 +119,8 @@ export default function Sensors() {
   const picked = (rows: SensorRow[]) => rows.filter((r) => !off.has(r.h));
   const quickList = picked(quickRows(all, shared, asked));
   const fullList = picked(all.filter((r) => !r.ai));
-  const mins = (n: number) => Math.max(1, Math.round((n * 0.12) / 60));
+  // About 0.12 s a sensor, in the app's one time wording.
+  const about = (n: number) => aboutRange(n * 0.12, n * 0.12, { lower: true });
 
   const search = async (mode: 'quick' | 'full') => {
     if (!client || !v) return;
@@ -195,7 +198,7 @@ export default function Sensors() {
             icon="lightning-bolt"
             iconColour="green"
             title="Quick search"
-            subtitle={`${quickList.length.toLocaleString('en-GB')} to ask, about ${mins(quickList.length)} min`}
+            subtitle={`${quickList.length.toLocaleString('en-GB')} to ask, ${about(quickList.length)}`}
             onPress={() => search('quick')}
           />
         ) : null}
@@ -204,7 +207,7 @@ export default function Sensors() {
           icon="radar"
           iconColour="blue"
           title="Full search"
-          subtitle={`${fullList.length.toLocaleString('en-GB')} to ask, about ${mins(fullList.length)} min`}
+          subtitle={`${fullList.length.toLocaleString('en-GB')} to ask, ${about(fullList.length)}`}
           disabled={!fullList.length}
           onPress={() => search('full')}
         />
@@ -288,7 +291,7 @@ export default function Sensors() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: cat ?? 'Sensors' }} />
+      <Stack.Screen options={{ title: cat ?? 'Find my car’s sensors' }} />
       {message ? <Notice tone={message.tone} icon={message.tone === 'ok' ? 'check' : message.tone === 'info' ? 'information-outline' : 'alert-circle-outline'} text={message.text} /> : null}
 
       {searching ? (
@@ -320,7 +323,12 @@ export default function Sensors() {
           </View>
         </GlowCard>
       ) : null}
-      {!searching && !v.sensorScan ? (
+      {!all.length ? (
+        <Notice
+          icon="information-outline"
+          text={`No sensor list fits this car: its older modules give values in numbered value groups instead.${sensorCount(v).groupValues ? ` Learn my car found ${groupValuesText(sensorCount(v))}.` : ' Learn my car reads them.'} Watch them in Live data, under Older VW modules.`}
+        />
+      ) : !searching && !v.sensorScan ? (
         scanControls
       ) : searching ? null : (
         <>
@@ -329,7 +337,7 @@ export default function Sensors() {
               <View style={styles.heroRow}>
                 <Text style={[styles.big, type.number, { color: t.text }]}>{mine.length}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={[type.heading, { color: t.text }]}>sensors on this car</Text>
+                  <Text style={[type.heading, { color: t.text }]}>{mine.length === 1 ? 'sensor' : 'sensors'} on this car</Text>
                   <Text style={[type.small, { color: t.muted }]}>
                     Searched {new Date(v.sensorScan!.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                     {v.sensorScan!.complete ? '' : ', more left to ask'}

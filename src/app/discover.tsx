@@ -2,7 +2,9 @@ import { Stack } from 'expo-router';
 import { allowSleep, stayAwake } from '../keepAwake';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { addSample, DISCOVER_RANGES, DiscoverModule, Discovery, knownName, loadDiscovery, quickRanges, rangeSize, readings, saveDiscovery } from '../discover';
+import { aboutTime, addSample, afterQuick, DISCOVER_RANGES, DiscoverModule, Discovery, exploreStatus, fullSeconds, knownName, loadDiscovery, modulesToExplore, quickDone, quickExploreRanges, quickResume, rangeSize, readings, saveDiscovery } from '../discover';
+import { routeFor, scanValueGroups } from '../learn/valueGroups';
+import { groupName } from '../data/groupLabels';
 import { sharedSensorKeys } from '../obd/sharedSensors';
 import { sendLogNow } from '../share/sendLog';
 import { sensorsForCar } from '../obd/sensors';
@@ -45,7 +47,8 @@ export default function Discover() {
     ]);
   const startedAt = useRef(0);
 
-  const [defs, setDefs] = useState<ModuleDef[] | null>(null);
+  // Every module this make can have; only those that answered are offered (shown below).
+  const [allDefs, setDefs] = useState<ModuleDef[] | null>(null);
   const [disc, setDisc] = useState<Discovery | null>(null);
   const [running, setRunning] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number; did: number } | null>(null);
@@ -78,6 +81,8 @@ export default function Discover() {
     );
   }
 
+  // The car as saved now: Learn my car and the value group reads update it.
+  const car = garage.get(v.vin) ?? v;
   const update = (fn: (d: Discovery) => Discovery) => {
     const next = fn(discRef.current ?? { vin: v.vin, started: Date.now(), updated: Date.now(), modules: {} });
     discRef.current = next;
@@ -86,6 +91,10 @@ export default function Discover() {
   };
   const moduleOf = (def: ModuleDef): DiscoverModule => disc?.modules[def.id] ?? { id: def.id, name: def.name, tx: def.tx, rx: def.rx, found: {} };
 
+  // Learn my car's quick explore and this one are the same, in the same
+  // store: either carries on where the other stopped.
+  const quickKey = (def: ModuleDef) => JSON.stringify(quickExploreRanges(def.tx, known(def)));
+  const older = (def: ModuleDef) => routeFor(client, car, def) === 'tp20';
   const sweep = async (list: ModuleDef[], mode: 'quick' | 'full' = 'quick') => {
     stop.current = false;
     setMessage(null);
@@ -94,15 +103,33 @@ export default function Discover() {
       for (const def of list) {
         if (stop.current || !alive.current) break;
         const m = moduleOf(def);
-        if (m.finished || (mode === 'quick' && m.quickDone)) continue;
+        // Older VW modules: their values come in numbered value groups, read
+        // and kept the way Learn my car reads them.
+        if (older(def)) {
+          if ((garage.latest(v.vin)?.groupsScanned ?? []).includes(def.id)) continue;
+          setRunning(def.id);
+          setOpen(def.id);
+          startedAt.current = Date.now();
+          setProgress(null);
+          await client.holdOlder(() =>
+            scanValueGroups(client, garage, v.vin, def, {
+              cancelled: () => stop.current || !alive.current,
+              onProgress: (p) => alive.current && setProgress({ did: -1, done: Math.round(p * 1000), total: 1000 }),
+            }),
+          );
+          continue;
+        }
+        const key = quickKey(def);
+        if (m.finished || (mode === 'quick' && quickDone(m, key))) continue;
         setRunning(def.id);
         setOpen(def.id);
         startedAt.current = Date.now();
         setProgress(null);
         let lastSave = Date.now();
-        const res = await client.discoverDids(def, mode === 'quick' ? quickRanges(known(def)) : ranges, {
-          // The full explore resumes where it paused; both skip what was asked.
-          startAt: mode === 'full' ? m.nextDid : undefined,
+        const res = await client.discoverDids(def, mode === 'quick' ? quickExploreRanges(def.tx, known(def)) : ranges, {
+          // Both resume where they paused (the quick one where Learn my car
+          // stopped too); both skip what was asked.
+          startAt: mode === 'full' ? m.nextDid : quickResume(m, key),
           skip: skipFor(def, m),
           cancelled: () => stop.current || !alive.current,
           onProgress: (did, done, total) => {
@@ -126,7 +153,7 @@ export default function Discover() {
             ...d.modules,
             [def.id]:
               mode === 'quick'
-                ? { ...(d.modules[def.id] ?? m), quickDone: res.finished || silent, silent }
+                ? afterQuick(d.modules[def.id] ?? m, key, res)
                 : { ...(d.modules[def.id] ?? m), finished: res.finished, silent, nextDid: res.lastDid ?? m.nextDid },
           },
         }));
@@ -196,7 +223,27 @@ export default function Discover() {
   };
 
   const totalFound = Object.values(disc?.modules ?? {}).reduce((n, m) => n + Object.keys(m.found).length, 0);
-  const minutes = Math.round((perModule * 0.07) / 60);
+  const statusOf = (def: ModuleDef) =>
+    exploreStatus(disc?.modules[def.id], {
+      key: quickKey(def),
+      older: older(def),
+      groups: car.groupsFound?.[def.id],
+      groupsDone: (car.groupsScanned ?? []).includes(def.id),
+      groupsStarted: car.groupsResume?.[def.id] != null,
+    });
+  // Only the modules that answered the last health check (all of them before one has run).
+  const checked = !!v.modulesSeen?.length;
+  // Modules that answered the last health check, older VW modules it found,
+  // and modules with value groups or values found before.
+  const seen = [...new Set([...(car.modulesSeen ?? []), ...(car.deepFound ?? []).map((d) => d.moduleId), ...Object.keys(car.groupsFound ?? {})])];
+  const defs = allDefs ? modulesToExplore(allDefs, seen.length ? seen : undefined, disc) : null;
+  // Every module here speaks the older VW protocol: value groups only.
+  const allOlder = !!defs?.length && defs.every(older);
+  const perModuleTime = aboutTime(fullSeconds(perModule));
+  // Full explore of every module listed that has not finished yet (older
+  // VW modules have value groups instead).
+  const left = (defs ?? []).filter((d) => !older(d) && !disc?.modules[d.id]?.finished).length;
+  const fullTime = left ? aboutTime(fullSeconds(perModule) * left) : null;
 
   return (
     <Screen>
@@ -208,12 +255,16 @@ export default function Discover() {
           <ScanPulse active size={120} />
           <Text style={[type.title3, { color: t.text, marginTop: space.md }]}>Exploring {defs?.find((d) => d.id === running)?.name ?? 'the module'}</Text>
           <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: 4, marginBottom: space.lg }]}>
-            {Object.keys(disc?.modules[running]?.found ?? {}).length} values found. Ignition on; running the engine keeps the battery up.
+            {(() => {
+              const def = defs?.find((d) => d.id === running);
+              return def && older(def) ? statusOf(def).text.replace(/, carries on$/, '') : `${Object.keys(disc?.modules[running]?.found ?? {}).length} values found`;
+            })()}
+            . Ignition on; running the engine keeps the battery up.
           </Text>
           <View style={{ alignSelf: 'stretch' }}>
             <ProgressBar
               value={progress ? progress.done / progress.total : 0}
-              label={progress ? `Asking value ${progress.did.toString(16).toUpperCase().padStart(4, '0')}` : 'Saying hello'}
+              label={progress ? (progress.did < 0 ? 'Reading value groups' : `Asking value ${progress.did.toString(16).toUpperCase().padStart(4, '0')}`) : 'Saying hello'}
               done={progress?.done}
               total={progress?.total}
               startedAt={startedAt.current}
@@ -230,16 +281,23 @@ export default function Discover() {
               <Icon name="telescope" size={30} color={t.accent} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[type.title3, { color: t.text }]}>Explore a module's unknown values</Text>
+              <Text style={[type.title3, { color: t.text }]}>{allOlder ? 'Read every value group' : "Explore a module's unknown values"}</Text>
               <Text style={[type.sub, { color: t.muted, marginTop: 2 }]}>
-                Asks each module for all {perModule.toLocaleString('en-GB')} value numbers where makers keep sensors, about {minutes} minutes a module. Read-only. Pause any time and carry on later.
+                {allOlder
+                  ? 'This car’s modules give their values in numbered value groups. Learn my car reads them too, and both keep the same list and carry on from the same place. Read-only.'
+                  : `Quick explore asks the values near ones already known: a few minutes a module. Full explore asks all ${perModule.toLocaleString('en-GB')} value numbers, ${perModuleTime} a module. Learn my car runs the quick explore too, and both carry on from the same place. Read-only.`}
               </Text>
             </View>
           </View>
-          <Button label="Quick explore every module" icon="lightning-bolt" disabled={!defs?.length} onPress={() => defs && sweep(defs, 'quick')} />
-          <View style={{ marginTop: space.sm }}>
+          <Button label={allOlder ? 'Read value groups in every module' : 'Quick explore every module'} icon="lightning-bolt" disabled={!defs?.length} onPress={() => defs && sweep(defs, 'quick')} />
+          {allOlder ? null : <View style={{ marginTop: space.sm }}>
             <Button label={totalFound ? 'Full explore (carries on)' : 'Full explore every module'} icon="play" variant="secondary" disabled={!defs?.length} onPress={() => defs && sweep(defs, 'full')} />
-          </View>
+            {fullTime ? (
+              <Text style={[type.small, { color: t.muted, marginTop: 4, textAlign: 'center' }]}>
+                {left} module{left === 1 ? '' : 's'}: {fullTime} in all
+              </Text>
+            ) : null}
+          </View>}
           {totalFound ? (
             <View style={{ marginTop: space.sm }}>
               <Button label={disc?.sentAt ? 'Send findings again' : 'Send findings to build in'} icon="share-variant" variant="secondary" busy={running === 'send'} onPress={send} />
@@ -248,12 +306,14 @@ export default function Discover() {
         </GlowCard>
       )}
 
-      <Group header="Modules" help={SECTIONS.discoverModules} footer={disc?.sentAt ? `Findings last sent ${new Date(disc.sentAt).toLocaleString('en-GB')}.` : 'Findings are kept on this phone until you send them.'}>
+      <Group
+        header="Modules"
+        help={SECTIONS.discoverModules}
+        footer={`${checked ? 'The modules that answered your last health check.' : 'Every module this make can have. Run a health check to list only the ones on your car.'}${(defs ?? []).some(older) ? ' Older VW modules give their values in numbered value groups; Live data shows them.' : ''} ${disc?.sentAt ? `Findings last sent ${new Date(disc.sentAt).toLocaleString('en-GB')}.` : 'Findings are kept on this phone until you send them.'}`}
+      >
         {(defs ?? []).map((def, i) => {
-          const m = disc?.modules[def.id];
-          const n = Object.keys(m?.found ?? {}).length;
-          const moving = Object.values(m?.found ?? {}).filter((f) => f.moves).length;
-          const status = m?.finished ? `${n} value${n === 1 ? '' : 's'}, ${moving} moving` : m?.silent ? 'Did not answer' : m?.nextDid != null ? `${n} found, paused` : 'Not explored yet';
+          const st = statusOf(def);
+          const isOlder = older(def);
           const shown = open === def.id;
           const mod = shown ? moduleOf(def) : null;
           const entries = mod ? Object.entries(mod.found).sort(([a], [b]) => a.localeCompare(b)) : [];
@@ -261,19 +321,33 @@ export default function Discover() {
             <View key={def.id}>
               <ListRow
                 first={i === 0}
-                icon={m?.finished ? 'check-circle' : m?.silent ? 'close-circle' : 'chip'}
-                iconColour={m?.finished ? 'green' : m?.silent ? 'grey' : 'indigo'}
+                icon={st.state === 'done' ? 'check-circle' : st.state === 'silent' ? 'close-circle' : 'chip'}
+                iconColour={st.state === 'done' ? 'green' : st.state === 'silent' ? 'grey' : st.state === 'partial' ? 'orange' : 'indigo'}
                 title={`${def.code && group === 'vag' ? `${def.code} · ` : ''}${def.name}`}
-                subtitle={status}
+                subtitle={st.text}
                 right={<Icon name={shown ? 'chevron-up' : 'chevron-down'} size={13} color={t.faint} />}
                 noChevron
                 onPress={() => setOpen(shown ? null : def.id)}
               />
               {/* Opens in place, under the module tapped. */}
-              {mod ? (
+              {mod && isOlder ? (
+                <View style={{ backgroundColor: t.sunken, padding: space.lg, gap: space.sm }}>
+                  {!(car.groupsScanned ?? []).includes(def.id) ? (
+                    <Button label={car.groupsResume?.[def.id] != null ? 'Carry on reading value groups' : 'Read value groups'} icon="play" disabled={!!running} onPress={() => sweep([def])} />
+                  ) : null}
+                  {Object.entries(car.groupsFound?.[def.id] ?? {})
+                    .filter(([, units]) => units.length)
+                    .map(([g, units]) => (
+                      <Text key={g} style={[type.small, { color: t.text }]}>
+                        {groupName(def.code, Number(g))}: {units.length} value{units.length === 1 ? '' : 's'}
+                      </Text>
+                    ))}
+                  <Text style={[type.small, { color: t.muted }]}>This module speaks the older VW protocol, so its values come in numbered value groups. Watch them live in Live data, under Older VW modules.</Text>
+                </View>
+              ) : mod ? (
                 <View style={{ backgroundColor: t.sunken }}>
                   <View style={{ padding: space.lg, gap: space.sm }}>
-                    {!mod.quickDone && !mod.finished ? <Button label="Quick explore this module" icon="lightning-bolt" disabled={!!running} onPress={() => sweep([def], 'quick')} /> : null}
+                    {!quickDone(mod, quickKey(def)) ? <Button label="Quick explore this module" icon="lightning-bolt" disabled={!!running} onPress={() => sweep([def], 'quick')} /> : null}
                     {!mod.finished ? <Button label={mod.nextDid != null ? 'Carry on: full explore' : 'Full explore this module'} icon="play" variant="secondary" disabled={!!running} onPress={() => sweep([def], 'full')} /> : null}
                     {entries.length ? <Button label="Sample again" icon="refresh" variant="secondary" busy={running === `sample-${def.id}`} disabled={!!running} onPress={() => sampleAgain(def)} /> : null}
                     {!entries.length ? (

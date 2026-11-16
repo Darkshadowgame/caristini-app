@@ -34,3 +34,12 @@ export function chargeVerdict(v: number): Verdict {
   return { tone: 'danger', word: 'Not charging', text: 'Below 12.5 V with the engine running. The alternator may not be charging.' };
 }
 
+
+// The last reading another screen saved (Learn my car, the health check), as
+// a Battery test result: charging bands at 13.3 V and above (engine
+// running), rest bands below.
+export function savedResult(saved: { volts: number; at: number; from: string } | null | undefined): { title: string; v: number; verdict: Verdict } | null {
+  if (!saved || !Number.isFinite(saved.volts)) return null;
+  const running = saved.volts >= 13.3;
+  return { title: `${running ? 'Engine running' : 'Engine off'}, from ${saved.from}`, v: saved.volts, verdict: running ? chargeVerdict(saved.volts) : restVerdict(saved.volts) };
+}

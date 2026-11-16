@@ -33,12 +33,14 @@ export interface SensorRow {
 }
 
 // The car's own list: the shared lists for its maker group. Each is still
-// asked on this car before it is shown.
+// asked on this car before it is shown. VW PQ35 cars get none: their modules
+// speak the older protocol (TP2.0) only and give values in numbered value
+// groups instead (Learn my car reads them; Live data shows them).
 export function sensorsForCar(
-  v: { group: ModuleGroup | 'other'; brand?: string } | null | undefined,
+  v: { group: ModuleGroup | 'other'; brand?: string; platform?: string | null } | null | undefined,
   _others: { group: ModuleGroup | 'other'; brand?: string }[] = [],
 ): SensorRow[] {
-  if (!v) return [];
+  if (!v || v.platform === 'PQ35') return [];
   return sensorsFor(v.group);
 }
 

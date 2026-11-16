@@ -1,10 +1,11 @@
 // One setting change with every safety step, used by Customise: read the module's coding now, keep the first coding ever seen as
 // the original, write, read back (the client puts the original back when the
 // module does not keep the change), and log it.
-import { addDiary, today } from '../diary';
+import { addDiary, SETTING_CHANGED, today } from '../diary';
 import { addHistory } from '../history';
 import { ElmClient } from '../obd/elm';
 import { toHex } from '../obd/uds';
+import { cacheAfterWrite } from '../diag/timeline';
 import { Vehicle, vehicleTitle } from '../vehicle/garage';
 import { CodingItem, isOn, withItem } from './items';
 
@@ -29,11 +30,23 @@ export async function applySetting(
   if (!saved[def.id]) await update({ codingOriginal: { ...saved, [def.id]: toHex(before) } });
   const after = withItem(item, before, on);
   const res = await client.writeCoding(def, before, after, item.login);
+  // The saved coding follows the write, so Put back decides from what the module holds now.
+  if (res.coding) await update({ codingCache: cacheAfterWrite(latest()?.codingCache, [{ key: def.id, hex: toHex(res.coding) }]) });
   if (!res.ok) {
     return { ok: false, text: res.restored ? `${def.name} did not keep the change, so the original coding was put back. Nothing changed.` : `${def.name} did not keep the change and the original could not be confirmed; restore it in Customise.` };
   }
   const what = `${item.title} ${on ? 'on' : 'off'}`;
-  await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: 'Other', mileage: null, notes: `Changed: ${what}. Undo it in Customise > Backups.` });
-  await addHistory({ vin: v.vin, kind: 'change', title: what.charAt(0).toUpperCase() + what.slice(1), detail: def.name, before: toHex(before), after: toHex(after), odometerKm: v.odometerKm });
+  await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: `Changed: ${what}. Undo it in Customise > Backups.` });
+  const backup = saved[def.id] ?? toHex(before);
+  await addHistory({
+    vin: v.vin,
+    kind: 'change',
+    title: what.charAt(0).toUpperCase() + what.slice(1),
+    detail: def.name,
+    before: toHex(before),
+    after: toHex(after),
+    odometerKm: v.odometerKm,
+    changes: [{ module: def.name, key: def.id, setting: item.title, from: on ? 'Off' : 'On', to: on ? 'On' : 'Off', before: toHex(before), after: toHex(after), backup, source: 'Customise' }],
+  });
   return { ok: true, text: `${what}. Switch the ignition off and on to see it.` };
 }

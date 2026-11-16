@@ -1,0 +1,82 @@
+// The recording loop against a fake adapter: manual record with a marker, and
+// an auto-start log that starts above the level and stops after the delay.
+import { LIVE_PIDS, LivePid } from '../src/obd/pids';
+import type { ElmClient } from '../src/obd/elm';
+import type { DataLog } from '../src/logger/format';
+import { obdKey } from '../src/logger/format';
+import { channelOptions, LoggerSession, LoggerStatus } from '../src/logger/recorder';
+import { saveLog } from '../src/logger/store';
+
+jest.mock('../src/logger/store', () => ({ saveLog: jest.fn(async () => undefined) }));
+
+const saved = saveLog as jest.MockedFunction<typeof saveLog>;
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function fakeClient(rpm: () => number) {
+  const reads: number[][] = [];
+  const client = {
+    moduleBusy: false,
+    supportsModules: false,
+    whenIdle: async () => undefined,
+    livePidsForCar: async () => LIVE_PIDS.filter((p) => [0x0c, 0x0d, 0x11].includes(p.pid)),
+    readLiveMany: async (list: LivePid[]) => {
+      await wait(5);
+      reads.push(list.map((p) => p.pid));
+      return new Map<number, number | null>(list.map((p) => [p.pid, p.pid === 0x0c ? rpm() : 20]));
+    },
+  };
+  return { client: client as unknown as ElmClient, reads };
+}
+
+beforeEach(() => saved.mockClear());
+
+test('manual record saves rows and markers', async () => {
+  const { client } = fakeClient(() => 1500);
+  const statuses: LoggerStatus[] = [];
+  const s = new LoggerSession(client, { vin: 'VIN1', title: 'Leon' }, (x) => statuses.push(x));
+  const options = await channelOptions(client, null);
+  s.configure(options, [obdKey(0x0c), obdKey(0x0d)], { on: false, kind: 'rpm', above: 3000, stopAfterS: 5 });
+  s.record();
+  await wait(80);
+  expect(s.mark()).toBe(1);
+  await wait(40);
+  await s.stop();
+  expect(saved).toHaveBeenCalledTimes(1);
+  const log = saved.mock.calls[0][0] as DataLog;
+  expect(log.channels.map((c) => c.key)).toEqual([obdKey(0x0c), obdKey(0x0d)]);
+  expect(log.rows.length).toBeGreaterThan(3);
+  expect(log.rows[0].v).toEqual([1500, 20]);
+  expect(log.markers).toHaveLength(1);
+  expect(log.start).toBe('manual');
+  expect(s.phase).toBe('idle');
+  expect(statuses.some((x) => x.phase === 'recording')).toBe(true);
+  await s.dispose();
+});
+
+test('auto-start records while above the level, then saves and waits again', async () => {
+  let n = 0;
+  // 10 reads at idle, 20 above 3000 rpm, then idle.
+  const { client, reads } = fakeClient(() => {
+    n++;
+    return n > 10 && n <= 30 ? 4000 : 850;
+  });
+  const s = new LoggerSession(client, { vin: 'VIN2', title: 'Focus' }, () => undefined);
+  const options = await channelOptions(client, null);
+  // Throttle chosen; engine speed is added as the trigger.
+  s.configure(options, [obdKey(0x11)], { on: true, kind: 'rpm', above: 3000, stopAfterS: 1 });
+  expect(s.phase).toBe('armed');
+  await wait(60);
+  // While waiting only the trigger is read.
+  expect(reads[0]).toEqual([0x0c]);
+  for (let i = 0; i < 60 && !saved.mock.calls.length; i++) await wait(50);
+  expect(saved).toHaveBeenCalledTimes(1);
+  const log = saved.mock.calls[0][0] as DataLog;
+  expect(log.start).toBe('auto');
+  expect(log.channels.map((c) => c.key)).toEqual([obdKey(0x0c), obdKey(0x11)]);
+  // The first row is the reading that started it.
+  expect(log.rows[0]).toEqual({ t: 0, v: [4000, null] });
+  expect(log.durationMs).toBeGreaterThanOrEqual(1000);
+  expect(s.phase).toBe('armed');
+  await s.dispose();
+  expect(s.phase).toBe('idle');
+}, 10_000);

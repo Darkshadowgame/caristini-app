@@ -8,7 +8,8 @@ import { Group, Icon, IconName, ListRow, Notice, Pill, Screen, SearchField, tap 
 import { useGarage, vehicleTitle } from '../vehicle/garage';
 import { loadDiscovery } from '../discover';
 import { ENRICHED_MODULES } from '../coding/enriched';
-import { SECTIONS } from '../help';
+import { sensorCount, sensorCountText } from '../vehicle/counts';
+import { SECTIONS, WHAT_IS_SENT } from '../help';
 
 const KIND_ICON: Record<KbKind, IconName> = {
   fuse: 'flash-outline',
@@ -73,7 +74,7 @@ export default function Knowledge() {
   return (
     <Screen>
       <Text style={[type.sub, { color: t.muted, marginBottom: space.md }]}>
-        {v ? `${vehicleTitle(v)}: ` : ''}notes saved for this kind of car, shared with every Caristini install. Each entry links to its sources.
+        {v ? `${vehicleTitle(v)}: ` : ''}notes for this kind of car, read from your findings store when the app opens. Each entry links to its sources.
       </Text>
 
       {garage.vehicles.length ? (
@@ -85,8 +86,8 @@ export default function Knowledge() {
       ) : null}
 
       {v ? (
-        <Group header={`Learned on ${vehicleTitle(v)}`} footer="Saved on this phone by Learn my car, health checks and the sensor search.">
-          <ListRow first icon="radar" iconColour="blue" title="Sensors found" value={String(v.sensorsFound?.length ?? 0)} onPress={() => router.push('/sensors')} />
+        <Group header={`Learned on ${vehicleTitle(v)}`} footer={`Saved on this phone by Learn my car, health checks and Find my car’s sensors. ${WHAT_IS_SENT}`}>
+          <ListRow first icon="radar" iconColour="blue" title="Sensors found" subtitle={sensorCountText(sensorCount(v))} onPress={() => router.push('/sensors')} />
           <ListRow icon={'telescope' as IconName} iconColour="purple" title="Unknown values found" value={values.toLocaleString('en-GB')} onPress={() => router.push('/discover')} />
           <ListRow icon="chip" iconColour="indigo" title="Older modules found" value={String(v.deepFound?.length ?? 0)} onPress={() => router.push('/diagnostics')} />
           {learned.map(([id, k]) => (

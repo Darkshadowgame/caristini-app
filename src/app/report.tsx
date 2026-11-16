@@ -11,6 +11,10 @@ import { space, type, useTheme } from '../theme';
 import { Button, GlowCard, Group, ListRow, NeedsConnection, Notice, Screen, success } from '../ui';
 import { useGarage, vehicleTitle } from '../vehicle/garage';
 import { SECTIONS } from '../help';
+import { faultLabel } from '../diag/faults';
+import { useLastScan, when } from '../components/LastScan';
+
+const odometer = (km: number, miles: boolean) => (miles ? `${Math.round(km / 1.609344).toLocaleString('en-GB')} miles` : `${Math.round(km).toLocaleString('en-GB')} km`);
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -25,6 +29,8 @@ export default function Report() {
   const v = conn.vehicle;
   const client = conn.client;
   const info = conn.info;
+  // The check History holds, the same one the Car tab counts.
+  const last = useLastScan(v?.vin);
 
   if (!v || !client || !info) {
     return (
@@ -46,7 +52,7 @@ export default function Report() {
       const firstOdo = distance.find((e) => odo[e.id] != null);
       if (firstOdo) await garage.update(v.vin, { odometerKm: odo[firstOdo.id], odometerAt: Date.now() });
       // Each fault of the last scan with its module and meaning.
-      const lastFaults = (await loadHistory(v.vin)).find((e) => e.kind === 'scan')?.faults ?? [];
+      const lastFaults = last?.faults ?? (await loadHistory(v.vin)).find((e) => e.kind === 'scan')?.faults ?? [];
       const checked = v.lastCheckedAt ? new Date(v.lastCheckedAt).toLocaleString('en-GB') : null;
       const obd = [...new Set([...codes.stored, ...codes.pending, ...codes.permanent])];
       const row = (k: string, val: string) => `<tr><th>${esc(k)}</th><td>${esc(val)}</td></tr>`;
@@ -73,7 +79,7 @@ export default function Report() {
           ${checked ? row('Last full health check', checked) : row('Last full health check', 'Not run yet')}
           ${checked && !lastFaults.length ? row('Faults found then', v.lastCodes.length ? [...new Set(v.lastCodes)].join(', ') : 'None') : ''}
         </table>
-        ${lastFaults.length ? `<table>${lastFaults.map((f) => row(`${f.module} · ${f.code}`, f.text ?? 'Meaning not in the library')).join('')}</table>` : ''}
+        ${lastFaults.length ? `<table>${lastFaults.map((f) => row(`${f.module} · ${f.code}`, faultLabel(f) ?? 'Meaning not in the library')).join('')}</table>` : ''}
         <h2>Emissions self-tests</h2><table>
           ${info.monitors.map((m) => row(m.name, m.state === 'complete' ? 'Complete' : 'Not yet run')).join('') || row('Self-tests', 'Not reported')}
         </table>
@@ -98,15 +104,20 @@ export default function Report() {
       <GlowCard tone="brand" style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg }}>
         <Mascot mood={busy ? 'scanning' : 'happy'} size={88} />
         <View style={{ flex: 1 }}>
-          <Text style={[type.title3, { color: t.text }]}>Health report</Text>
-          <Text style={[type.sub, { color: t.muted, marginTop: 4 }]}>A one-page PDF of this car: odometer, engine warning light, faults, emissions self-tests and battery. Handy for an MOT, a sale or a garage.</Text>
+          <Text style={[type.sub, { color: t.muted }]}>A one-page PDF of this car: odometer, engine warning light, faults, emissions self-tests and battery. Handy for an MOT, a sale or a garage.</Text>
         </View>
       </GlowCard>
       {error ? <Notice tone="danger" icon="alert-circle-outline" text={error} /> : null}
-      <Group header="Included" help={SECTIONS.reportIncluded} footer="Run a health check first so the report lists every module's faults.">
-        <ListRow first title="Last health check" value={v.lastCheckedAt ? new Date(v.lastCheckedAt).toLocaleDateString('en-GB') : 'Not run yet'} noChevron />
+      <Group header="Included" help={SECTIONS.reportIncluded} footer={last ? undefined : "Run a health check first so the report lists every module's faults."}>
+        {last ? (
+          <ListRow first title="Faults" value={`${last.faults?.length ?? 0} (from ${when(last.at)} check)`} noChevron />
+        ) : (
+          <ListRow first title="Last health check" value="Not run yet" noChevron />
+        )}
+        <ListRow title="Odometer" value={v.odometerKm == null ? 'Read for the PDF' : odometer(v.odometerKm, settings.speed === 'mph')} noChevron />
         <ListRow title="Engine warning light" value={info.milOn ? 'On' : 'Off'} noChevron />
         <ListRow title="Emissions self-tests" value={`${info.monitors.filter((m) => m.state === 'complete').length} of ${info.monitors.length} complete`} noChevron />
+        <ListRow title="Battery" value={v.battery ? `${v.battery.volts.toFixed(1)} V last time; read again for the PDF` : 'Read for the PDF'} noChevron />
       </Group>
       <Button label="Make PDF" icon="file-document-outline" busy={busy} disabled={busy} onPress={make} />
     </Screen>

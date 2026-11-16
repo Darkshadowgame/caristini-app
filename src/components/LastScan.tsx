@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { HistoryEntry, loadHistory, onHistory } from '../history';
 import { SECTIONS } from '../help';
+import { faultLabel } from '../diag/faults';
 import { Group, ListRow } from '../ui';
 
 export function useLastScan(vin: string | undefined): HistoryEntry | null {
@@ -35,7 +36,7 @@ export function LastScan({ vin, entry, limit = 12 }: { vin: string; entry: Histo
   return (
     <Group
       header={`Last health check, ${when(entry.at)}${entry.complete === false ? ' (stopped early)' : ''}`}
-      footer={faults.length ? 'Tap a fault for what it means and what to do.' : undefined}
+      footer={faults.length ? 'Tap a fault for what it means and, where Caristini knows them, the likely causes and fixes.' : undefined}
       help={SECTIONS.lastScan}
     >
       {entry.noAnswer ? (
@@ -53,7 +54,7 @@ export function LastScan({ vin, entry, limit = 12 }: { vin: string; entry: Histo
           <ListRow
             key={`${f.module}-${f.code}-${i}`}
             first={i === 0 && !entry.noAnswer}
-            title={f.text ?? 'Meaning not in the library yet'}
+            title={faultLabel(f) ?? 'Meaning not in the library yet'}
             subtitle={`${shortCode(f.code)} · ${f.module}`}
             onPress={() => router.push({ pathname: '/code/[code]', params: { code: f.code, module: f.module } })}
           />

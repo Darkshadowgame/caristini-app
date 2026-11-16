@@ -230,12 +230,6 @@ export const FUSE_CARS: FuseCar[] = [
         official: true,
         note: ERWIN_NOTE,
       },
-      {
-        label: 'Old Audi erWin address',
-        url: 'https://erwin.audi.de',
-        official: true,
-        note: 'Did not connect on 11 Nov 2026.',
-      },
     ],
   },
 
@@ -363,8 +357,8 @@ export const FUSE_CARS: FuseCar[] = [
         name: 'Engine compartment, side box (high-current)',
         location: '"Position in engine compartment: side box"',
         access:
-          'Not described. These are high-current fuses; the manual says relays and high-current fuses should be replaced by a qualified workshop.',
-        note: 'High-current fuses: have a qualified workshop replace them.',
+          'Not described in the manual.',
+        note: 'High-current fuses: the manual says a qualified workshop should replace them.',
         sourceUrl: SEAT_PDF,
         fuses: [
           { id: 'B1', amps: [150, 200], fn: 'Alternator below 140 W / above 140 W (as printed)', varies: true },
@@ -389,12 +383,6 @@ export const FUSE_CARS: FuseCar[] = [
         url: 'https://erwin.vwgroup-datahub.com',
         official: true,
         note: ERWIN_NOTE,
-      },
-      {
-        label: 'Old SEAT erWin address',
-        url: 'https://erwin.seat.com',
-        official: true,
-        note: 'Did not connect on 11 Nov 2026.',
       },
     ],
   },

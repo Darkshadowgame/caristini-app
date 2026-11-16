@@ -6,7 +6,7 @@ import { useConnection } from '../state';
 import { Body, Button, Card, ConfirmSheet, Group, IconName, Label, ListRow, Notice, Row, Screen, tap } from '../ui';
 import { useGarage, Vehicle } from '../vehicle/garage';
 import { LastScan, useLastScan } from '../components/LastScan';
-import { decodeVin, GROUP_LABEL, MakeGroup } from '../vehicle/vin';
+import { decodeVin, GROUP_LABEL, MakeGroup, platformModels } from '../vehicle/vin';
 
 const GROUPS: MakeGroup[] = ['vag', 'ford', 'mazda', 'other'];
 const PLATFORMS = ['MQB', 'MQB evo', 'MQB A0', 'PQ35', 'PQ25', 'PQ26', 'PQ46', 'MLB', 'MLB evo'];
@@ -44,23 +44,6 @@ export default function VehicleDetails() {
 
   return (
     <Screen>
-      {lastScan ? <LastScan vin={v.vin} entry={lastScan} /> : null}
-      <Group header="Records" footer="Kept on this phone, readable without the adapter.">
-        <ListRow first icon={'barcode' as IconName} iconColour="indigo" title="Parts and IDs" subtitle="VIN, codes, module part numbers, service parts" onPress={() => router.push({ pathname: '/car-ids', params: { vin: v.vin } })} />
-        <ListRow icon="progress-clock" iconColour="blue" title="History" subtitle="Every health check and its faults, clears and setting changes" onPress={() => router.push({ pathname: '/history', params: { vin: v.vin } })} />
-        <ListRow icon={'book-open-variant' as IconName} iconColour="purple" title="Research notes" subtitle="Notes saved for this kind of car" onPress={() => router.push('/knowledge')} />
-        <ListRow icon="notebook-outline" iconColour="orange" title="Diary" subtitle="Services, repairs and notes" onPress={() => router.push('/diary')} />
-      </Group>
-
-      <Card>
-        <Label>Detected from the VIN</Label>
-        <Row label="VIN" value={v.vin} mono />
-        <Row label="Make" value={decoded.brand ?? 'Not recognised'} />
-        <Row label="Model" value={decoded.model ? `${decoded.model} (likely)` : 'Not in the VIN table'} />
-        <Row label="Model year" value={decoded.year ? `${decoded.year}${decoded.yearReliable ? '' : ' (check)'}` : 'Not encoded'} />
-        <Row label="Fuel" value={v.fuel ?? 'Unknown'} />
-      </Card>
-
       <Card>
         <Label>Your details</Label>
         <Field label="Nickname" value={draft.nickname} onChange={(x) => set({ nickname: x })} placeholder="For example the owner's Golf" />
@@ -87,6 +70,11 @@ export default function VehicleDetails() {
               value={draft.platform ?? ''}
               onPick={(p) => set({ platform: p || null })}
             />
+            <Body muted small style={{ marginTop: space.sm }}>
+              {draft.platform
+                ? `${draft.platform} includes ${platformModels(draft.platform).slice(0, 6).join(', ') || 'other VW group models'}.`
+                : 'The platform is the base a car is built on. Not sure? Leave it: Caristini fills it in from the VIN or part numbers when it can.'}
+            </Body>
           </>
         ) : null}
         <Body muted small style={{ marginTop: space.md, marginBottom: space.sm }}>
@@ -102,19 +90,35 @@ export default function VehicleDetails() {
         />
       </Card>
 
-      <View style={{ gap: space.sm }}>
-        <Button
-          label="Save"
-          icon="content-save-outline"
-          onPress={async () => {
-            const year = /^\d{4}$/.test(yearText) ? Number(yearText) : null;
-            await garage.update(v.vin, { ...draft, year, edited: true });
-            router.back();
-          }}
-        />
-        <Button label="Remove this car" icon="trash-can-outline" variant="ghost" onPress={() => setConfirmRemove(true)} />
-      </View>
-      <Text style={[type.small, { color: t.faint, marginTop: space.md }]}>Saved on this phone only.</Text>
+      <Button
+        label="Save"
+        icon="content-save-outline"
+        onPress={async () => {
+          const year = /^\d{4}$/.test(yearText) ? Number(yearText) : null;
+          await garage.update(v.vin, { ...draft, year, edited: true });
+          router.back();
+        }}
+      />
+      <Text style={[type.small, { color: t.faint, marginTop: space.sm, marginBottom: space.lg }]}>Saved on this phone only.</Text>
+
+      <Card>
+        <Label>Detected from the VIN</Label>
+        <Row label="VIN" value={v.vin} mono />
+        <Row label="Make" value={decoded.brand ?? 'Not recognised'} />
+        <Row label="Model" value={decoded.model ? `${decoded.model} (likely)` : 'Not in the VIN table'} />
+        <Row label="Model year" value={decoded.year ? `${decoded.year}${decoded.yearReliable ? '' : ' (check)'}` : 'Not encoded'} />
+        <Row label="Fuel" value={v.fuel ?? 'Unknown'} />
+      </Card>
+
+      {lastScan ? <LastScan vin={v.vin} entry={lastScan} /> : null}
+      <Group header="Records" footer="Kept on this phone, readable without the adapter.">
+        <ListRow first icon={'barcode' as IconName} iconColour="indigo" title="Parts and IDs" subtitle="VIN, codes, module part numbers, service parts" onPress={() => router.push({ pathname: '/car-ids', params: { vin: v.vin } })} />
+        <ListRow icon="progress-clock" iconColour="blue" title="History" subtitle="Every health check and its faults, clears and setting changes" onPress={() => router.push({ pathname: '/history', params: { vin: v.vin } })} />
+        <ListRow icon={'book-open-variant' as IconName} iconColour="purple" title="Research notes" subtitle="Notes saved for this kind of car" onPress={() => router.push('/knowledge')} />
+        <ListRow icon="notebook-outline" iconColour="orange" title="Diary" subtitle="Services, repairs and notes" onPress={() => router.push('/diary')} />
+      </Group>
+
+      <Button label="Remove this car" icon="trash-can-outline" variant="ghost" onPress={() => setConfirmRemove(true)} />
       <ConfirmSheet
         visible={confirmRemove}
         title="Remove this car?"

@@ -6,6 +6,8 @@ import { useConnection } from '../state';
 import { space, type, useTheme } from '../theme';
 import { SECTIONS } from '../help';
 import { Body, Button, GlowCard, Group, ListRow, NeedsConnection, Notice, Pill, Screen, success, Tone } from '../ui';
+import { when } from '../components/LastScan';
+import { useGarage } from '../vehicle/garage';
 
 const RPM = pidInfo(0x0c)!;
 const RUNNING_RPM = 400;
@@ -13,7 +15,7 @@ const RUNNING_RPM = 400;
 const CRANK_WINDOW_S = 10;
 const CRANK_SAMPLE_MS = 12_000;
 
-import { chargeVerdict, crankVerdict, restVerdict, Verdict } from '../obd/battery';
+import { chargeVerdict, crankVerdict, restVerdict, savedResult, Verdict } from '../obd/battery';
 export { chargeVerdict, crankVerdict, restVerdict };
 export type { Verdict };
 
@@ -41,7 +43,11 @@ async function steadyVolts(client: ElmClient, alive: () => boolean, n = 5): Prom
 export default function Battery() {
   const t = useTheme();
   const conn = useConnection();
+  const garage = useGarage();
   const client = conn.client;
+  // The last reading saved on this phone (Learn my car, Health check), shown
+  // until the adapter gives a new one, and with no adapter connected.
+  const saved = garage.get(conn.vehicle?.vin ?? garage.vehicles[0]?.vin)?.battery;
   const [busy, setBusy] = useState<'rest' | 'crank' | 'idle' | 'load' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [last, setLast] = useState<number | null>(null);
@@ -58,14 +64,40 @@ export default function Battery() {
     };
   }, []);
   const alive = () => aliveRef.current;
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+
+  // Last reading: read when the page opens and every 10 s between steps, as
+  // the Car tab does, so the figure matches it. Paused while a step reads.
+  useEffect(() => {
+    if (!client) return undefined;
+    let on = true;
+    const read = () => {
+      if (busyRef.current) return;
+      client.batteryVoltage().then(
+        (v) => {
+          if (on && v != null && !busyRef.current) setLast(v);
+        },
+        () => undefined,
+      );
+    };
+    read();
+    const id = setInterval(read, 10000);
+    return () => {
+      on = false;
+      clearInterval(id);
+    };
+  }, [client]);
 
   if (!client) {
     return (
       <Screen>
+        {saved ? <Notice icon="car-battery" text={`Last reading ${saved.volts.toFixed(2)} V, from ${saved.from}, ${when(saved.at)}.`} /> : null}
         <NeedsConnection title="Connect your car to test the battery" />
       </Screen>
     );
   }
+  const shown = last ?? saved?.volts ?? null;
 
   // Engine speed, or null when the car does not report it.
   const rpm = () => client.readLive(RPM);
@@ -172,14 +204,17 @@ export default function Battery() {
   if (crank) results.push({ title: 'Lowest while cranking', v: crank.min, verdict: crankVerdict(crank.min, crank.first, crank.last) });
   if (idle != null) results.push({ title: 'Idle, loads off', v: idle, verdict: chargeVerdict(idle) });
   if (load != null) results.push({ title: 'Idle, loads on', v: load, verdict: chargeVerdict(load) });
+  // The reading Learn my car or the health check saved, with when it was read.
+  const fromSaved = savedResult(saved);
+  const savedRow = fromSaved ? { ...fromSaved, title: `${fromSaved.title}, ${when(saved!.at)}` } : null;
   const off = !!busy;
 
   return (
     <Screen>
       <GlowCard tone="brand" style={{ padding: space.xl }}>
         <Text style={[type.label, { color: t.muted }]}>{crankNow ? 'Cranking' : 'Last reading'}</Text>
-        <Text style={[{ fontSize: 56, lineHeight: 62, fontWeight: '700', letterSpacing: -1, color: t.text }, type.number]} accessibilityLabel={last == null ? 'No reading' : undefined}>
-          {last == null ? '–' : last.toFixed(2)}
+        <Text style={[{ fontSize: 56, lineHeight: 62, fontWeight: '700', letterSpacing: -1, color: t.text }, type.number]} accessibilityLabel={shown == null ? 'No reading' : undefined}>
+          {shown == null ? '–' : shown.toFixed(2)}
           <Text style={[type.title3, { color: t.muted }]}> V</Text>
         </Text>
         {crankNow ? (
@@ -188,7 +223,9 @@ export default function Battery() {
             {`. Lowest ${crankNow.min.toFixed(2)} V`}
           </Text>
         ) : (
-          <Text style={[type.sub, { color: t.muted, marginTop: space.sm }]}>Measured by the adapter at the OBD port.</Text>
+          <Text style={[type.sub, { color: t.muted, marginTop: space.sm }]}>
+            {last == null && saved ? `From ${saved.from}, ${when(saved.at)}. Reading now…` : 'Measured by the adapter at the OBD port.'}
+          </Text>
         )}
       </GlowCard>
 
@@ -230,8 +267,8 @@ export default function Battery() {
       </Group>
 
       <Group header="Results" footer="The adapter measures at the OBD port, which reads slightly lower than at the battery.">
-        {results.length ? (
-          results.map((r, i) => (
+        {results.length || savedRow ? (
+          [...results, ...(savedRow ? [savedRow] : [])].map((r, i) => (
             <ListRow
               key={r.title}
               first={i === 0}

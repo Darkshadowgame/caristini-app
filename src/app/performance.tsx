@@ -1,12 +1,13 @@
 import { useKeepAwake } from 'expo-keep-awake';
 import React, { useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { pidInfo } from '../obd/pids';
 import { KMH_PER_MPH, speedIn, useSettings } from '../settings';
 import { useConnection } from '../state';
-import { space, type, useTheme } from '../theme';
+import { radius, space, type, useTheme } from '../theme';
 import { SECTIONS } from '../help';
-import { Button, GlowCard, Group, Icon, ListRow, NeedsConnection, Notice, Screen, success, tap } from '../ui';
+import { addRun, clearRuns, CustomRange, loadRanges, loadRuns, saveRanges, SavedRun } from '../monitors/store';
+import { Button, ConfirmSheet, GlowCard, Group, Icon, ListRow, NeedsConnection, Notice, Screen, success, tap } from '../ui';
 
 // ---------------------------------------------------------------------------
 // Timing logic (pure, tested in __tests__/perf.test.ts).
@@ -49,12 +50,19 @@ export interface PerfResult {
   rate: number;
   samples: number;
   at: number;
+  // Time between the two readings either side of the start and of the finish (ms).
+  startGapMs: number;
+  endGapMs: number;
+  // Plus or minus this many seconds (see runUncertainty).
+  plusMinus: number;
 }
 
+// prev: the last real reading (last can be the interpolated start point).
+// startGapMs and startAcc: the readings either side of the start crossing.
 export type Run =
   | { phase: 'waiting' }
   | { phase: 'ready'; last: Sample }
-  | { phase: 'running'; start: number; last: Sample; metres: number; firstT: number; count: number }
+  | { phase: 'running'; start: number; last: Sample; prev: Sample; metres: number; firstT: number; count: number; startGapMs: number; startAcc: number | null }
   | { phase: 'done'; result: PerfResult }
   | { phase: 'aborted'; reason: string };
 
@@ -98,6 +106,36 @@ export function distanceCrossing(a: Sample, b: Sample, before: number, target: n
   return { t: a.t + tau * 1000, kmh: (v1 + acc * tau) * 3.6 };
 }
 
+// Speed resolution of the car's report: PID 0D is one byte of whole km/h
+// (SAE J1979; Wikipedia OBD-II PIDs, market-research source [53]).
+export const SPEED_STEP_KMH = 1;
+
+// Acceleration between two readings in km/h per second (null if not rising).
+export function accelKmhS(a: Sample, b: Sample): number | null {
+  const dt = (b.t - a.t) / 1000;
+  return dt > 0 && b.kmh > a.kmh ? (b.kmh - a.kmh) / dt : null;
+}
+
+// How far a timed run can be off, in seconds, from how often the car was read.
+// Each crossing is placed between the two readings either side of it, so it
+// can be off by up to half the time between them (VCDS ties its tolerance to
+// the sample rate the same way: market-research source [15]). The car also
+// reports whole km/h, so the moment a speed is passed is unclear by half a
+// km/h divided by the acceleration there. Both ends are added. A distance
+// finish (quarter mile) has no speed term at the end. A guide, not a bound.
+export function runUncertainty(p: { startGapMs: number; endGapMs: number; startAcc: number | null; endAcc: number | null }): number {
+  const res = (acc: number | null) => (acc != null && acc > 0 ? SPEED_STEP_KMH / 2 / acc : 0);
+  return (p.startGapMs + p.endGapMs) / 2 / 1000 + res(p.startAcc) + res(p.endAcc);
+}
+
+// A timer for a range the owner chose. Speeds in km/h; the car reports at
+// most 255 km/h (PID 0D is one byte), so higher targets are refused.
+export const MAX_TARGET_KMH = 255;
+export function customTest(fromKmh: number, toKmh: number, label: string): PerfTest | null {
+  if (!Number.isFinite(fromKmh) || !Number.isFinite(toKmh) || fromKmh < 0 || toKmh <= fromKmh || toKmh > MAX_TARGET_KMH) return null;
+  return { id: `custom-${Math.round(fromKmh * 10)}-${Math.round(toKmh * 10)}`, label, startKmh: fromKmh, targetKmh: toKmh };
+}
+
 // At or below the start speed: standstill for a standing start.
 export function isReady(test: PerfTest, kmh: number): boolean {
   return test.startKmh <= 0 ? kmh <= 0 : kmh < test.startKmh;
@@ -111,7 +149,17 @@ export function stepRun(test: PerfTest, run: Run, s: Sample): Run {
     case 'ready': {
       if (isReady(test, s.kmh)) return { phase: 'ready', last: s };
       const start = crossingTime(run.last, s, test.startKmh);
-      const r: Running = { phase: 'running', start, last: { t: start, kmh: test.startKmh }, metres: 0, firstT: run.last.t, count: 2 };
+      const r: Running = {
+        phase: 'running',
+        start,
+        last: { t: start, kmh: test.startKmh },
+        prev: run.last,
+        metres: 0,
+        firstT: run.last.t,
+        count: 2,
+        startGapMs: s.t - run.last.t,
+        startAcc: accelKmhS(run.last, s),
+      };
       return advance(test, r, s);
     }
     case 'running':
@@ -132,11 +180,12 @@ function advance(test: PerfTest, r: Running, s: Sample): Run {
     const c = distanceCrossing(a, s, r.metres, test.targetM);
     return finish(test, r, s, c.t, c.kmh);
   }
-  return { ...r, last: s, metres: r.metres + seg };
+  return { ...r, last: s, prev: s, metres: r.metres + seg };
 }
 
 function finish(test: PerfTest, r: Running, s: Sample, end: number, finishKmh?: number): Run {
   const span = (s.t - r.firstT) / 1000;
+  const endGapMs = s.t - r.prev.t;
   return {
     phase: 'done',
     result: {
@@ -146,6 +195,9 @@ function finish(test: PerfTest, r: Running, s: Sample, end: number, finishKmh?: 
       rate: span > 0 ? (r.count - 1) / span : 0,
       samples: r.count,
       at: s.t,
+      startGapMs: r.startGapMs,
+      endGapMs,
+      plusMinus: runUncertainty({ startGapMs: r.startGapMs, endGapMs, startAcc: r.startAcc, endAcc: test.targetKmh != null ? accelKmhS(r.prev, s) : null }),
     },
   };
 }
@@ -157,6 +209,12 @@ function finish(test: PerfTest, r: Running, s: Sample, end: number, finishKmh?: 
 const SPEED = pidInfo(0x0d)!;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function rangeLabel(r: CustomRange): string {
+  const f = r.unit === 'mph' ? r.fromKmh / KMH_PER_MPH : r.fromKmh;
+  const to = r.unit === 'mph' ? r.toKmh / KMH_PER_MPH : r.toKmh;
+  return `${Math.round(f)} to ${Math.round(to)} ${r.unit}`;
+}
+
 export default function Performance() {
   const t = useTheme();
   const conn = useConnection();
@@ -167,11 +225,31 @@ export default function Performance() {
   const [rate, setRate] = useState<number | null>(null);
   const [testId, setTestId] = useState(TESTS[0].id);
   const [run, setRun] = useState<Run | null>(null);
-  const [results, setResults] = useState<PerfResult[]>([]);
+  const [history, setHistory] = useState<SavedRun[]>([]);
+  const [ranges, setRanges] = useState<CustomRange[]>([]);
+  const [fromText, setFromText] = useState('');
+  const [toText, setToText] = useState('');
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const runRef = useRef<Run | null>(null);
-  const test = TESTS.find((x) => x.id === testId) ?? TESTS[0];
+  const vin = conn.vehicle?.vin ?? null;
+
+  const custom = ranges.map((r) => customTest(r.fromKmh, r.toKmh, rangeLabel(r))).filter((x): x is PerfTest => !!x);
+  const all = [...TESTS, ...custom];
+  const test = all.find((x) => x.id === testId) ?? TESTS[0];
   const testRef = useRef(test);
   testRef.current = test;
+  const vinRef = useRef(vin);
+  vinRef.current = vin;
+
+  useEffect(() => {
+    loadRanges().then(setRanges, () => undefined);
+  }, []);
+  useEffect(() => {
+    setHistory([]);
+    if (vin) loadRuns(vin).then(setHistory, () => undefined);
+  }, [vin]);
 
   useEffect(() => {
     const client = conn.client;
@@ -213,7 +291,20 @@ export default function Performance() {
           setRun(next);
           if (next.phase === 'running' && r.phase === 'ready') tap();
           if (next.phase === 'done') {
-            setResults((old) => [next.result, ...old]);
+            const res = next.result;
+            const saved: SavedRun = {
+              vin: vinRef.current ?? '',
+              testId: res.testId,
+              label: testRef.current.label,
+              seconds: res.seconds,
+              plusMinus: res.plusMinus,
+              rate: res.rate,
+              samples: res.samples,
+              finishKmh: res.finishKmh,
+              at: Date.now(),
+            };
+            setHistory((old) => [saved, ...old]);
+            if (vinRef.current) void addRun(saved);
             success();
           }
         }
@@ -242,8 +333,47 @@ export default function Performance() {
     runRef.current = null;
     setRun(null);
   };
-  const startWord = test.startKmh > 0 ? `${Math.round(speedIn(test.startKmh, 'mph'))} mph` : '';
+  const pick = (id: string) => {
+    setTestId(id);
+    setRun(null);
+    runRef.current = null;
+  };
+  const addRange = async () => {
+    const unit = settings.speed;
+    const f = Number(fromText.replace(',', '.'));
+    const to = Number(toText.replace(',', '.'));
+    const k = unit === 'mph' ? KMH_PER_MPH : 1;
+    const made = customTest(f * k, to * k, '');
+    if (!fromText.trim() || !toText.trim() || !made) {
+      const max = Math.floor(unit === 'mph' ? MAX_TARGET_KMH / KMH_PER_MPH : MAX_TARGET_KMH);
+      setRangeError(`Enter a start speed and a higher target, up to ${max} ${unit}.`);
+      return;
+    }
+    if (custom.some((c) => c.id === made.id)) {
+      setRangeError('You already have this range.');
+      return;
+    }
+    const r: CustomRange = { id: made.id, fromKmh: f * k, toKmh: to * k, unit };
+    const next = [...ranges, r];
+    setRanges(next);
+    await saveRanges(next);
+    setFromText('');
+    setToText('');
+    setRangeError(null);
+    pick(made.id);
+  };
+  const removeRange = async (id: string) => {
+    const next = ranges.filter((r) => r.id !== id);
+    setRanges(next);
+    await saveRanges(next);
+    if (testId === id) pick(TESTS[0].id);
+  };
+
+  const speedWord = (k: number) => `${Math.round(speedIn(k, settings.speed))} ${settings.speed}`;
+  const startWord = test.startKmh > 0 ? speedWord(test.startKmh) : '';
   const shown = kmh == null ? '–' : Math.round(speedIn(kmh, settings.speed)).toString();
+  // Typical uncertainty at the current reading rate: half a gap at each end.
+  const typical = rate ? 1 / rate : null;
 
   let status = 'Choose a test and tap Get ready.';
   if (run?.phase === 'waiting') status = test.startKmh > 0 ? `Slow down below ${startWord} to begin.` : 'Stop the car to begin.';
@@ -251,8 +381,17 @@ export default function Performance() {
   else if (run?.phase === 'running') {
     const secs = Math.max(0, (run.last.t - run.start) / 1000);
     status = test.targetM ? `Timing: ${secs.toFixed(1)} s, ${Math.round(run.metres)} m` : `Timing: ${secs.toFixed(1)} s`;
-  } else if (run?.phase === 'done') status = `${test.label}: ${run.result.seconds.toFixed(2)} s`;
+  } else if (run?.phase === 'done') status = `${test.label}: ${run.result.seconds.toFixed(2)} s ± ${run.result.plusMinus.toFixed(2)} s`;
   else if (run?.phase === 'aborted') status = run.reason;
+
+  // Best time per test on this car.
+  const best = new Map<string, SavedRun>();
+  for (const h of history) {
+    const b = best.get(h.testId);
+    if (!b || h.seconds < b.seconds) best.set(h.testId, h);
+  }
+  const listed = showAll ? history : history.slice(0, 10);
+  const inputStyle = [type.body, type.number, styles.input, { backgroundColor: t.sunken, color: t.text }];
 
   return (
     <Screen>
@@ -275,27 +414,24 @@ export default function Performance() {
         <Text style={[type.small, type.number, { color: t.muted, marginTop: space.xs }]}>
           {supported === false
             ? 'This car does not report speed over OBD, so the timers cannot run.'
-            : rate
-              ? `${rate.toFixed(1)} speed readings a second`
+            : rate && typical
+              ? `${rate.toFixed(1)} speed readings a second, so about ± ${typical.toFixed(2)} s per run`
               : 'Waiting for speed readings…'}
         </Text>
       </GlowCard>
 
       <Group header="Test" help={SECTIONS.perfTest}>
-        {TESTS.map((x, i) => (
+        {all.map((x, i) => (
           <ListRow
             key={x.id}
             first={i === 0}
             title={x.label}
+            subtitle={best.get(x.id) ? `Best on this car ${best.get(x.id)!.seconds.toFixed(2)} s` : undefined}
             noChevron
             selected={x.id === testId}
             disabled={armed}
             right={<Icon name="check" size={18} color={x.id === testId ? t.accentText : 'transparent'} />}
-            onPress={() => {
-              setTestId(x.id);
-              setRun(null);
-              runRef.current = null;
-            }}
+            onPress={() => pick(x.id)}
           />
         ))}
       </Group>
@@ -308,22 +444,82 @@ export default function Performance() {
         )}
       </View>
 
+      <Group header="Your speed ranges" help={SECTIONS.monPerfRanges} footer={rangeError ?? `Speeds in ${settings.speed}. Change units in Settings.`}>
+        {ranges.map((r, i) => (
+          <ListRow
+            key={r.id}
+            first={i === 0}
+            title={rangeLabel(r)}
+            right={
+              <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${rangeLabel(r)}`} hitSlop={10} disabled={armed} onPress={() => removeRange(r.id)}>
+                <Icon name="trash-can-outline" size={18} color={armed ? t.faint : t.danger} />
+              </Pressable>
+            }
+          />
+        ))}
+        <View style={[styles.addRow, ranges.length ? { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border } : null]}>
+          <TextInput
+            value={fromText}
+            onChangeText={setFromText}
+            placeholder="From"
+            placeholderTextColor={t.muted}
+            keyboardType="decimal-pad"
+            accessibilityLabel={`Start speed in ${settings.speed}`}
+            selectionColor={t.accent}
+            style={inputStyle}
+          />
+          <Text style={[type.body, { color: t.muted }]}>to</Text>
+          <TextInput
+            value={toText}
+            onChangeText={setToText}
+            placeholder="To"
+            placeholderTextColor={t.muted}
+            keyboardType="decimal-pad"
+            accessibilityLabel={`Target speed in ${settings.speed}`}
+            selectionColor={t.accent}
+            style={inputStyle}
+          />
+          <Button label="Add" icon="plus" compact variant="secondary" onPress={addRange} disabled={armed} />
+        </View>
+      </Group>
+
       <Group
-        header="This session"
+        header={vin ? 'Runs on this car' : 'This session'}
         help={SECTIONS.perfSession}
-        footer="Accuracy is limited by how fast the adapter answers, typically 5 to 10 readings a second, and the car reports speed in whole km/h. The start and finish are estimated between the readings either side, so treat results as a guide."
+        footer="Each time shows plus or minus how far it could be off, from the gap between speed readings at the start and finish and the car's whole-km/h speed. A faster adapter gives a smaller figure."
       >
-        {results.length ? (
-          results.map((r, i) => {
-            const x = TESTS.find((y) => y.id === r.testId);
-            const parts = [`${r.rate.toFixed(1)} readings a second`, new Date(r.at).toTimeString().slice(0, 5)];
-            if (r.finishKmh != null) parts.unshift(`${Math.round(speedIn(r.finishKmh, settings.speed))} ${settings.speed} at the line`);
-            return <ListRow key={`${r.at}-${i}`} first={i === 0} title={x?.label ?? r.testId} subtitle={parts.join(', ')} value={`${r.seconds.toFixed(2)} s`} />;
+        {listed.length ? (
+          listed.map((r, i) => {
+            const parts = [`± ${r.plusMinus != null ? r.plusMinus.toFixed(2) : '?'} s`, `${r.rate.toFixed(1)} readings a second`];
+            if (r.finishKmh != null) parts.push(`${speedWord(r.finishKmh)} at the line`);
+            parts.push(new Date(r.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
+            return <ListRow key={`${r.at}-${i}`} first={i === 0} title={r.label} subtitle={parts.join(', ')} value={`${r.seconds.toFixed(2)} s`} />;
           })
         ) : (
           <ListRow first title="No runs yet" />
         )}
+        {history.length > 10 ? <ListRow title={showAll ? 'Show fewer' : `Show all ${history.length}`} onPress={() => setShowAll((v) => !v)} /> : null}
+        {history.length > 0 && vin ?<ListRow title="Clear runs for this car" onPress={() => setConfirmClear(true)} /> : null}
       </Group>
+
+      <ConfirmSheet
+        visible={confirmClear}
+        title="Clear runs?"
+        lines={['Removes every saved run for this car from this phone. Your speed ranges stay.']}
+        confirmLabel="Clear runs"
+        onCancel={() => setConfirmClear(false)}
+        onConfirm={async () => {
+          setConfirmClear(false);
+          if (vin) await clearRuns(vin);
+          setHistory([]);
+        }}
+      />
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  addRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
+  input: { flex: 1, minWidth: 0, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: 8, minHeight: 40 },
+});
+

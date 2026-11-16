@@ -19,7 +19,8 @@ export default function Workshop() {
   const [query, setQuery] = useState('');
   const [showAll, setShowAll] = useState(false);
   // Modules that answered a health check come first, with their fault count.
-  const seen = new Set(conn.vehicle?.modulesSeen ?? []);
+  // Modules found on the older VW protocol are on this car too.
+  const seen = new Set([...(conn.vehicle?.modulesSeen ?? []), ...(conn.vehicle?.deepFound ?? []).map((d) => d.moduleId)]);
   const last = useLastScan(conn.vehicle?.vin);
   const faultsOf = (d: ModuleDef) => (last?.faults ?? []).filter((f) => f.module === d.name).length;
 

@@ -36,6 +36,17 @@ const ICON: Record<GuideId, IconName> = {
   discover: 'telescope' as IconName,
   listen: 'record-circle-outline',
   settings: 'tune-variant',
+  logger: 'chart-line',
+  diagTests: 'clipboard-check-outline',
+  diagChanges: 'timeline-text-outline',
+  mot: 'clipboard-list-outline',
+  monitors: 'steering' as IconName,
+  knock: 'piston' as IconName,
+  dpf: 'filter-outline' as IconName,
+  trip: 'map-marker-distance' as IconName,
+  fuelTrims: 'gas-station' as IconName,
+  boost: 'turbine' as IconName,
+  carReference: 'book-open-page-variant' as IconName,
 };
 
 const firstSentence = (s: string) => {
@@ -55,7 +66,7 @@ export default function Guide() {
       {GUIDE_GROUPS.map((g) => (
         <Group key={g.title} header={g.title}>
           {g.ids.map((id, i) => (
-            <ListRow key={id} first={i === 0} icon={ICON[id]} iconColour="grey" title={GUIDES[id].title} subtitle={firstSentence(GUIDES[id].what)}onPress={() => setOpen(id)} />
+            <ListRow key={id} first={i === 0} icon={ICON[id]} iconColour="grey" title={GUIDES[id].title} subtitle={firstSentence(GUIDES[id].what)} onPress={() => setOpen(id)} />
           ))}
         </Group>
       ))}

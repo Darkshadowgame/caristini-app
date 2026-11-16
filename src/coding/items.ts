@@ -256,3 +256,11 @@ export function bitsLabel(item: CodingItem): string {
   const bits = item.field ? [0, 1, 2, 3, 4, 5, 6, 7].filter((b) => (item.field!.mask >> b) & 1) : item.bits;
   return bits.length === 1 ? `bit ${bits[0]}` : `bits ${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}`;
 }
+
+// The setting's line in Customise, matching what the car has now: "Off on
+// your car. When on, the headlights stay on ..." The summary says what the
+// setting does when on; source notes stay behind Technical.
+export function stateText(item: Pick<CodingItem, 'summary'>, on: boolean): string {
+  const what = item.summary.charAt(0).toLowerCase() + item.summary.slice(1);
+  return on ? `On on your car: ${what}` : `Off on your car. When on, ${what}`;
+}

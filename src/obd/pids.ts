@@ -58,6 +58,11 @@ export const LIVE_PIDS: LivePid[] = [
   { pid: 0x15, label: 'O2 sensor B1S2', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => o2Volts(a) },
   { pid: 0x18, label: 'O2 sensor B2S1', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => o2Volts(a) },
   { pid: 0x19, label: 'O2 sensor B2S2', unit: 'V', group: 'Air and exhaust', bytes: 2, decimals: 2, decode: ([a]) => o2Volts(a) },
+  // Wide-band front sensors: lambda from bytes A and B (2/65536 per bit).
+  { pid: 0x24, label: 'Lambda B1S1', unit: 'λ', group: 'Air and exhaust', bytes: 4, decimals: 3, decode: ([a, b]) => (2 / 65536) * word(a, b) },
+  { pid: 0x28, label: 'Lambda B2S1', unit: 'λ', group: 'Air and exhaust', bytes: 4, decimals: 3, decode: ([a, b]) => (2 / 65536) * word(a, b) },
+  { pid: 0x34, label: 'Lambda B1S1 (wide-band)', unit: 'λ', group: 'Air and exhaust', bytes: 4, decimals: 3, decode: ([a, b]) => (2 / 65536) * word(a, b) },
+  { pid: 0x38, label: 'Lambda B2S1 (wide-band)', unit: 'λ', group: 'Air and exhaust', bytes: 4, decimals: 3, decode: ([a, b]) => (2 / 65536) * word(a, b) },
   { pid: 0x2c, label: 'EGR commanded', unit: '%', group: 'Air and exhaust', bytes: 1, decimals: 0, decode: ([a]) => pct(a) },
   { pid: 0x2d, label: 'EGR error', unit: '%', group: 'Air and exhaust', bytes: 1, decimals: 1, decode: ([a]) => trim(a) },
 

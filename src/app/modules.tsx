@@ -3,12 +3,13 @@ import React, { useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import { ModuleDetails } from '../obd/elm';
 import { modulesFor, ROUTE_LABEL } from '../obd/modules';
+import { SECOND_BUS_NOTICE } from '../obd/msCan';
 import { useConnection } from '../state';
 import { MONO, space, type, useTheme } from '../theme';
 import { Arrive, Button, Card, Group, Icon, ListRow, NeedsConnection, Notice, ScanPulse, Screen } from '../ui';
 import { useGarage } from '../vehicle/garage';
 import { SECTIONS } from '../help';
-import { mergeModuleIds } from '../vehicle/ids';
+import { mergeCodingBackup, mergeModuleIds } from '../vehicle/ids';
 
 export default function Modules() {
   const t = useTheme();
@@ -21,6 +22,7 @@ export default function Modules() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
+  const [everyAddress, setEveryAddress] = useState(false);
 
   if (!conn.client || !conn.vehicle) {
     return (
@@ -30,7 +32,13 @@ export default function Modules() {
     );
   }
   const vehicle = conn.vehicle;
-  const defs = modulesFor(vehicle.group);
+  const all = modulesFor(vehicle.group);
+  // Once a health check has found the car's modules (older VW ones too), read
+  // only those; every address on request.
+  const known = [...new Set([...(vehicle.modulesSeen ?? []), ...(vehicle.deepFound ?? []).map((d) => d.moduleId)])];
+  const onlyKnown = known.length >= 3 && !everyAddress;
+  const defs = onlyKnown ? all.filter((d) => known.includes(d.id)) : all;
+  const toRead = onlyKnown ? known.length : all.length;
 
   const scan = async () => {
     setBusy(true);
@@ -45,11 +53,13 @@ export default function Modules() {
           setCurrent(defs[d]?.name ?? null);
         },
         (m) => setResult((old) => [...(old ?? []), m]),
+        onlyKnown ? known : undefined,
       );
       setResult(list);
-      const backup = list.filter((m) => m.coding).map((m) => ({ module: m.def.name, part: m.partNumber, coding: m.coding }));
-      const ids = { ...(garage.latest(vehicle.vin)?.ids ?? {}), modules: mergeModuleIds(garage.latest(vehicle.vin)?.ids?.modules, list) };
-      await garage.update(vehicle.vin, { ids, ...(backup.length ? { codingBackup: { date: new Date().toISOString(), modules: backup } } : {}) });
+      const now = garage.latest(vehicle.vin);
+      const ids = { ...(now?.ids ?? {}), modules: mergeModuleIds(now?.ids?.modules, list) };
+      const codingBackup = mergeCodingBackup(now?.codingBackup, list.map((m) => ({ module: m.def.name, part: m.partNumber, coding: m.coding })));
+      await garage.update(vehicle.vin, { ids, ...(codingBackup ? { codingBackup } : {}) });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -101,13 +111,16 @@ export default function Modules() {
               <Icon name="chip" size={30} color="#FFFFFF" />
             </View>
             <Text style={[type.title3, { color: t.text, marginTop: space.md, textAlign: 'center' }]}>
-              {result ? `${found.length} of ${result.length} module${result.length === 1 ? '' : 's'} answered` : `${defs.length} module${defs.length === 1 ? '' : 's'} to read`}
+              {result ? `${found.length} of ${result.length} module${result.length === 1 ? '' : 's'} answered` : `${toRead} module${toRead === 1 ? '' : 's'} to read`}
             </Text>
             <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: space.xs }]}>
               Part number, software, hardware and coding. Read-only, and the coding is kept on this phone as a backup.
             </Text>
             <View style={{ alignSelf: 'stretch', marginTop: space.lg }}>
               <Button label={result ? 'Read again' : 'Read part numbers'} icon="chip" variant={result ? 'secondary' : 'primary'} onPress={scan} />
+              {onlyKnown && !result ? (
+                <Button label={`Read all ${all.length} addresses`} variant="ghost" onPress={() => setEveryAddress(true)} style={{ marginTop: space.sm }} />
+              ) : null}
             </View>
           </View>
         )}
@@ -126,9 +139,10 @@ export default function Modules() {
               <ModuleGroup m={m} first={i === 0} />
             </Arrive>
           ))}
+          {missing.some((m) => m.note) ? <Notice icon="information-outline" text={SECOND_BUS_NOTICE} /> : null}
           {missing.length ? (
             <Group help={SECTIONS.diagNotFound} footer={showMissing ? 'Not fitted, or not reachable from this port.' : undefined}>
-              {showMissing ? missing.map((m, i) => <ListRow key={m.def.id} first={i === 0} title={m.def.name} value="No answer" />) : null}
+              {showMissing ? missing.map((m, i) => <ListRow key={m.def.id} first={i === 0} title={m.def.name} subtitle={m.note} value="No answer" />) : null}
               <ListRow
                 first={!showMissing}
                 title={showMissing ? 'Hide' : `${missing.length} module${missing.length === 1 ? '' : 's'} not found`}

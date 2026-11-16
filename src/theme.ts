@@ -2,6 +2,9 @@ import { Platform, useColorScheme } from 'react-native';
 
 // Monospace for codes and VINs: SF Mono's sibling Menlo on iPhone.
 export const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'ui-monospace, Menlo, Consolas, monospace' });
+// For SVG text (chart labels), which does not inherit the app font: without
+// it a browser draws Times.
+export const SANS = Platform.select({ ios: 'Helvetica Neue', android: 'sans-serif', default: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" });
 
 // Caristini on iOS conventions: system grounds and grouped lists, one amber
 // tint for everything you can tap, and system colours for state and for each

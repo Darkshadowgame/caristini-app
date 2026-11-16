@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { codeAnatomy, DTC_LIBRARY, searchDtc } from '../../../data/dtcLibrary';
+import { vagFaultText } from '../../../data/vagFaults';
 import { useConnection } from '../../../state';
 import { MONO, radius, space, type, useTheme } from '../../../theme';
 import { GUIDES } from '../../../help';
@@ -17,6 +18,8 @@ export default function Lookup() {
   const results = useMemo(() => (query ? searchDtc(query, 40) : []), [query]);
   const looksLikeCode = /^[PCBU][0-9A-F]{4}$/i.test(query);
   const exactMissing = looksLikeCode && !results.some((r) => r.code === query.toUpperCase());
+  // VW group 5-digit fault numbers (16684, 00532), as older modules report them.
+  const vwNumber = /^\d{3,5}$/.test(query) && vagFaultText(query) ? query.padStart(5, '0') : null;
   // The same code can sit in several modules; list it once.
   const recent = [...new Set(conn.vehicle?.lastCodes ?? [])];
 
@@ -72,9 +75,19 @@ export default function Lookup() {
         </View>
       ) : (
         <Group style={{ marginTop: space.lg }}>
-          {exactMissing ? (
+          {vwNumber ? (
             <ListRow
               first
+              icon="alert-circle-outline"
+              iconColour="grey"
+              title={vwNumber}
+              subtitle={`VW fault number · ${vagFaultText(vwNumber)}`}
+              onPress={() => open(vwNumber)}
+            />
+          ) : null}
+          {exactMissing ? (
+            <ListRow
+              first={!vwNumber}
               icon="code-tags"
               iconColour="blue"
               title={query.toUpperCase()}
@@ -85,7 +98,7 @@ export default function Lookup() {
           {results.map((r, i) => (
             <ListRow
               key={r.code}
-              first={i === 0 && !exactMissing}
+              first={i === 0 && !exactMissing && !vwNumber}
               icon={r.severity === 'high' ? 'alert-octagon-outline' : 'alert-circle-outline'}
               iconColour={r.severity === 'high' ? 'red' : r.severity === 'medium' ? 'orange' : 'grey'}
               title={r.code}
@@ -93,7 +106,7 @@ export default function Lookup() {
               onPress={() => open(r.code)}
             />
           ))}
-          {!results.length && !exactMissing ? (
+          {!results.length && !exactMissing && !vwNumber ? (
             <View style={{ alignItems: 'center', paddingVertical: space.xl }}>
               <Icon name="magnify-close" size={28} color={t.faint} />
               <Body muted style={{ marginTop: space.sm }}>

@@ -45,7 +45,7 @@ export default function RootLayout() {
             <Stack.Screen name="live" options={{ title: 'Live data', headerRight: () => <GuideButton id="live" /> }} />
             <Stack.Screen name="service" options={{ title: 'Service', headerRight: () => <GuideButton id="service" /> }} />
             <Stack.Screen name="car-ids" options={{ title: 'Parts and IDs', headerRight: () => <GuideButton id="carIds" /> }} />
-            <Stack.Screen name="car-reference" options={{ title: 'Car reference', headerRight: () => <GuideButton id="carIds" /> }} />
+            <Stack.Screen name="car-reference" options={{ title: 'Car reference', headerRight: () => <GuideButton id="carReference" /> }} />
             <Stack.Screen name="service-reset" options={{ title: 'Reset with the adapter', headerRight: () => <GuideButton id="serviceReset" /> }} />
             <Stack.Screen name="modules" options={{ title: 'Read part numbers', headerRight: () => <GuideButton id="partNumbers" /> }} />
             <Stack.Screen name="workshop/index" options={{ title: 'Workshop', headerRight: () => <GuideButton id="workshop" /> }} />
@@ -56,7 +56,7 @@ export default function RootLayout() {
             <Stack.Screen name="performance" options={{ title: 'Performance', headerRight: () => <GuideButton id="performance" /> }} />
             <Stack.Screen name="battery" options={{ title: 'Battery test', headerRight: () => <GuideButton id="battery" /> }} />
             <Stack.Screen name="report" options={{ title: 'Health report', headerRight: () => <GuideButton id="report" /> }} />
-            <Stack.Screen name="sensors" options={{ title: 'Sensors', headerRight: () => <GuideButton id="sensors" /> }} />
+            <Stack.Screen name="sensors" options={{ title: 'Find my car’s sensors', headerRight: () => <GuideButton id="sensors" /> }} />
             <Stack.Screen name="discover" options={{ title: 'Unknown values', headerRight: () => <GuideButton id="discover" /> }} />
             <Stack.Screen name="history" options={{ title: 'History', headerRight: () => <GuideButton id="history" /> }} />
             <Stack.Screen name="learn-car" options={{ title: 'Learn my car', headerRight: () => <GuideButton id="learnCar" /> }} />
@@ -68,7 +68,13 @@ export default function RootLayout() {
             <Stack.Screen name="code/[code]" options={{ title: 'Fault code', headerRight: () => <GuideButton id="code" /> }} />
             <Stack.Screen name="vehicle" options={{ title: 'Vehicle details', headerRight: () => <GuideButton id="vehicle" /> }} />
             <Stack.Screen name="guide" options={{ title: 'User guide' }} />
-            <Stack.Screen name="diary-add" options={{ title: 'Add to diary', presentation: 'modal', headerLeft: () => <Cancel colour={t.accentText} />, headerRight: () => <GuideButton id="diaryAdd" /> }} />
+            <Stack.Screen name="monitors" options={{ title: 'Drive monitors', headerRight: () => <GuideButton id="monitors" /> }} />
+            <Stack.Screen name="knock" options={{ title: 'Knock and timing', headerRight: () => <GuideButton id="knock" /> }} />
+            <Stack.Screen name="dpf" options={{ title: 'DPF monitor', headerRight: () => <GuideButton id="dpf" /> }} />
+            <Stack.Screen name="trip" options={{ title: 'Trip computer', headerRight: () => <GuideButton id="trip" /> }} />
+            <Stack.Screen name="fuel-trims" options={{ title: 'Fuel trims', headerRight: () => <GuideButton id="fuelTrims" /> }} />
+            <Stack.Screen name="boost" options={{ title: 'Turbo boost', headerRight: () => <GuideButton id="boost" /> }} />
+            <Stack.Screen name="diary-add"options={{ title: 'Add to diary', presentation: 'modal', headerLeft: () => <Cancel colour={t.accentText} />, headerRight: () => <GuideButton id="diaryAdd" /> }} />
           </Stack>
         </ConnectionProvider>
       </GarageProvider>
@@ -80,7 +86,8 @@ export default function RootLayout() {
 // Cancel for modal sheets, in the tint, as iOS places it.
 function Cancel({ colour }: { colour: string }) {
   return (
-    <Pressable accessibilityRole="button" hitSlop={10} onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center' }}>
+    // On the web the header gives no side margin, so Cancel gets its own.
+    <Pressable accessibilityRole="button" hitSlop={10} onPress={() => router.back()} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: Platform.OS === 'web' ? 16 : 0 }}>
       <Text style={{ color: colour, fontSize: 17, letterSpacing: -0.41 }}>Cancel</Text>
     </Pressable>
   );

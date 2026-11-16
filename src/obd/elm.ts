@@ -12,10 +12,13 @@ import { vinInBytes } from '../vehicle/vin';
 import { idsForNode, nodesFromBitmap, parseC6List, slotsFromTables } from './vagGateway';
 import type { ServiceReset } from '../service/obdReset';
 import { MAX_DIDS, soleAnswer, splitKnown } from './multiDid';
+import { batchCommand, batchVerdict, chunkPids, parseBatch } from './livePidBatch';
 import { MeasuringCell, parseMeasuringBlock } from './tp20';
+import { secondBusNote } from './msCan';
 import { GROUP_LABELS } from '../data/groupLabels';
 import { kwpFaults, kwpReadFaults, VAG_ADDRESS_NAMES, parseGatewayList, parseKwpIdent, Tp20Coding, tp20Identity, tp20Name, tp20LeaveCommands, tp20ReadCoding, tp20WriteCoding, Tp20Module, Tp20Session, TP20_CANDIDATES } from './tp20';
 import { cleanText, describeNrc, negativeCode, parseDtcReport, toHex, UdsFault } from './uds';
+import { atstFor, PaceMeter } from './pace';
 
 const ERRORS = ['NO DATA', 'UNABLE TO CONNECT', 'CAN ERROR', 'BUS ERROR', 'BUS INIT', 'STOPPED', 'BUFFER FULL', 'DATA ERROR', 'LV RESET', 'ACT ALERT', 'FB ERROR', 'LP ALERT', 'BUS BUSY'];
 // Adapter faults that are not data: "ERR94", or a frame marked "<RX ERROR".
@@ -158,6 +161,8 @@ export interface ModuleDetails extends ModuleInfo {
   serial: string | null;
   // VW long coding (DID 0600) as hex, read-only.
   coding: string | null;
+  // Why a module did not answer, when known (second CAN bus, see msCan.ts).
+  note?: string;
 }
 
 export interface AdapterReport {
@@ -191,6 +196,9 @@ export interface ModuleFaults {
   state: 'ok' | 'faults' | 'no-answer' | 'error';
   faults: UdsFault[];
   error?: string;
+  // No answer because the adapter's own wait ran out (a Bluetooth stall), not a
+  // clean NO DATA from the car: never a reason to stop asking this module.
+  timedOut?: boolean;
 }
 
 const ID_DIDS: { key: 'partNumber' | 'software' | 'vin'; did: string }[] = [
@@ -233,8 +241,11 @@ export class ElmClient {
   private installed: Set<string> | null = null;
 
   private skipped(def: ModuleDef): boolean {
-    return !!this.installed && this.make === 'vag' && !this.installed.has(def.id);
+    return !!this.installed && this.make === 'vag' && !this.installed.has(def.id) && !this.deepIds.has(def.id);
   }
+  // Modules the older-module search reached: fitted, even when the gateway's
+  // list leaves them out (the 2007 Leon's own gateway and comfort module).
+  private deepIds = new Set<string>();
   // Route that answered, per module id, for this connection.
   private winner = new Map<string, Route>();
   // Modules that answered on an earlier visit (saved per car). During a full
@@ -243,6 +254,13 @@ export class ElmClient {
   // before keeps the long wait, so a slow or busy module is never missed.
   private seenBefore = new Set<string>();
   private sweeping = false;
+  // The fault sweep's fixed wait: AT ST 4B (300 ms) until this connection has
+  // timed enough answers, then the measured wait (see pace.ts).
+  private sweepSt = 'ATST4B';
+  // Reply times on this connection, for the adaptive waits (pace.ts).
+  readonly pace = new PaceMeter();
+  // Adapter adaptive timing (AT AT1): an answered request returns at the answer.
+  private adaptiveOn = true;
   // Raw CAN mode for the older VW protocol stays on between modules while a
   // sweep holds it (holdRaw), saving about 13 adapter commands per module.
   // Any other command takes the adapter out of it first (see command()).
@@ -273,6 +291,17 @@ export class ElmClient {
       this.stn = /STN/i.test(r);
     }
     return this.stn;
+  }
+
+  // True when the adapter can switch to the Ford / Mazda second CAN bus.
+  canReachSecondBus(): Promise<boolean> {
+    return this.hasStn();
+  }
+
+  // Note for a module that gave no answer because the adapter cannot reach its bus.
+  private async secondBusMissing(def: ModuleDef): Promise<string | null> {
+    if (this.make !== 'ford' && this.make !== 'mazda') return null;
+    return secondBusNote(def, this.make, await this.hasStn());
   }
 
   private async routesFor(def: ModuleDef): Promise<Route[]> {
@@ -438,14 +467,27 @@ export class ElmClient {
     this.rawCan = false;
     return this.chain(async () => {
       for (const c of tp20LeaveCommands(this.dp)) await this.sendNow(c, 1500).catch(() => undefined);
-      if (this.sweeping) for (const c of ['ATAT0', 'ATST4B']) await this.sendNow(c, 1500).catch(() => undefined);
+      if (this.sweeping) for (const c of ['ATAT0', this.sweepSt]) await this.sendNow(c, 1500).catch(() => undefined);
     });
   }
 
   // The sweep's fixed short wait (adaptive timing off).
   private async sweepTiming(): Promise<void> {
     await this.send('ATAT0').catch(() => undefined);
-    await this.send('ATST4B').catch(() => undefined);
+    await this.send(this.sweepSt).catch(() => undefined);
+  }
+
+  // Runs fn with raw CAN kept on between older VW modules (TP2.0), as the
+  // fault sweep does: about 13 adapter commands saved per module. Any other
+  // request inside fn leaves raw CAN first, so mixed module lists still work.
+  async holdOlder<T>(fn: () => Promise<T>): Promise<T> {
+    this.holdRaw++;
+    try {
+      return await fn();
+    } finally {
+      this.holdRaw--;
+      if (!this.holdRaw) await this.exclusive(() => this.releaseRaw());
+    }
   }
 
   // Extra detail the module keeps for one fault (UDS 19 06 extended data and
@@ -547,16 +589,50 @@ export class ElmClient {
     await this.tp20(a, async (s) => {
       // A closed channel (A8) fails at once, so the loop ends there; spinning
       // on it would freeze the app.
+      // Ends on a closed channel (A8), a lost adapter, or 4 failed reads in a
+      // row, so a dead link can never keep the loop spinning.
+      let failed = 0;
       while (keepGoing() && !s.closed) {
         let answer: number[] = [];
         try {
           answer = await s.request([0x21, group]);
-        } catch {
-          if (s.closed) break;
+          failed = 0;
+        } catch (e) {
+          if (s.closed || e instanceof LinkLost || ++failed >= 4) break;
         }
         onCells(parseMeasuringBlock(answer, group));
       }
     });
+  }
+
+  // Reads several groups in turn, over and over, on one open channel until
+  // keepGoing() is false (knock monitor: group 020 with its related groups).
+  async watchMeasuringGroups(def: ModuleDef, groups: number[], onCells: (group: number, c: MeasuringCell[] | null) => void, keepGoing: () => boolean): Promise<boolean> {
+    const a = this.tp20Address(def);
+    if (a == null || !groups.length) return false;
+    const opened = await this.tp20(a, async (s) => {
+      // Ends on a closed channel, a lost adapter, or 4 failed reads in a row.
+      let failed = 0;
+      while (keepGoing()) {
+        for (const g of groups) {
+          if (!keepGoing()) break;
+          let answer: number[] = [];
+          try {
+            answer = await s.request([0x21, g]);
+            failed = 0;
+          } catch (e) {
+            if (e instanceof LinkLost || ++failed >= 4) return true;
+            // One failed read keeps the last good values on screen; only an
+            // answer (even a refusal) updates the group.
+            continue;
+          }
+          onCells(g, parseMeasuringBlock(answer, g));
+          if (s.closed) return true;
+        }
+      }
+      return true;
+    });
+    return opened === true;
   }
 
   // Reads every group from 1 to 255 once (or 1 to `to`), to find values by
@@ -662,9 +738,16 @@ export class ElmClient {
 
   private async sendNow(cmd: string, timeoutMs: number): Promise<string> {
     trafficLog.add('>', cmd);
+    const t0 = Date.now();
     try {
       const reply = await this.transport.send(cmd, timeoutMs);
       trafficLog.add('<', reply);
+      if (cmd.startsWith('AT')) {
+        if (cmd === 'ATAT0') this.adaptiveOn = false;
+        else if (/^ATAT[12]$|^ATZ$|^ATD$/.test(cmd)) this.adaptiveOn = true;
+        // The link's own round trip: plain settings, not resets or protocol changes.
+        if (!/^AT(Z|D|SP|DP|RV|MA)/.test(cmd) && /OK/.test(reply)) this.pace.noteLink(Date.now() - t0);
+      }
       return reply;
     } catch (e) {
       trafficLog.add('!', e instanceof Error ? e.message : String(e));
@@ -674,7 +757,14 @@ export class ElmClient {
 
   async request(cmd: string, timeoutMs = 4000): Promise<number[][]> {
     if (!this.addressed && /^0[1-9A]/.test(cmd)) this.lastObdAt = Date.now();
-    return parseMessages(await this.command(cmd, timeoutMs), cmd);
+    const t0 = Date.now();
+    const msgs = parseMessages(await this.command(cmd, timeoutMs), cmd);
+    // One module asked, one single-frame answer, and the adapter returning at
+    // it: how soon a module starts answering, for the adaptive waits. Longer
+    // answers time the Bluetooth transfer too; broadcast requests wait for
+    // every unit. Neither is timed.
+    if (msgs.length === 1 && msgs[0].length <= 7 && this.addressed && this.adaptiveOn && !this.rawCan) this.pace.noteAnswer(Date.now() - t0);
+    return msgs;
   }
 
   // When a standard OBD request last went to the car. A 2007 Leon's engine
@@ -903,55 +993,26 @@ export class ElmClient {
   // asked on its own; a car that answers combined requests with only one
   // value falls back to one value per request for the rest of the session.
   private multiPid: boolean | null = null;
-  private static chunks(list: LivePid[]): LivePid[][] {
-    const out: LivePid[][] = [];
-    let cur: LivePid[] = [];
-    let size = 0;
-    for (const p of list) {
-      if (cur.length && (size + 1 + p.bytes > 6 || cur.length === 6)) {
-        out.push(cur);
-        cur = [];
-        size = 0;
-      }
-      cur.push(p);
-      size += 1 + p.bytes;
-    }
-    if (cur.length) out.push(cur);
-    return out;
+  // True once the car has answered a combined request with several values.
+  get batching(): boolean {
+    return this.isCan && this.multiPid === true;
   }
   async readLiveMany(list: LivePid[]): Promise<Map<number, number | null>> {
     const out = new Map<number, number | null>();
     if (this.addressed) return out;
     if (this.isCan && this.multiPid !== false && list.length > 1) {
-      for (const chunk of ElmClient.chunks(list)) {
+      for (const chunk of chunkPids(list)) {
         if (chunk.length < 2) continue;
-        const cmd = `01${chunk.map((p) => p.pid.toString(16).padStart(2, '0').toUpperCase()).join('')}`;
         let msgs: number[][] = [];
         try {
-          msgs = await this.request(cmd);
+          msgs = await this.request(batchCommand(chunk));
         } catch (e) {
           if (e instanceof LinkLost) throw e;
         }
-        let got = 0;
-        for (const m of msgs) {
-          if (m[0] !== 0x41) continue;
-          let j = 1;
-          while (j < m.length) {
-            const p = chunk.find((x) => x.pid === m[j]);
-            if (!p || j + 1 + p.bytes > m.length) break;
-            if (!out.has(p.pid) || out.get(p.pid) == null) {
-              out.set(p.pid, p.decode(m.slice(j + 1, j + 1 + p.bytes)));
-              got++;
-            }
-            j += 1 + p.bytes;
-          }
-        }
+        const { values, got } = parseBatch(msgs, chunk);
+        for (const [pid, v] of values) if (!out.has(pid) || out.get(pid) == null) out.set(pid, v);
         // Decide only from a real answer: an error or no answer decides nothing.
-        if (this.multiPid == null && msgs.some((m) => m[0] === 0x41)) {
-          const most = Math.max(...msgs.filter((m) => m[0] === 0x41).map((m) => m.length));
-          if (got > 1) this.multiPid = true;
-          else if (most <= 2 + Math.max(...chunk.map((p) => p.bytes))) this.multiPid = false;
-        }
+        if (this.multiPid == null) this.multiPid = batchVerdict(msgs, chunk, got);
         if (this.addressed) return out;
       }
     }
@@ -1091,7 +1152,7 @@ export class ElmClient {
         await this.command('ATAT0');
         await this.command('ATSTFF');
       } else if (this.sweeping) {
-        await this.command('ATST4B');
+        await this.command(this.sweepSt);
       } else {
         await this.command('ATST32');
         await this.command('ATAT1');
@@ -1157,7 +1218,8 @@ export class ElmClient {
     if (!first && this.olderProtocol.has(def.id)) {
       return { def, state: 'no-answer', faults: [], error: 'Uses the older VW protocol: see Older modules' };
     }
-    return first ?? { def, state: 'no-answer', faults: [] };
+    const bus = first ? null : await this.secondBusMissing(def);
+    return first ?? { def, state: 'no-answer', faults: [], ...(bus ? { error: bus } : {}) };
   }
 
   private async udsFaults(def: ModuleDef, restore = true): Promise<ModuleFaults> {
@@ -1170,13 +1232,20 @@ export class ElmClient {
           const m = await this.uds('19022D', 2500, quick);
           return { def, ...withFaults(parseDtcReport(m) ?? []) };
         } catch (e) {
-          if ((e instanceof ObdError && e.message === 'NO DATA') || e instanceof AdapterTimeout) return { def, state: 'no-answer', faults: [] };
+          if (e instanceof AdapterTimeout) return { def, state: 'no-answer', faults: [], timedOut: true };
+          if (e instanceof ObdError && e.message === 'NO DATA') return { def, state: 'no-answer', faults: [] };
           return { def, state: 'error', faults: [], error: e instanceof Error ? e.message : String(e) };
         }
       }, restore);
     } catch (e) {
       return { def, state: 'error', faults: [], error: e instanceof Error ? e.message : String(e) };
     }
+  }
+
+  // The module is known to be on this car from this connection: the gateway
+  // lists it, the older-module search found it, or it answered (route known).
+  knowsModule(id: string): boolean {
+    return !!this.installed?.has(id) || this.found.has(id) || this.winner.has(id);
   }
 
   // Scans every known module for the maker in turn and reports each as it finishes.
@@ -1186,7 +1255,9 @@ export class ElmClient {
     cancelled?: () => boolean,
     // knownOnly: ask only modules that have answered on this car before (a
     // quick check); addresses that never answered are left for a full check.
-    opts: { knownOnly?: boolean } = {},
+    // skip: module ids that never answered here and are not asked again until
+    // the next full read (Learn my car); a module seen before is always asked.
+    opts: { knownOnly?: boolean; skip?: Set<string> } = {},
   ): Promise<ModuleFaults[]> {
     // Modules that answered before go first, so real results show at once.
     // Among those, the newer-protocol ones first and the older-protocol ones
@@ -1194,13 +1265,18 @@ export class ElmClient {
     const all = await this.modulesForCar(group);
     const older = (d: ModuleDef) => this.winner.get(d.id)?.via === 'tp20';
     const seen = all.filter((d) => this.seenBefore.has(d.id));
-    const unseen = opts.knownOnly && seen.length >= 3 ? [] : all.filter((d) => !this.seenBefore.has(d.id));
-    const defs = [...seen.filter((d) => !older(d)), ...seen.filter(older), ...unseen];
+    // A module the car's gateway lists as fitted is asked even when it was
+    // silent before: it may have been fitted since.
+    const listedHere = (d: ModuleDef) => this.knowsModule(d.id);
+    const unseen = opts.knownOnly && seen.length >= 3 ? [] : all.filter((d) => !this.seenBefore.has(d.id) && (!opts.skip?.has(d.id) || listedHere(d)));
+    const defs = [...seen.filter((d) => !older(d)), ...engineLast(seen.filter(older)), ...unseen];
     const out: ModuleFaults[] = [];
     let failedInRow = 0;
-    // Fixed short wait for the sweep (adaptive timing off), restored after.
+    // Fixed short wait for the sweep (adaptive timing off), restored after:
+    // 300 ms, or the wait measured on this connection (pace.ts).
+    this.sweepSt = atstFor(this.pace.silentWaitMs(300));
     this.sweeping = await this.command('ATAT0')
-      .then(() => this.command('ATST4B'))
+      .then(() => this.command(this.sweepSt))
       .then(() => true)
       .catch(() => false);
     // Older VW modules one after another share one raw CAN set-up.
@@ -1288,9 +1364,11 @@ export class ElmClient {
     group: 'vag' | 'ford' | 'mazda' | 'other',
     onProgress?: (done: number, total: number) => void,
     onModule?: (m: ModuleDetails) => void,
+    // Module ids to read; all the car's addresses when not given.
+    only?: string[],
   ): Promise<ModuleDetails[]> {
     if (!this.isCan || !this.canElevenBit) return [];
-    const defs = await this.modulesForCar(group);
+    const defs = (await this.modulesForCar(group)).filter((d) => !only || only.includes(d.id));
     const out: ModuleDetails[] = [];
     try {
       for (let i = 0; i < defs.length; i++) {
@@ -1368,7 +1446,8 @@ export class ElmClient {
         return { ...info, def, route: r.via };
       }
     }
-    return empty;
+    const bus = await this.secondBusMissing(def);
+    return bus ? { ...empty, note: bus } : empty;
   }
 
   private async udsDetails(def: ModuleDef, restore = true): Promise<ModuleDetails> {
@@ -1434,7 +1513,10 @@ export class ElmClient {
     try {
       for (const [id, values] of byModule) {
         const def = MODULES_BY_ID.get(id);
-        if (!def) continue;
+        // Maker values are newer-protocol reads: a module that answers only the
+        // older VW protocol, or is not fitted, would only wait out timeouts
+        // (about 5 s for the 2007 Leon's odometer).
+        if (!def || this.winner.get(id)?.via === 'tp20' || this.skipped(def)) continue;
         await this.withModule(
           def,
           async () => {
@@ -1630,6 +1712,8 @@ export class ElmClient {
         const def = this.sensorDef(h, rx);
         await this.withModule(
           def,
+          // The normal wait (AT ST 32): a value the search marks as asked is not
+          // asked again until a full read, so a slow one must not be missed.
           async () => {
             let silent = 0;
             let answered = false;
@@ -1756,21 +1840,34 @@ export class ElmClient {
   // the usual layout (reply = request + 8) and the VW one (request + 6A) are
   // heard. Read-only: tester present only; those that answer are then asked
   // their name. About 0.3 s per address.
-  async findAnyModules(opts: { onProgress?: (done: number, total: number) => void; onFound?: (def: ModuleDef) => void; cancelled?: () => boolean } = {}): Promise<ModuleDef[]> {
+  async findAnyModules(
+    opts: {
+      onProgress?: (done: number, total: number) => void;
+      onFound?: (def: ModuleDef) => void;
+      cancelled?: () => boolean;
+      // Request IDs (hex) that did not answer an earlier search: not asked.
+      skip?: Set<string>;
+      // Each request ID asked that nothing answered.
+      onSilent?: (tx: string) => void;
+    } = {},
+  ): Promise<ModuleDef[]> {
     const out: ModuleDef[] = [];
     if (!this.supportsModules) return out;
     const ids: number[] = [];
     // 700 is left out on VW group cars: a public source describes it as a
     // broadcast address there (replica/vag-sources.md), so every module would
     // answer it and it is not a module of its own.
-    for (let tx = this.make === 'vag' ? 0x701 : 0x700; tx <= 0x7f7; tx++) if (tx !== 0x7df && !(tx >= 0x7e8 && tx <= 0x7ef)) ids.push(tx);
+    for (let tx = this.make === 'vag' ? 0x701 : 0x700; tx <= 0x7f7; tx++) {
+      if (tx !== 0x7df && !(tx >= 0x7e8 && tx <= 0x7ef) && !opts.skip?.has(tx.toString(16).toUpperCase())) ids.push(tx);
+    }
     const hits: { tx: string; rx: string }[] = [];
     await this.exclusive(async () => {
       this.addressed = true;
       try {
         // Fixed wait (adaptive timing off), so a slow reply cannot land in the
-        // next address's window and be credited to the wrong request ID.
-        for (const c of ['ATH1', 'ATCF700', 'ATCM700', 'ATAT0', 'ATST32']) await this.command(c).catch(() => undefined);
+        // next address's window and be credited to the wrong request ID: 200
+        // ms, or the wait measured on this connection (pace.ts).
+        for (const c of ['ATH1', 'ATCF700', 'ATCM700', 'ATAT0', atstFor(this.pace.silentWaitMs(200))]) await this.command(c).catch(() => undefined);
         for (const [i, tx] of ids.entries()) {
           if (opts.cancelled?.()) break;
           opts.onProgress?.(i, ids.length);
@@ -1801,6 +1898,7 @@ export class ElmClient {
           // Several modules answering one address means a broadcast, not a module.
           const [rx] = [...heard];
           if (heard.size === 1 && !hits.some((x) => x.tx === h || x.rx === rx)) hits.push({ tx: h, rx });
+          if (!heard.size) opts.onSilent?.(h);
         }
       } finally {
         // ATD resets filters and formatting on every ELM327 version (bare ATCRA
@@ -1865,7 +1963,7 @@ export class ElmClient {
     let last: number | null = null;
     let quiet = 0;
     let finished = true;
-    await this.withModule(def, async () => {
+    await this.withModule(def, () => this.shortWait(async () => {
       // Tester present first: a module that does not answer is skipped.
       const hello = await this.fastDid('F190', 1000).catch(() => 'silent' as const);
       if (hello === 'silent') {
@@ -1906,9 +2004,23 @@ export class ElmClient {
           if (got !== 'refused') opts.onFound?.(did, got);
         }
       }
-    });
+    }));
     opts.onProgress?.(last ?? 0, total, total);
     return { finished, lastDid: last };
+  }
+
+  // Inside a module conversation: the adapter's wait for a value the module
+  // does not answer is the one measured on this connection (pace.ts), then
+  // back to AT ST 32. A "busy, wait" answer still gets the long wait (uds()).
+  private async shortWait<T>(fn: () => Promise<T>): Promise<T> {
+    const st = atstFor(this.pace.silentWaitMs(200));
+    if (st === 'ATST32') return fn();
+    await this.command(st).catch(() => undefined);
+    try {
+      return await fn();
+    } finally {
+      await this.command('ATST32').catch(() => undefined);
+    }
   }
 
   // A few quick reads of identifiers already found, to see which ones move.
@@ -2356,6 +2468,8 @@ export class ElmClient {
     addresses: number[] = TP20_CANDIDATES,
     onProgress?: (done: number, total: number) => void,
     onModule?: (m: Tp20Module) => void,
+    // Each address where no module opened a channel.
+    onSilent?: (address: number) => void,
   ): Promise<Tp20Module[]> {
     if (!this.supportsModules) return [];
     // Addresses already reached as a named module are not probed again.
@@ -2376,7 +2490,10 @@ export class ElmClient {
         } catch {
           opened = false;
         }
-        if (!opened) continue;
+        if (!opened) {
+          onSilent?.(address);
+          continue;
+        }
         const m: Tp20Module = { address, faults: [] };
         try {
           const start = await s.request([0x10, 0x89]);
@@ -2413,6 +2530,7 @@ export class ElmClient {
       (d) => (d.groups.includes('vag') || d.groups.includes('all')) && routesOf(d, this.found.get(d.id) ?? []).some((r) => r.via === 'tp20' && r.address === address),
     );
     const id = def?.id ?? `vag-at${address.toString(16).padStart(2, '0')}`;
+    this.deepIds.add(id);
     if (!def) this.extraDefs.push({ id, name: tp20Name(address), tx: '', rx: '', alt: [route], groups: ['vag'], source: 'Found by the deep scan' });
     if (!def?.groups.includes('all')) {
       const known = this.found.get(id) ?? [];
@@ -2544,6 +2662,15 @@ export class ElmClient {
   close(): Promise<void> {
     return this.transport.close();
   }
+}
+
+// Older VW modules in an order that spares the engine's quiet wait: the 2007
+// Leon's engine and gearbox refuse a TP2.0 channel for about 6 s after a
+// standard OBD request (obdQuiet), so they go after the other modules, whose
+// reads fill that time. The rest keep their order.
+export function engineLast<T extends { id: string }>(defs: T[]): T[] {
+  const late = (d: T) => d.id === 'engine' || d.id === 'gearbox';
+  return [...defs.filter((d) => !late(d)), ...defs.filter(late)];
 }
 
 // The 3 bytes a module uses for a fault code: 'P0011B5' or maker-numbered '0000F3'.

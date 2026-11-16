@@ -19,6 +19,7 @@ const KIND: Record<string, { icon: IconName; colour: ToolColour }> = {
   Tyres: { icon: 'tire', colour: 'grey' },
   Battery: { icon: 'car-battery', colour: 'teal' },
   Repair: { icon: 'wrench-outline', colour: 'indigo' },
+  'Setting changed': { icon: 'tune-variant', colour: 'purple' },
   Other: { icon: 'note-outline', colour: 'grey' },
 };
 
@@ -87,7 +88,7 @@ export default function Diary() {
                   </View>
                   <Text style={[type.sub, { color: t.muted }]}>
                     {e.vehicleName}
-                    {e.mileage != null ? ` · ${e.mileage.toLocaleString('en-GB')} ${distanceUnit}` : ''}
+                    {e.mileage != null ? ` · ${e.mileage.toLocaleString('en-GB')} ${e.unit ? (e.unit === 'mi' ? 'miles' : 'km') : distanceUnit}` : ''}
                   </Text>
                   {e.notes ? <Text style={[type.callout, { color: t.text, marginTop: space.xs }]}>{e.notes}</Text> : null}
                   <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${e.kind} entry`} hitSlop={8} onPress={() => setRemove(e)} style={styles.delete}>

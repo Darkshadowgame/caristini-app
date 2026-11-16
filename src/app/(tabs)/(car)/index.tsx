@@ -5,7 +5,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { codingItemsFor } from '../../../coding/items';
 import { modsForVehicle } from '../../../mods/catalogue';
 import { modulesFor } from '../../../obd/modules';
-import { readKey, sensorsForCar } from '../../../obd/sensors';
+import { estimateSeconds, learnEstimate } from '../../../learn/runLearn';
+import { aboutRange } from '../../../timeText';
+import { modulesText, sensorCount, sensorCountText } from '../../../vehicle/counts';
+import { driveTools, driveToolsSummary } from '../../../monitors/hub';
 import { methodsFor } from '../../../service/procedures';
 import { describeDue, serviceDue } from '../../../service/reminder';
 import { useSettings } from '../../../settings';
@@ -66,6 +69,7 @@ function Connected() {
   const t = useTheme();
   const conn = useConnection();
   const v = conn.vehicle!;
+  const garage = useGarage();
   const { settings: prefs } = useSettings();
   const info = conn.info!;
   const [liveCount, setLiveCount] = useState<number | null>(null);
@@ -110,10 +114,22 @@ function Connected() {
   // Above 13.3 V the alternator is charging (engine running): judge the
   // charging voltage; below, judge the resting battery (Battery test bands).
   const battery = volts == null ? null : volts >= 13.3 ? chargeVerdict(volts) : restVerdict(volts);
-  const found = new Set(v.sensorsFound ?? []);
-  const sensorCount = v.sensorScan ? sensorsForCar(v).filter((r) => found.has(readKey(r))).length : 0;
-  const sensorTotal = sensorCount + (liveCount ?? 0);
+  // One sensor count (vehicle/counts.ts), the same on every screen.
+  const sensors = sensorCount(v);
+  const sensorsFound = sensors.maker + sensors.groupValues;
   const learned = v.learnRun;
+  // Learn my car stays on the Car tab: before a run, its time on this car;
+  // after one, what the last run found.
+  const [lo, hi] = estimateSeconds(learnEstimate(v, garage.vehicles, { pace: conn.client?.pace.snapshot() ?? null }));
+  const learnLine = learned
+    ? `${learned.full && !v.learnTimes?.repeat ? 'First read done' : 'Last run'} ${new Date(learned.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}: ${[
+        learned.faults != null ? `${learned.faults} fault${learned.faults === 1 ? '' : 's'}` : null,
+        modulesText(learned.modules),
+        sensorsFound ? sensorCountText(sensors).replace(/^./, (c) => c.toLowerCase()) : null,
+      ]
+        .filter(Boolean)
+        .join(', ')}. Run it again to refresh: ${aboutRange(lo, hi, { lower: true })}.`
+    : `One button reads everything: faults, modules, sensors, emissions, MOT and battery. ${aboutRange(lo, hi)}.`;
 
   return (
     <Screen
@@ -123,8 +139,9 @@ function Connected() {
       <View style={styles.metaRow}>
         <MakeBadge brand={v.brand} size={24} />
         <Pill text={demo ? 'Demo car' : 'Connected'} tone="ok" icon="checkbox-blank-circle" />
-        <Text style={[type.sub, { color: t.muted, flex: 1 }]} numberOfLines={1}>
-          {[v.nickname && v.model ? v.model : null, v.brand, v.year, v.fuel].filter(Boolean).join(' · ')}
+        {/* Year first, so it is never the part cut off at iPhone width. */}
+        <Text style={[type.sub, { color: t.muted, flex: 1 }]} numberOfLines={2}>
+          {[v.year, v.nickname && v.model ? v.model : null, v.brand, v.fuel].filter(Boolean).join(' · ')}
         </Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Disconnect from the car" hitSlop={10} onPress={() => conn.disconnect()}>
           <Text style={[type.sub, { color: t.accentText, fontWeight: '600' }]}>Disconnect</Text>
@@ -152,7 +169,7 @@ function Connected() {
           </View>
           <View style={styles.stats}>
             <Stat icon="engine-outline" label="Engine light" value={info.milOn ? 'On' : 'Off'} tone={info.milOn ? 'danger' : 'ok'} />
-            <Stat icon="leaf" label="Emissions self-tests" value={info.monitors.length === 0 ? 'Not reported' : incomplete ? `${incomplete} pending` : 'All done'} tone={incomplete ? 'accent' : 'ok'} />
+            <Stat icon="leaf" label="Emissions self-tests" value={info.monitors.length === 0 ? 'Not reported' : incomplete ? `${incomplete} pending` : 'All done'} tone={incomplete ? 'accent' : 'ok'} onPress={() => router.push('/emissions-tests')} />
             <Stat
               icon="car-battery"
               label="Battery"
@@ -181,7 +198,7 @@ function Connected() {
           value={settings ? 'Change settings' : mods.length ? `${mods.length} guide${mods.length === 1 ? '' : 's'}` : 'Learn my car first'}
           onPress={() => router.push(customCount ? '/customise' : '/learn-car')}
         />
-        <Tile icon="chart-timeline-variant" colour="blue" title="Live data" value={liveCount == null ? '…' : sensorCount ? `${sensorCount} sensor${sensorCount === 1 ? '' : 's'}` : `${sensorTotal} value${sensorTotal === 1 ? '' : 's'}`} onPress={() => router.push('/live')} />
+        <Tile icon="chart-timeline-variant" colour="blue" title="Live data" value={sensorsFound ? sensorCountText(sensors) : liveCount == null ? '…' : `${liveCount} value${liveCount === 1 ? '' : 's'}`} onPress={() => router.push('/live')} />
         <Tile icon="wrench-clock" colour="green" title="Service" value={v.service ? (serviceDue(v.service, v.odometerKm).overdue ? 'Overdue' : describeDue(serviceDue(v.service, v.odometerKm), prefs.speed === 'mph').split(' or ')[0]) : 'Reminder and reset'} onPress={() => router.push('/service')} />
         <Tile icon="progress-clock" colour="red" title="History" value="Checks and changes" onPress={() => router.push({ pathname: '/history', params: { vin: v.vin } })} />
       </View>
@@ -200,24 +217,23 @@ function Connected() {
       ) : null}
 
 
-      {!learned ? (
-        <Pressable accessibilityRole="button" onPress={() => router.push('/learn-car')} style={({ pressed }) => [styles.learn, { backgroundColor: t.surface, opacity: pressed ? 0.85 : 1 }]}>
-          <View style={[styles.learnIcon, { backgroundColor: t.indigo }]}>
-            <Icon name="school-outline" size={22} color="#FFFFFF" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[type.heading, { color: t.text }]}>Learn my car</Text>
-            <Text style={[type.small, { color: t.muted, marginTop: 1 }]}>Once per car: finds its modules, sensors and values.</Text>
-          </View>
-          <Icon name="chevron-right" size={13} color={t.faint} />
-        </Pressable>
-      ) : null}
+      <Pressable accessibilityRole="button" onPress={() => router.push('/learn-car')} style={({ pressed }) => [styles.learn, { backgroundColor: t.surface, opacity: pressed ? 0.85 : 1 }]}>
+        <View style={[styles.learnIcon, { backgroundColor: t.indigo }]}>
+          <Icon name="school-outline" size={22} color="#FFFFFF" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[type.heading, { color: t.text }]}>Learn my car</Text>
+          <Text style={[type.small, { color: t.muted, marginTop: 1 }]}>{learnLine}</Text>
+        </View>
+        <Icon name="chevron-right" size={13} color={t.faint} />
+      </Pressable>
 
       <Group header="This car" footer={`${info.adapter} on ${info.protocol}`}>
         <ListRow first icon="car-info" iconColour="grey" title="VIN" value={v.vin} mono />
         <ListRow icon={'barcode' as IconName} iconColour="indigo" title="Parts and IDs" value="For buying parts" onPress={() => router.push({ pathname: '/car-ids', params: { vin: v.vin } })} />
         <ListRow icon="flash-outline" iconColour="teal" title="Fuses and manuals" onPress={() => router.push('/fuses')} />
         <ListRow icon="car-battery" iconColour="green" title="Battery test" onPress={() => router.push('/battery')} />
+        <ListRow icon="clipboard-list-outline" iconColour="green" title="MOT check" value="Before the test" onPress={() => router.push('/mot')} />
         <ListRow icon="file-document-outline" iconColour="indigo" title="Health report" value="PDF" onPress={() => router.push('/report')} />
         <ListRow icon={'book-open-variant' as IconName} iconColour="purple" title="Research notes" onPress={() => router.push('/knowledge')} />
         <ListRow icon="pencil-outline" iconColour="grey" title={v.model ? 'Edit details' : 'Add model details'} onPress={() => router.push(`/vehicle?vin=${encodeURIComponent(v.vin)}`)} />
@@ -226,14 +242,13 @@ function Connected() {
       <Group header="Driving">
         <ListRow first icon="speedometer" iconColour="blue" title="Dashboard" value="Gauges" onPress={() => router.push('/dashboard')} />
         <ListRow icon="timer-outline" iconColour="red" title="Performance" value="0 to 60" onPress={() => router.push('/performance')} />
+        <ListRow icon={'steering' as IconName} iconColour="teal" title="Drive monitors" value={driveToolsSummary(driveTools(v, !!(info.diesel || v.fuel === 'Diesel')))} onPress={() => router.push('/monitors')} />
+        <ListRow icon="chart-line" iconColour="indigo" title="Data logger" value="Record and chart" onPress={() => router.push('/logger')} />
       </Group>
 
-      <Group header="Expert" footer="Optional. Health check finds faults, Live data watches values, and Learn my car finds a car's modules, sensors and values.">
+      <Group header="Expert" footer="Optional. Workshop opens one module at a time; Learn my car, above, reads everything and fills in these screens.">
         <ListRow first icon="wrench-outline" iconColour="orange" title="Workshop" value="Every module" onPress={() => router.push('/workshop')} />
-        <ListRow icon="radar" iconColour="blue" title="Sensor search" value={sensorCount ? `${sensorCount} found` : undefined} onPress={() => router.push('/sensors')} />
-        {learned ? (
-          <ListRow icon="school-outline" iconColour="indigo" title="Learn my car" value={`${learned.modules} module${learned.modules === 1 ? '' : 's'}, ${learned.sensors} maker sensor${learned.sensors === 1 ? '' : 's'}`} onPress={() => router.push('/learn-car')} />
-        ) : null}
+        <ListRow icon="radar" iconColour="blue" title="Find my car’s sensors" value={sensors.maker ? `${sensors.maker} found` : undefined} onPress={() => router.push('/sensors')} />
         <ListRow icon={'telescope' as IconName} iconColour="indigo" title="Unknown values" value="Explore a module" onPress={() => router.push('/discover')} />
         <ListRow icon="ear-hearing" iconColour="grey" title="Listen mode" value="Record another tool" onPress={() => router.push('/listen')} />
       </Group>

@@ -7,7 +7,8 @@ import { Make, MAKES, methodsFor, PROCEDURES } from '../service/procedures';
 import { useConnection } from '../state';
 import { radius, space, type, useTheme } from '../theme';
 import { Body, Button, Card, Heading, Icon, Label, Notice, Pill, Screen, tap, success } from '../ui';
-import { describeDue, PLANS, serviceDue } from '../service/reminder';
+import { describeDue, PLANS, planLabel, serviceDue } from '../service/reminder';
+import { extrasFor } from '../obd/extras';
 import { useSettings } from '../settings';
 import { Group, ListRow } from '../ui';
 import { useGarage, vehicleTitle } from '../vehicle/garage';
@@ -28,6 +29,24 @@ export default function Service() {
   const plan = v?.service;
   const due = plan ? serviceDue(plan, v?.odometerKm) : null;
   const odo = v?.odometerKm;
+  const miles = settings.speed === 'mph';
+  // Reads the odometer here, the same read-only way the health check does.
+  const [reading, setReading] = useState<string | null>(null);
+  const readOdometer = async () => {
+    if (!v || !conn.client) return;
+    setReading('Reading');
+    try {
+      const distance = extrasFor(v.group).filter((e) => e.category === 'Distance');
+      const got = await conn.client.readExtras(distance).catch(() => ({}) as Record<string, number>);
+      const first = distance.find((e) => got[e.id] != null);
+      if (first) {
+        await garage.update(v.vin, { odometerKm: got[first.id], odometerAt: Date.now() });
+        setReading(null);
+      } else setReading('The car did not give its odometer. Run a health check, or read maker data in Live data.');
+    } catch (e) {
+      setReading(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const markDone = async (title: string) => {
     await addDiary({
@@ -109,38 +128,58 @@ export default function Service() {
       ))}
 
       {v ? (
-        <Group
-          header="Reminder"
-          help={SECTIONS.serviceReminder}
-          footer={
-            odo != null
-              ? `Odometer ${Math.round(settings.speed === 'mph' ? odo / 1.609344 : odo).toLocaleString('en-GB')} ${settings.speed === 'mph' ? 'mi' : 'km'}, read from the car. Read maker data in Live data to update it.`
-              : 'Read maker data in Live data once, so the reminder counts distance too.'
-          }
-        >
-          {due ? <ListRow first title={describeDue(due, settings.speed === 'mph')} right={due.overdue ? <Pill text="Overdue" tone="danger" /> : due.soon ? <Pill text="Soon" /> : undefined} noChevron /> : null}
-          {PLANS.map((p, i) => (
+        <>
+          <Group
+            header="Common service intervals"
+            help={SECTIONS.serviceReminder}
+            footer={`Generic intervals, not a plan from your car's maker: Caristini has no maker service plans. ${plan ? 'Tap another to change it.' : 'Tap the one that matches your service book or handbook, and Caristini counts down to the next service.'}`}
+          >
+            {PLANS.map((p, i) => (
+              <ListRow
+                key={p.label}
+                first={i === 0}
+                title={planLabel(p, miles)}
+                selected={plan?.everyKm === p.everyKm && plan?.everyMonths === p.everyMonths}
+                noChevron
+                onPress={() => garage.update(v.vin, { service: { ...(plan ?? {}), everyKm: p.everyKm, everyMonths: p.everyMonths } })}
+              />
+            ))}
+          </Group>
+          <Group
+            header="Reminder"
+            footer={
+              odo != null
+                ? `Odometer ${Math.round(miles ? odo / 1.609344 : odo).toLocaleString('en-GB')} ${miles ? 'mi' : 'km'}, read from the car${v.odometerAt ? ` on ${new Date(v.odometerAt).toLocaleDateString('en-GB')}` : ''}.`
+                : 'Caristini does not know the odometer yet, so the reminder counts time only. Read it to count distance too.'
+            }
+          >
+            {due ? (
+              <ListRow first title={describeDue(due, miles)} right={due.overdue ? <Pill text="Overdue" tone="danger" /> : due.soon ? <Pill text="Soon" /> : undefined} noChevron />
+            ) : (
+              <ListRow first title="Pick an interval above to start" noChevron />
+            )}
             <ListRow
-              key={p.label}
-              first={!due && i === 0}
-              title={p.label}
-              selected={plan?.everyKm === p.everyKm && plan?.everyMonths === p.everyMonths}
-              onPress={() => garage.update(v.vin, { service: { ...(plan ?? {}), everyKm: p.everyKm, everyMonths: p.everyMonths } })}
+              icon="counter"
+              iconColour="blue"
+              title={reading === 'Reading' ? 'Reading the odometer…' : odo != null ? 'Read the odometer again' : 'Read the odometer'}
+              subtitle={!conn.client ? 'Connect the adapter first' : reading && reading !== 'Reading' ? reading : 'Read-only: nothing is changed in the car'}
+              disabled={!conn.client || reading === 'Reading'}
+              onPress={readOdometer}
             />
-          ))}
-          {plan ? (
-            <ListRow
-              icon="check"
-              iconColour="green"
-              title="Mark service done today"
-              subtitle="Saves it to the diary and starts the reminder again"
-              onPress={() => {
-                success();
-                markDone('Service done');
-              }}
-            />
-          ) : null}
-        </Group>
+            {plan ? (
+              <ListRow
+                icon="check"
+                iconColour="green"
+                title="Mark service done today"
+                subtitle="Saves it to the diary and starts the reminder again"
+                onPress={() => {
+                  success();
+                  markDone('Service done');
+                }}
+              />
+            ) : null}
+          </Group>
+        </>
       ) : null}
 
       <Group header="Reset with the adapter" help={SECTIONS.serviceObd} footer="For cars that need a tool to reset the reminder. Caristini learns the reset once, then does it in one tap.">

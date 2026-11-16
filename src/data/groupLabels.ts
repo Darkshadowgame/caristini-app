@@ -88,3 +88,23 @@ export const GROUP_LABELS: Record<string, Record<number, (string | null)[]>> = {
 export function groupLabels(moduleCode: string | undefined, group: number): (string | null)[] | null {
   return (moduleCode && GROUP_LABELS[moduleCode]?.[group]) || null;
 }
+
+// Short names for groups people open most (engine, 2.0 TFSI; same sources).
+export const GROUP_NAMES: Record<string, Record<number, string>> = {
+  '01': { 1: 'Engine basics', 3: 'Air mass and timing', 114: 'Boost control', 115: 'Boost' },
+};
+
+// Fields most groups carry alongside their own, so they do not name a group.
+const COMMON = new Set(['Engine speed', 'Engine load']);
+
+// A group named after what it holds: "Boost (group 115)", "Knock retard
+// cylinder 1, Knock retard cylinder 2 (group 20)", or "Group 7" when nothing
+// is known about it.
+export function groupName(moduleCode: string | undefined, group: number): string {
+  const named = (moduleCode && GROUP_NAMES[moduleCode]?.[group]) || null;
+  if (named) return `${named} (group ${group})`;
+  const fields = (groupLabels(moduleCode, group) ?? []).filter((x): x is string => !!x);
+  const own = fields.filter((x) => !COMMON.has(x));
+  const words = (own.length ? own : fields).slice(0, 2).join(', ');
+  return words ? `${words} (group ${group})` : `Group ${group}`;
+}

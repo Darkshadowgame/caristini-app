@@ -554,7 +554,8 @@ export function ListRow({
         </View>
       ) : null}
       <View style={[styles.rowMain, { borderColor: t.border, borderTopWidth: first ? 0 : StyleSheet.hairlineWidth }]}>
-        <View style={{ flex: 1, paddingVertical: subtitle ? 10 : 0 }}>
+        {/* Padding also for a title that wraps, so it never touches the lines. */}
+        <View style={{ flex: 1, paddingVertical: 10 }}>
           <Text style={[type.body, { color: t.text }]}>{title}</Text>
           {subtitle ? <Text style={[type.sub, { color: t.muted, marginTop: 1 }]}>{subtitle}</Text> : null}
         </View>
@@ -604,7 +605,7 @@ export function Notice({ text, tone = 'neutral', icon }: { text: string; tone?: 
   );
 }
 
-export function SearchField({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+export function SearchField({ value, onChange, placeholder, caps = true }: { value: string; onChange: (v: string) => void; placeholder: string; caps?: boolean }) {
   const t = useTheme();
   return (
     <View style={[styles.search, { backgroundColor: t.sunken }]}>
@@ -614,7 +615,7 @@ export function SearchField({ value, onChange, placeholder }: { value: string; o
         onChangeText={onChange}
         placeholder={placeholder}
         placeholderTextColor={t.muted}
-        autoCapitalize="characters"
+        autoCapitalize={caps ? 'characters' : 'none'}
         autoCorrect={false}
         clearButtonMode="while-editing"
         returnKeyType="search"

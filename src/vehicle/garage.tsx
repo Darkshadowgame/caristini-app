@@ -7,6 +7,9 @@ import type { LearnedSetting, Snapshot } from '../coding/learn';
 import type { ServiceReset } from '../service/obdReset';
 import type { CarIds, PartsList } from './ids';
 import type { Route } from '../obd/modules';
+import type { AlertRule } from '../live/alerts';
+import type { DashPage } from '../live/dashboards';
+import type { ValueSet } from '../live/sets';
 import { decodeVin, MakeGroup, vagModelFromParts } from './vin';
 
 export interface Vehicle {
@@ -27,6 +30,9 @@ export interface Vehicle {
   // Last odometer reading from the car (km) and when it was read.
   odometerKm?: number;
   odometerAt?: number;
+  // Last battery voltage read at the OBD port, when, and by which screen
+  // (Health check, Learn my car), shown on the Battery test before it reads.
+  battery?: { volts: number; at: number; from: string };
   // Service reminder: interval and the last service.
   service?: { everyKm: number; everyMonths: number; lastKm?: number; lastDate?: string };
   // Try mode results per setting id on this car.
@@ -74,6 +80,12 @@ export interface Vehicle {
   codingCache?: Record<string, string>;
   // Standard live values chosen on Live data.
   liveWatch?: number[];
+  // Live data and dashboard (src/live): saved value sets, alert limits,
+  // dashboard pages and the shift light engine speed (0 or absent: off).
+  liveSets?: ValueSet[];
+  liveAlerts?: AlertRule[];
+  dashPages?: DashPage[];
+  shiftRpm?: number;
   // quick: only the sensors other cars of the same make answered were asked.
   sensorScan?: { at: number; asked: number; complete: boolean; quick?: boolean };
   // Every sensor value asked on this car (answered or not), so a later search
@@ -88,7 +100,22 @@ export interface Vehicle {
   // Kept only so data saved by older versions still loads; nothing writes them.
   aiItems?: CodingItem[];
   aiSensors?: SensorRow[];
-  learnRun?: { at: number; modules: number; sensors: number; researched?: number };
+  // faults: found by that run; full: it was a full read (the first, or every 30 days).
+  learnRun?: { at: number; modules: number; sensors: number; researched?: number; faults?: number; full?: boolean };
+  // Learn my car: when a run last read everything (module identities and
+  // codings, sensors, every address). Later runs refresh only what changes
+  // until 30 days have passed or the owner asks to read everything again.
+  learnFullAt?: number;
+  // Addresses that never answered, not asked again until the next full read:
+  // module ids, newer-protocol request IDs (hex) and older VW (TP2.0)
+  // addresses. at: when the list was started.
+  learnSilent?: { at: number; modules: string[]; addresses: string[]; tp20: number[] };
+  // Every value and value group explored (nothing left for the next run).
+  learnExplored?: boolean;
+  // Seconds each step took on the last run of each kind, and the adapter's
+  // measured pace, for the time shown before the next run.
+  learnTimes?: { first?: Partial<Record<string, number>>; repeat?: Partial<Record<string, number>> };
+  learnPace?: { linkMs: number; replyMs: number | null; silentMs: number; at: number };
   // The car does not report its VIN over the standard OBD request; it came from
   // its modules or the owner, so a later connect without one can pick this car.
   noObdVin?: boolean;

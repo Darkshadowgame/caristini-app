@@ -87,6 +87,33 @@ export function mergeModuleIds(saved: ModuleId[] = [], read: (ModuleDetails | Mo
   return [...out.values()].sort((a, b) => (a.code ?? a.tx ?? a.id).localeCompare(b.code ?? b.tx ?? b.id));
 }
 
+// The coding backup kept per car (Car IDs, Customise): every module read now
+// with a coding, plus modules an earlier read backed up that were not read
+// this time, so a shorter read never drops a backup.
+export type CodingBackup = { date: string; modules: { module: string; part: string | null; coding: string | null }[] };
+export function mergeCodingBackup(saved: CodingBackup | undefined, read: { module: string; part: string | null; coding: string | null }[], date = new Date().toISOString()): CodingBackup | undefined {
+  const fresh = read.filter((m) => m.coding);
+  if (!fresh.length) return saved;
+  const kept = (saved?.modules ?? []).filter((m) => !fresh.some((f) => f.module === m.module));
+  return { date, modules: [...fresh, ...kept] };
+}
+
+// Part numbers already read by the older VW module search (Health check),
+// added for modules with no full read yet, so Parts and IDs shows them.
+export function withOlderModules(
+  modules: ModuleId[],
+  older: { address: number; moduleId: string; part?: string | null; component?: string | null; at: number }[] = [],
+  nameOf: (moduleId: string, address: number) => { name: string; code?: string },
+): ModuleId[] {
+  const out = [...modules];
+  for (const d of older) {
+    if (out.some((m) => m.id === d.moduleId)) continue;
+    const { name, code } = nameOf(d.moduleId, d.address);
+    out.push({ id: d.moduleId, name, code, part: d.part ?? null, systemName: d.component ?? null, at: d.at });
+  }
+  return out.sort((a, b) => (a.code ?? a.tx ?? a.id).localeCompare(b.code ?? b.tx ?? b.id));
+}
+
 // Plain text of everything, to copy or share with a parts counter.
 export function idsText(car: { title: string; vin: string }, ids: CarIds | undefined): string {
   const lines = [`${car.title}`, `VIN ${car.vin}`];

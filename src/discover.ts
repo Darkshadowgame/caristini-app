@@ -3,6 +3,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ModuleGroup } from './obd/modules';
 import { sensorsFor } from './obd/sensors';
+import { durationText } from './timeText';
 
 export interface FoundDid {
   // Hex samples, oldest first (up to 6).
@@ -29,6 +30,8 @@ export interface DiscoverModule {
   learnNext?: number;
   // The ranges learnNext belongs to; a resume point from other ranges is not used.
   learnRanges?: string;
+  // The ranges Learn my car swept to the end: not swept again until a full read.
+  learnDone?: string;
   found: Record<string, FoundDid>;
 }
 
@@ -43,6 +46,69 @@ export function quickRanges(knownDids: string[]): [number, number][] {
     if (Number.isFinite(n)) blocks.add(n & 0xff00);
   }
   return [...blocks].sort((a, b) => a - b).map((b) => [b, b + 0xff] as [number, number]);
+}
+
+// One quick explore for Learn my car and Unknown values: the blocks around
+// values already known for the module. F400 to F4FF is swept on the engine
+// (7E0) only: on other modules it held copies of standard OBD values (Mazda6
+// 2016 scan, 14 Nov 2026).
+export function quickExploreRanges(tx: string, knownDids: string[]): [number, number][] {
+  return quickRanges(knownDids).filter(([a]) => tx === '7E0' || a !== 0xf400);
+}
+
+// Both screens keep the quick explore's progress in the same fields
+// (learnNext, learnRanges, learnDone), so either carries on where the other
+// stopped. quickDone and finished are from older versions and the full explore.
+export function quickDone(m: DiscoverModule | undefined, key: string): boolean {
+  // A module that was silent during an older quick explore was saved as done:
+  // it is asked again.
+  return !!m && (m.learnDone === key || (!!m.quickDone && !m.silent) || !!m.finished);
+}
+
+export function quickResume(m: DiscoverModule | undefined, key: string): number | undefined {
+  return m && m.learnRanges === key ? m.learnNext : undefined;
+}
+
+// The module after a quick explore: finished, cut short (carries on from the
+// next value) or silent (tried again next time).
+export function afterQuick(m: DiscoverModule, key: string, swept: { finished: boolean; lastDid?: number | null }): DiscoverModule {
+  const done = swept.finished || swept.lastDid == null;
+  const silent = !swept.finished && swept.lastDid == null && !Object.keys(m.found).length;
+  return {
+    ...m,
+    learnNext: done ? undefined : swept.lastDid! + 1,
+    learnRanges: done ? undefined : key,
+    learnDone: swept.finished ? key : undefined,
+    silent: silent || undefined,
+  };
+}
+
+// What Unknown values shows for a module, from the one store both screens
+// write: values found by either, and older VW modules' value groups.
+export function exploreStatus(
+  m: DiscoverModule | undefined,
+  // older: the module speaks the older VW protocol, so its values are read
+  // in value groups; groupsDone: every group was read; groupsStarted: a read
+  // stopped part-way and carries on.
+  opts: { key?: string; older?: boolean; groups?: Record<string, string[]>; groupsDone?: boolean; groupsStarted?: boolean } = {},
+): { text: string; state: 'done' | 'partial' | 'silent' | 'none' } {
+  const groups = Object.values(opts.groups ?? {}).filter((u) => u.length);
+  if (opts.older || groups.length) {
+    const values = groups.reduce((n, u) => n + u.length, 0);
+    const text = `${values} value${values === 1 ? '' : 's'} in ${groups.length} value group${groups.length === 1 ? '' : 's'}`;
+    if (opts.groupsDone) return { text: groups.length ? text : 'Value groups read: none hold values', state: 'done' };
+    if (groups.length || opts.groupsStarted) return { text: `${text}, carries on`, state: 'partial' };
+    return { text: 'Value groups not read yet', state: 'none' };
+  }
+  const n = Object.keys(m?.found ?? {}).length;
+  const moving = Object.values(m?.found ?? {}).filter((f) => f.moves).length;
+  const found = `${n} value${n === 1 ? '' : 's'}, ${moving} moving`;
+  if (m?.finished) return { text: `Full explore done: ${found}`, state: 'done' };
+  if (m?.silent && !n) return { text: 'Did not answer', state: 'silent' };
+  if (m && quickDone(m, opts.key ?? '')) return { text: n ? `Quick explore done: ${found}` : 'Quick explore done: nothing found', state: 'done' };
+  if (m && (m.learnNext != null || m.nextDid != null)) return { text: `${n} found so far, carries on`, state: 'partial' };
+  if (n) return { text: found, state: 'partial' };
+  return { text: 'Not explored yet', state: 'none' };
 }
 
 export interface Discovery {
@@ -136,4 +202,20 @@ export function readings(hex: string): string[] {
   const text = b.map((x) => (x >= 0x20 && x < 0x7f ? String.fromCharCode(x) : '')).join('');
   if (text.replace(/\s/g, '').length >= 4 && text.length >= b.length * 0.8) out.unshift(`Text: "${text.trim()}"`);
   return out;
+}
+
+// The modules to offer for exploring: those that answered the last health
+// check (modulesSeen), plus any explored before. With no check yet, all.
+export function modulesToExplore<T extends { id: string }>(defs: T[], seen: string[] | undefined, disc: Discovery | null | undefined): T[] {
+  if (!seen?.length) return defs;
+  return defs.filter((d) => seen.includes(d.id) || Object.keys(disc?.modules[d.id]?.found ?? {}).length > 0);
+}
+
+// Seconds a full explore takes for one module: about 70 ms a value number.
+export const fullSeconds = (perModule: number) => perModule * 0.07;
+
+// "about 14 minutes", "about 3 hours", "about 2 hours 50 minutes", "about 30
+// seconds": the app's one duration wording (src/timeText.ts).
+export function aboutTime(seconds: number): string {
+  return `about ${durationText(seconds)}`;
 }

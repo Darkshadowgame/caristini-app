@@ -187,3 +187,17 @@ export const GROUP_LABEL: Record<MakeGroup, string> = {
   mazda: 'Mazda',
   other: 'Other make',
 };
+
+// Models on a VW group platform, from the VIN table above, for a plain hint
+// when picking a platform by hand (for example PQ35: Golf V / VI, Tiguan).
+export function platformModels(platform: string): string[] {
+  const names = [...new Set(Object.values(VAG_MODELS).filter((m) => m.platform === platform).map((m) => m.model))];
+  // "Golf V / VI" already names the Golf VI: one entry per model.
+  const covers = (wide: string) => {
+    const parts = wide.split(' / ');
+    const stem = parts[0].replace(/\s*\S+$/, '');
+    return new Set([parts[0], ...parts.slice(1).map((p) => `${stem} ${p}`.trim())]);
+  };
+  return names.filter((n) => !names.some((o) => o !== n && o.includes(' / ') && covers(o).has(n)));
+}
+

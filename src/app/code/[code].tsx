@@ -1,8 +1,9 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
-import { codeAnatomy, genericAdvice, lookupDtc } from '../../data/dtcLibrary';
+import { codeAnatomy } from '../../data/dtcLibrary';
 import { vagFaultText } from '../../data/vagFaults';
+import { faultMeaning } from '../../diag/faults';
 import { describeFailureType, isMakerNumbered } from '../../obd/uds';
 import { useConnection } from '../../state';
 import { MONO, radius, space, type, useTheme } from '../../theme';
@@ -25,12 +26,15 @@ export default function CodeDetail() {
   const base = /^[PCBU][0-9A-F]{4}[0-9A-F]{2}$/.test(code) ? code.slice(0, 5) : code;
   const failure = base !== code ? parseInt(code.slice(5), 16) : null;
   const failureText = failure ? describeFailureType(failure) : null;
-  const entry = lookupDtc(base);
+  const brand = conn.vehicle?.brand;
+  // The same meaning the fault lists show. A P code from a module outside the
+  // engine and gearbox is the maker's own number: no engine causes for it.
+  const meaning = faultMeaning(code, { module, brand });
+  const entry = meaning.entry;
   const anatomy = codeAnatomy(base);
-  const advice = entry ? { causes: entry.causes, fixes: entry.fixes } : genericAdvice(base);
+  const advice = meaning.advice;
   const group = conn.vehicle?.group;
   const makeNote = entry?.makes && group && group !== 'other' ? entry.makes[group] : undefined;
-  const brand = conn.vehicle?.brand;
   const serious = entry?.severity === 'high';
   // Older VW modules (KWP2000) give a 5-digit decimal fault number.
   const vwNumber = /^\d{5}$/.test(code);
@@ -79,19 +83,31 @@ export default function CodeDetail() {
       <Screen>
         <Stack.Screen options={{ title: code }} />
         <Card style={{ padding: space.xl }}>
-          <Text style={[type.title, { color: t.text }]}>{vwNumber ? (vagFaultText(code) ?? `${brand ?? 'VW'} fault ${code}`) : `${brand ?? 'Maker'} fault number ${parseInt(code, 16)}`}</Text>
+          <Text style={[type.title, { color: t.text }]}>{meaning.title}</Text>
           {vwNumber && vagFaultText(code) ? <Text style={[type.sub, { color: t.muted, marginTop: 4 }]}>VW fault number {code}</Text> : null}
           <Text style={[type.sub, { color: t.muted, marginTop: space.sm }]}>
             {vwNumber && vagFaultText(code)
-              ? "The meaning comes from public VW fault number lists; the module's own wording may differ slightly."
+              ? `The meaning comes from public VW fault number lists; the module's own wording may differ slightly.${meaning.pcode ? ` The same fault as the standard code ${meaning.pcode}.` : ''}`
               : "This module reports faults in the maker's own numbering, not as a standard code, so Caristini has no description for it. A dealer or specialist tool shows the text."}
           </Text>
+          {entry ? (
+            <View style={[styles.drive, { backgroundColor: serious ? t.dangerSoft : t.sunken }]}>
+              <Icon name="steering" size={18} color={serious ? t.danger : t.muted} />
+              <Text style={[type.sub, { flex: 1, color: serious ? t.danger : t.text }]}>{entry.drive}</Text>
+            </View>
+          ) : null}
         </Card>
         <Group header="Where it was found" help={SECTIONS.codeWhere}>
           {module ? <ListRow first title="Control module" value={String(module)} /> : null}
           {state ? <ListRow first={!module} title="Status" value={String(state)} /> : null}
           <ListRow first={!module && !state} title="Raw code" value={code} mono />
         </Group>
+        {entry ? (
+          <Group header={`What ${meaning.pcode} means`}>
+            <Text style={[type.body, styles.para, { color: t.text }]}>{entry.meaning}</Text>
+          </Group>
+        ) : null}
+        {advice ? <AdviceGroups advice={advice} /> : null}
       {detailBlock}
         <View style={{ gap: space.sm }}>
           <Button label="Search the web for this code" icon="open-in-new" variant="secondary" onPress={search} />
@@ -103,14 +119,12 @@ export default function CodeDetail() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: code }} />
+      <Stack.Screen options={{ title: base }} />
       <Card style={{ padding: space.xl }}>
-        <Text style={[type.title, { color: t.text }]}>
-          {entry?.title ?? (anatomy ? `${anatomy.scope} ${anatomy.system.toLowerCase()} code` : 'Not a valid fault code')}
-        </Text>
+        <Text style={[type.title, { color: t.text }]}>{meaning.title}</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md }}>
           {entry ? <Pill text={SEVERITY[entry.severity].text} tone={SEVERITY[entry.severity].tone} /> : null}
-          {anatomy ? <Pill text={anatomy.scope} /> : null}
+          {meaning.scope ? <Pill text={meaning.scope} /> : null}
           {entry?.system ? <Pill text={entry.system} /> : null}
         </View>
         {entry ? (
@@ -135,6 +149,12 @@ export default function CodeDetail() {
         <Group header="What it means">
           <Text style={[type.body, styles.para, { color: t.text }]}>{entry.meaning}</Text>
         </Group>
+      ) : meaning.makerUse ? (
+        <Group header="What it means">
+          <Text style={[type.body, styles.para, { color: t.text }]}>
+            {`The ${module ? `${module} module` : 'module'} uses this number for its own fault, so the standard engine meaning of ${base} does not apply. A dealer or specialist tool shows the text.`}
+          </Text>
+        </Group>
       ) : anatomy ? (
         <Group header="What it means">
           <Text style={[type.body, styles.para, { color: t.text }]}>
@@ -148,21 +168,7 @@ export default function CodeDetail() {
 
       {makeNote ? <Notice tone="info" icon="car-info" text={`${brand ?? 'This make'}: ${makeNote}`} /> : null}
 
-      {advice ? (
-        <Group header="Most likely causes">
-          {advice.causes.map((c, i) => (
-            <NumberedRow key={c} n={i + 1} text={c} first={i === 0} />
-          ))}
-        </Group>
-      ) : null}
-
-      {advice ? (
-        <Group header="How to fix it" footer="Work through these in order: cheapest and most likely first.">
-          {advice.fixes.map((f, i) => (
-            <NumberedRow key={f} n={i + 1} text={f} first={i === 0} />
-          ))}
-        </Group>
-      ) : null}
+      {advice ? <AdviceGroups advice={advice} /> : null}
 
 
       {def ? (
@@ -171,9 +177,9 @@ export default function CodeDetail() {
         </Group>
       ) : null}
 
-      {anatomy ? (
+      {anatomy && !meaning.makerUse ? (
         <Group header="Reading the code" help={SECTIONS.codeReading}>
-          <ListRow first title="Code" value={code} />
+          <ListRow first title="Code" value={base} />
           <ListRow title="System" value={anatomy.system} />
           <ListRow title="Type" value={anatomy.scope} />
           <ListRow title="Area" value={anatomy.area} />
@@ -193,6 +199,23 @@ export default function CodeDetail() {
         General guidance for owners, not a substitute for a garage diagnosis. If the light is flashing or the car runs badly, stop and get it checked.
       </Text>
     </Screen>
+  );
+}
+
+function AdviceGroups({ advice }: { advice: { causes: string[]; fixes: string[] } }) {
+  return (
+    <>
+      <Group header="Most likely causes">
+        {advice.causes.map((c, i) => (
+          <NumberedRow key={c} n={i + 1} text={c} first={i === 0} />
+        ))}
+      </Group>
+      <Group header="How to fix it" footer="Work through these in order: cheapest and most likely first.">
+        {advice.fixes.map((f, i) => (
+          <NumberedRow key={f} n={i + 1} text={f} first={i === 0} />
+        ))}
+      </Group>
+    </>
   );
 }
 

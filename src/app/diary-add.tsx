@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
-import { addDiary, DIARY_KINDS, today } from '../diary';
+import { addDiary, DIARY_KINDS, parseUkDate, shiftDate, today, ukDate } from '../diary';
+import { useSettings } from '../settings';
 import { useConnection } from '../state';
 import { radius, space, type, useTheme } from '../theme';
 import { Body, Button, Card, Label, Screen } from '../ui';
@@ -14,11 +15,18 @@ export default function DiaryAdd() {
   const garage = useGarage();
   const [vin, setVin] = useState<string>(conn.vehicle?.vin ?? garage.vehicles[0]?.vin ?? '');
   const [kind, setKind] = useState('Oil service');
-  const [date, setDate] = useState(today());
+  // Typed and shown as DD/MM/YYYY; saved as year-month-day.
+  const [dateText, setDateText] = useState(ukDate(today()));
   const [mileage, setMileage] = useState('');
   const [notes, setNotes] = useState('');
-  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
+  const date = parseUkDate(dateText);
   const vehicle = garage.get(vin);
+  const { settings } = useSettings();
+  const unit = settings.speed === 'mph' ? 'mi' : 'km';
+  const quick = [
+    { id: today(), label: 'Today' },
+    { id: shiftDate(today(), -1), label: 'Yesterday' },
+  ];
 
   const input = [
     type.body,
@@ -41,14 +49,23 @@ export default function DiaryAdd() {
       </Card>
       <Card>
         <Label>Details</Label>
-        <Text style={[type.small, { color: t.muted, marginBottom: 4 }]}>Date, for example 2026-11-12</Text>
-        <TextInput value={date} onChangeText={setDate} accessibilityLabel="Date" style={input} />
-        <Text style={[type.small, { color: t.muted, marginBottom: 4, marginTop: space.md }]}>Mileage (optional)</Text>
+        <Text style={[type.small, { color: t.muted, marginBottom: 4 }]}>Date (day/month/year)</Text>
+        <Choices options={quick} value={date ?? ''} onPick={(iso) => setDateText(ukDate(iso))} />
+        <TextInput
+          value={dateText}
+          onChangeText={setDateText}
+          accessibilityLabel="Date, day/month/year"
+          placeholder="For example 12/11/2026"
+          placeholderTextColor={t.faint}
+          keyboardType="numbers-and-punctuation"
+          style={[input, { marginTop: space.sm }]}
+        />
+        <Text style={[type.small, { color: t.muted, marginBottom: 4, marginTop: space.md }]}>Mileage in {unit === 'mi' ? 'miles' : 'km'} (optional)</Text>
         <TextInput
           value={mileage}
           onChangeText={(x) => setMileage(x.replace(/[^\d]/g, ''))}
           keyboardType="number-pad"
-          accessibilityLabel="Mileage"
+          accessibilityLabel={`Mileage in ${unit === 'mi' ? 'miles' : 'km'}`}
           placeholder="For example 48200"
           placeholderTextColor={t.faint}
           style={input}
@@ -64,25 +81,26 @@ export default function DiaryAdd() {
           style={[input, { minHeight: 90, textAlignVertical: 'top' }]}
         />
       </Card>
-      {!validDate ? <Body small style={{ color: t.danger, marginBottom: space.sm }}>Type the date as year-month-day, for example 2026-11-12.</Body> : null}
-      <View style={{ gap: space.sm }}>
+      {!date ? <Body small style={{ color: t.danger, marginBottom: space.sm }}>Type the date as day/month/year, for example 12/11/2026.</Body> : null}
+      <View>
         <Button
           label="Save entry"
           icon="content-save-outline"
-          disabled={!validDate}
+          disabled={!date}
           onPress={async () => {
+            if (!date) return;
             await addDiary({
               vin: vehicle?.vin ?? null,
               vehicleName: vehicle ? vehicleTitle(vehicle) : 'My car',
               date,
               kind,
               mileage: mileage ? Number(mileage) : null,
+              ...(mileage ? { unit } : {}),
               notes: notes.trim(),
             });
             router.back();
           }}
         />
-        <Button label="Cancel" variant="ghost" onPress={() => router.back()} />
       </View>
     </Screen>
   );

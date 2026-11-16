@@ -26,7 +26,7 @@ export interface ModEntry {
 
 export const STATUS_LABEL: Record<ModStatus, string> = {
   owner: 'Owner procedure',
-  documented: 'Documented, write not verified',
+  documented: 'Steps known, not yet tested by Caristini',
   dealer: 'Dealer tool only',
 };
 
@@ -241,11 +241,14 @@ export function modsForVehicle(group: MakeGroup | undefined, platform: string | 
   return MODS.filter((m) => m.group === group && (!m.platforms || !platform || m.platforms.includes(platform)));
 }
 
+// Guides by category, each guide once: popular ones under Most popular only,
+// and a category left empty by that is not listed.
 export function categoriesFor(list: ModEntry[]): { name: string; items: ModEntry[] }[] {
   const out: { name: string; items: ModEntry[] }[] = [];
   const popular = list.filter((m) => m.popular);
   if (popular.length) out.push({ name: 'Most popular', items: popular });
-  const names = [...new Set(list.map((m) => m.category))].sort();
-  for (const n of names) out.push({ name: n, items: list.filter((m) => m.category === n) });
+  const rest = list.filter((m) => !m.popular);
+  const names = [...new Set(rest.map((m) => m.category))].sort();
+  for (const n of names) out.push({ name: n, items: rest.filter((m) => m.category === n) });
   return out;
 }

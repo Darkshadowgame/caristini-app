@@ -13,7 +13,7 @@ import { releaseUrl, versionLine } from '../version';
 import { phoneRegion, regionUnits, useSettings } from '../settings';
 import { useConnection } from '../state';
 import { radius, space, type, useTheme } from '../theme';
-import { Help, SECTIONS } from '../help';
+import { Help, SECTIONS, WHAT_IS_SENT } from '../help';
 import { Button, Group, ListRow, Notice, Screen, ConfirmSheet } from '../ui';
 
 export default function SettingsScreen({ title, guide }: { title?: string; guide?: Help } = {}) {
@@ -102,11 +102,11 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
         <Notice icon="information-outline" text="The adapter answers slowly for older VW modules, which expect a reply within about 100 ms. They may answer only some of the time." />
       ) : null}
 
-      <UpdatesGroup />
+      <UpdatesGroup developer={settings.developer} />
 
-      <Group header="Troubleshooting" help={SECTIONS.settingsTroubleshooting} footer="The log holds the last 4,000 adapter commands and replies. With automatic sending on, new lines are sent after each health check or search, so a problem can be looked at without sharing anything.">
+      <Group header="Troubleshooting" help={SECTIONS.settingsTroubleshooting} footer="The log holds the last 4,000 adapter commands and replies. With Send the log automatically on, new lines go to your private findings store after each health check or search, so you do not have to share it yourself.">
         {toggle('Keep an adapter log', settings.debugLog, (v) => set({ debugLog: v }), undefined, true)}
-        {toggle('Send the log automatically', settings.autoSendLog !== false, (v) => set({ autoSendLog: v }), 'After each health check, sensor search, Learn my car or failed connect')}
+        {toggle('Send the log automatically', settings.autoSendLog !== false, (v) => set({ autoSendLog: v }), 'After each health check, Find my car’s sensors, Learn my car or failed connect')}
         <ListRow
           icon="cloud-upload-outline"
           iconColour="green"
@@ -144,27 +144,31 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
         />
       </Group>
 
-      <Group
-        header="Sharing findings"
-        help={SECTIONS.settingsSending}
-        footer="What your car teaches Caristini goes to your private findings store, so it can be built in for every car."
-      >
-        <AutoSendRow />
-        <OutboxRows />
-        <SecretRow name="githubToken" label="GitHub token (optional)" placeholder="github_pat_..." />
-        <View style={[styles.row, { borderColor: t.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
-          <Text style={[type.body, { color: t.text }]}>Email to</Text>
-          <TextInput
-            value={settings.sendTo}
-            onChangeText={(v) => set({ sendTo: v.trim() })}
-            placeholder="you@example.com"
-            placeholderTextColor={t.muted}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={[type.body, styles.inline, { color: t.text }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
-          />
-        </View>
+      {/* Developer controls are hidden by default. Hiding them changes
+          nothing: findings and logs are sent the same way either way. */}
+      <Group header="What leaves this phone" help={SECTIONS.settingsSending} footer={WHAT_IS_SENT}>
+        {toggle('Developer options', settings.developer, (v) => set({ developer: v }), 'GitHub token, email, app version and findings waiting to send', true)}
       </Group>
+
+      {settings.developer ? (
+        <Group header="Developer: sending findings" footer="Sending works the same with this section hidden.">
+          <AutoSendRow />
+          <OutboxRows />
+          <SecretRow name="githubToken" label="GitHub token (optional)" placeholder="github_pat_..." />
+          <View style={[styles.row, { borderColor: t.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
+            <Text style={[type.body, { color: t.text }]}>Email to</Text>
+            <TextInput
+              value={settings.sendTo}
+              onChangeText={(v) => set({ sendTo: v.trim() })}
+              placeholder="you@example.com"
+              placeholderTextColor={t.muted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={[type.body, styles.inline, { color: t.text }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
+            />
+          </View>
+        </Group>
+      ) : null}
 
       <Group header="Help">
         <ListRow first icon="help-circle-outline" iconColour="blue" title="User guide" subtitle="What each screen does and how it works" onPress={() => router.push('/guide')} />
@@ -174,7 +178,7 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
 }
 
 // New versions arrive over the air: checked when the app opens and here on demand.
-function UpdatesGroup() {
+function UpdatesGroup({ developer }: { developer: boolean }) {
   const [state, setState] = useState<'idle' | 'checking' | 'none' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const enabled = Updates.isEnabled;
@@ -200,24 +204,29 @@ function UpdatesGroup() {
       header="App updates"
       help={SECTIONS.settingsUpdates}
       footer={
-        enabled
-          ? 'New versions download by themselves when the app opens and apply the next time it starts. A free Apple ID install still needs signing again every 7 days.'
-          : 'Updates work in the installed app, not in this preview.'
+        !enabled
+          ? 'Updates work in the installed app, not in this preview.'
+          : developer
+            ? 'New versions download by themselves when the app opens and apply the next time it starts. A free Apple ID install still needs signing again every 7 days.'
+            : 'New versions download by themselves when the app opens and apply the next time it starts.'
       }
     >
-      <ListRow
-        first
-        icon="information-outline"
-        iconColour="grey"
-        title={versionLine()}
-        subtitle={when ? `Running the update from ${when}` : 'Running the built-in version'}
-        onPress={releaseUrl() ? () => Linking.openURL(releaseUrl()!) : undefined}
-        noChevron={!releaseUrl()}
-      />
+      {developer ? (
+        <ListRow
+          first
+          icon="information-outline"
+          iconColour="grey"
+          title={versionLine()}
+          subtitle={when ? `Running the update from ${when}` : 'Running the built-in version'}
+          onPress={releaseUrl() ? () => Linking.openURL(releaseUrl()!) : undefined}
+          noChevron={!releaseUrl()}
+        />
+      ) : null}
       {state === 'ready' ? (
-        <ListRow icon="restart" iconColour="green" title="Restart to update" onPress={() => Updates.reloadAsync()} />
+        <ListRow first={!developer} icon="restart" iconColour="green" title="Restart to update" onPress={() => Updates.reloadAsync()} />
       ) : (
         <ListRow
+          first={!developer}
           icon="refresh"
           iconColour="blue"
           title={state === 'checking' ? 'Checking…' : 'Check for updates'}

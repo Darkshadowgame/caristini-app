@@ -143,6 +143,18 @@ export async function shareOutbox(): Promise<number> {
   return n;
 }
 
+const NO_TOKEN = 'No GitHub token is set (Settings, Developer options).';
+
+// Why a send did not go, in plain words, then what happens to it: "Not sent:
+// the phone could not reach GitHub (no signal?). Saved on this phone; it goes
+// by itself next time the app opens."
+export function notSentText(error: string): string {
+  const why = /network request failed|failed to fetch|network|timed? ?out|offline/i.test(error)
+    ? 'the phone could not reach GitHub (no signal?).'
+    : error.trim().replace(/^(No|The|A|An) /, (w) => w.toLowerCase()).replace(/([^.])$/, '$1.');
+  return `Not sent: ${why} Saved on this phone; it goes by itself next time the app opens.`;
+}
+
 // kind: short slug ('sensors', 'discover', 'learned'); vin: the car; data: any JSON.
 export async function sendBack(kind: string, vin: string, data: unknown, opts: { email?: string; allowManual?: boolean } = {}): Promise<SendResult> {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -152,7 +164,7 @@ export async function sendBack(kind: string, vin: string, data: unknown, opts: {
   const message = `Findings from the app: ${kind} on ${vin}`;
   const keep = async (error: string): Promise<SendResult> => {
     await queue({ path, name, text, message, error, at: Date.now() });
-    return { via: 'none', detail: 'Not sent yet. It is saved on this phone and goes by itself next time the app opens.' };
+    return { via: 'none', detail: notSentText(error) };
   };
   try {
     if (await toGitHub(path, text, message)) {
@@ -163,7 +175,7 @@ export async function sendBack(kind: string, vin: string, data: unknown, opts: {
   } catch (e) {
     if (!opts.allowManual) return keep(e instanceof Error ? e.message : String(e));
   }
-  if (!opts.allowManual) return keep('Automatic sending is not set up yet.');
+  if (!opts.allowManual) return keep(NO_TOKEN);
   const uri = await toFile(name, text);
   if (uri && (await MailComposer.isAvailableAsync().catch(() => false))) {
     const r = await MailComposer.composeAsync({

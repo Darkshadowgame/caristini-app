@@ -1,11 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { goneSince, HISTORY_LABEL, HistoryEntry, HistoryKind, loadHistory, onHistory } from '../history';
+import { HISTORY_LABEL, HistoryEntry, HistoryKind, loadHistory, onHistory } from '../history';
+import { diffScans, previousFull } from '../diag/scanDiff';
 import { useSettings } from '../settings';
 import { useConnection } from '../state';
 import { MONO, radius, space, type, useTheme, ToolColour } from '../theme';
-import { Group, Icon, IconName, Pill, Screen, tap } from '../ui';
+import { Group, Icon, IconName, ListRow, Pill, Screen, tap } from '../ui';
+import { faultLabel } from '../diag/faults';
 import { useGarage, vehicleTitle } from '../vehicle/garage';
 
 const KIND_ICON: Record<HistoryKind, IconName> = {
@@ -15,8 +17,9 @@ const KIND_ICON: Record<HistoryKind, IconName> = {
   service: 'wrench-clock',
   sensors: 'radar' as IconName,
   discover: 'telescope' as IconName,
+  mot: 'clipboard-list-outline',
 };
-const KIND_COLOUR: Record<HistoryKind, ToolColour> = { scan: 'blue', clear: 'orange', change: 'purple', service: 'green', sensors: 'teal', discover: 'indigo' };
+const KIND_COLOUR: Record<HistoryKind, ToolColour> = { scan: 'blue', clear: 'orange', change: 'purple', service: 'green', sensors: 'teal', discover: 'indigo', mot: 'green' };
 const FILTERS: { key: 'all' | HistoryKind; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'scan', label: 'Health checks' },
@@ -25,6 +28,7 @@ const FILTERS: { key: 'all' | HistoryKind; label: string }[] = [
   { key: 'service', label: 'Service' },
   { key: 'sensors', label: 'Sensors' },
   { key: 'discover', label: 'Learning' },
+  { key: 'mot', label: 'MOT' },
 ];
 
 // Everything Caristini did with a car, readable with no adapter connected:
@@ -58,7 +62,7 @@ export default function History() {
   }
 
   const shown = (list ?? []).filter((e) => filter === 'all' || e.kind === filter);
-  const scans = (list ?? []).filter((e) => e.kind === 'scan');
+  const changes = (list ?? []).filter((e) => e.kind === 'change').length;
   const day = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
   const time = (ms: number) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const miles = (km?: number) => (km == null ? null : settings.speed === 'mph' ? `${Math.round(km / 1.609344).toLocaleString('en-GB')} mi` : `${Math.round(km).toLocaleString('en-GB')} km`);
@@ -95,6 +99,20 @@ export default function History() {
         })}
       </ScrollView>
 
+      {/* Always shown, so the timeline can be found before the first change. */}
+      {filter === 'all' || filter === 'change' ? (
+        <Group>
+          <ListRow
+            first
+            icon="timeline-text-outline"
+            iconColour="purple"
+            title="Change timeline"
+            subtitle={changes ? `${changes} change${changes === 1 ? '' : 's'}, with old and new values. Put one back or share the list.` : 'No setting changes yet. Each one you make is listed here.'}
+            onPress={() => router.push({ pathname: '/customise/timeline', params: { vin } })}
+          />
+        </Group>
+      ) : null}
+
       {list && !shown.length ? (
         <View style={{ alignItems: 'center', paddingVertical: space.xxl }}>
           <Icon name="progress-clock" size={40} color={t.faint} />
@@ -107,9 +125,15 @@ export default function History() {
         <Group key={d.day} header={d.day}>
           {d.items.map((e, i) => {
             const expanded = open === e.id;
-            const prev = e.kind === 'scan' ? scans[scans.indexOf(e) + 1] : undefined;
-            const gone = e.kind === 'scan' ? goneSince(prev, e.faults ?? []) : [];
-            const isNew = (f: { module: string; code: string }) => !!prev && !(prev.faults ?? []).some((p) => p.module === f.module && p.code === f.code);
+            // Compared with the full check before it: new, recurring and cleared.
+            const diff = e.kind === 'scan' ? diffScans(previousFull(list ?? [], e), e) : null;
+            const tagOf = new Map<string, 'New' | 'Seen before'>();
+            for (const m of diff?.modules ?? []) {
+              m.added.forEach((f) => tagOf.set(`${f.module}|${f.code}`, 'New'));
+              m.recurring.forEach((f) => tagOf.set(`${f.module}|${f.code}`, 'Seen before'));
+            }
+            const gone = (diff?.modules ?? []).flatMap((m) => m.cleared);
+            const tag = (f: { module: string; code: string }) => tagOf.get(`${f.module}|${f.code}`);
             return (
               <Pressable
                 key={e.id}
@@ -133,44 +157,67 @@ export default function History() {
                     {e.detail ? ` · ${e.detail}` : ''}
                     {miles(e.odometerKm) ? ` · ${miles(e.odometerKm)}` : ''}
                   </Text>
-                  {e.kind === 'scan' && (e.faults?.length || gone.length) ? (
+                  {/* The title already gives the fault count; these say how it compares with the check before. */}
+                  {e.kind === 'scan' && (diff?.added || diff?.recurring || gone.length) ? (
                     <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                      {e.faults?.length ? <Pill text={`${e.faults.length} fault${e.faults.length === 1 ? '' : 's'}`} tone="danger" /> : null}
-                      {gone.length ? <Pill text={`${gone.length} gone since the last check`} tone="ok" /> : null}
-                      {e.faults?.filter(isNew).length ? <Pill text={`${e.faults.filter(isNew).length} new`} tone="accent" /> : null}
+                      {diff?.added ? <Pill text={`${diff.added} new`} tone="accent" /> : null}
+                      {diff?.recurring ? <Pill text={`${diff.recurring} also in the last check`} /> : null}
+                      {gone.length ? <Pill text={`${gone.length} cleared`} tone="ok" /> : null}
                     </View>
                   ) : null}
-                  {expanded && e.faults?.length ? (
+                  {expanded && diff ? (
+                    <Text style={[type.small, { color: t.muted, marginTop: space.sm }]}>
+                      Compared with the full check of {day(diff.since.at)}, {time(diff.since.at)}.{diff.recurring ? ' Seen before: the fault was there then too, so it has not gone away.' : ''}
+                    </Text>
+                  ) : null}
+                  {expanded && (e.faults?.length || gone.length) ? (
                     <View style={{ marginTop: space.sm, gap: 6 }}>
-                      {e.faults.map((f, k) => (
+                      {(e.faults ?? []).map((f, k) => (
                         <Pressable
                           key={`${f.module}-${f.code}-${k}`}
                           accessibilityRole="button"
-                          accessibilityLabel={`${f.code}, ${f.module}${f.text ? `, ${f.text}` : ''}${isNew(f) ? ', new' : ''}`}
+                          accessibilityLabel={`${f.code}, ${f.module}${faultLabel(f) ? `, ${faultLabel(f)}` : ''}${tag(f) ? `, ${tag(f)!.toLowerCase()}` : ''}`}
                           onPress={() => router.push({ pathname: '/code/[code]', params: { code: f.code, module: f.module } })}
                           style={[styles.fault, { backgroundColor: t.sunken }]}
                         >
                           <Text style={[type.sub, { color: t.text, fontFamily: MONO }]}>{f.code}</Text>
                           <Text style={[type.small, { color: t.muted, flex: 1 }]} numberOfLines={2}>
                             {f.module}
-                            {f.text ? ` · ${f.text}` : ''}
+                            {faultLabel(f) ? ` · ${faultLabel(f)}` : ''}
                           </Text>
-                          {isNew(f) ? <Pill text="New" tone="accent" /> : null}
+                          {tag(f) ? <Pill text={tag(f)!} tone={tag(f) === 'New' ? 'accent' : 'neutral'} /> : null}
                         </Pressable>
                       ))}
                       {gone.map((f, k) => (
                         <View key={`gone-${f.code}-${k}`} style={[styles.fault, { backgroundColor: t.okSoft }]}>
                           <Text style={[type.sub, { color: t.ok, fontFamily: MONO, textDecorationLine: 'line-through' }]}>{f.code}</Text>
-                          <Text style={[type.small, { color: t.ok, flex: 1 }]}>{f.module} · gone since the check before</Text>
+                          <Text style={[type.small, { color: t.ok, flex: 1 }]}>{f.module} · cleared since that check</Text>
                         </View>
                       ))}
                     </View>
                   ) : null}
-                  {expanded && e.before ? (
-                    <Text selectable style={[type.small, { color: t.muted, fontFamily: MONO, marginTop: space.sm }]}>
-                      {e.before} → {e.after}
+                  {expanded && e.motText ? (
+                    <Text selectable style={[type.small, { color: t.text, marginTop: space.sm }]}>
+                      {e.motText}
                     </Text>
                   ) : null}
+                  {expanded && e.changes?.length
+                    ? e.changes.map((c, k) => (
+                        <View key={`${c.key ?? c.module}-${k}`} style={{ marginTop: space.sm }}>
+                          <Text style={[type.small, { color: t.text }]}>
+                            {c.module}: {c.setting}
+                            {c.from || c.to ? `, ${c.from ?? '?'} to ${c.to ?? '?'}` : ''}
+                          </Text>
+                          <Text selectable style={[type.small, { color: t.muted, fontFamily: MONO }]}>
+                            {c.before} → {c.after}
+                          </Text>
+                        </View>
+                      ))
+                    : expanded && e.before ? (
+                        <Text selectable style={[type.small, { color: t.muted, fontFamily: MONO, marginTop: space.sm }]}>
+                          {e.before} → {e.after}
+                        </Text>
+                      ) : null}
                 </View>
               </Pressable>
             );

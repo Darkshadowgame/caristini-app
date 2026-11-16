@@ -6,7 +6,7 @@ import { bitsLabel, CodingItem, codingItemsFor, isOn, withItem } from '../../cod
 import { preflightCheck } from '../../coding/preflight';
 import { groupLabels } from '../../data/groupLabels';
 import { lookupDtc } from '../../data/dtcLibrary';
-import { addDiary, today } from '../../diary';
+import { addDiary, SETTING_CHANGED, today } from '../../diary';
 import { addHistory } from '../../history';
 import { describeDtc } from '../../obd/dtc';
 import { ModuleDetails, ModuleFaults } from '../../obd/elm';
@@ -21,6 +21,7 @@ import { Button, ConfirmSheet, Group, ListRow, NeedsConnection, Notice, Pill, Sc
 import { useGarage, vehicleTitle } from '../../vehicle/garage';
 import { SECTIONS } from '../../help';
 import { mergeModuleIds } from '../../vehicle/ids';
+import { cacheAfterWrite } from '../../diag/timeline';
 
 const hex2 = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -197,11 +198,13 @@ export default function ControlModule() {
       if (res.coding) {
         setCoding(res.coding);
         setDraft(res.coding);
+        // The saved coding follows the write, so Put back decides from what the module holds now.
+        if (client.routeOf(def) !== 'tp20') await garage.update(v.vin, { codingCache: cacheAfterWrite(garage.latest(v.vin)?.codingCache, [{ key: def.id, hex: toHex(res.coding) }]) });
       }
       if (res.ok) {
         success();
-        await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: 'Other', mileage: null, notes: `Workshop: ${def.name} ${what}. Coding ${toHex(coding)} to ${toHex(target)}.` });
-        await addHistory({ vin: v.vin, kind: 'change', title: `${def.name} ${what}`, detail: 'Workshop', before: toHex(coding), after: toHex(target) });
+        await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: `Workshop: ${def.name} ${what}. Coding ${toHex(coding)} to ${toHex(target)}.` });
+        await addHistory({ vin: v.vin, kind: 'change', title: `${def.name} ${what}`, detail: 'Workshop', before: toHex(coding), after: toHex(target), odometerKm: v.odometerKm, changes: [{ module: def.name, key: def.id, setting: what.charAt(0).toUpperCase() + what.slice(1), before: toHex(coding), after: toHex(target), backup: saved[def.id] ?? toHex(coding), source: 'Workshop' }] });
         setMessage({ tone: 'ok', text: `${what.charAt(0).toUpperCase() + what.slice(1)}. Switch the ignition off and on to see it. Saved to History.` });
       } else {
         setMessage({ tone: 'danger', text: res.restored ? 'The module did not keep the change, so Caristini put the original coding back.' : 'The module did not keep the change and the original could not be confirmed. Use Restore original.' });
@@ -276,7 +279,7 @@ export default function ControlModule() {
           </View>
 
           {tab === 'faults' ? (
-            <Group header="Fault memory" help={SECTIONS.moduleFaults} footer="Tap a fault for what it means and the likely causes.">
+            <Group header="Fault memory" help={SECTIONS.moduleFaults} footer="Tap a fault for what it means and, where Caristini knows them, the likely causes.">
               {faults?.faults.map((f, i) => (
                 <ListRow
                   key={`${f.code}-${i}`}
@@ -326,7 +329,7 @@ export default function ControlModule() {
                 <Group
                   header={named.length ? `${named.length} named values` : 'Named values'}
                   help={SECTIONS.moduleNamedValues}
-                  footer={v.sensorScan ? 'Values this module answered in the sensor search.' : 'Values this kind of module usually has. Run All sensors > Find my car’s sensors to keep only the ones your car answers.'}
+                  footer={v.sensorScan ? 'Values this module answered in Find my car’s sensors.' : 'Values this kind of module usually has. Run Find my car’s sensors to keep only the ones your car answers.'}
                 >
                   {named.length ? (
                     <View style={[styles.pad, { flexDirection: 'row', gap: space.sm }]}>

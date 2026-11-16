@@ -4,14 +4,18 @@ import { fordSensors, mazdaSensors, vagSensors } from '../data/sensors';
 // off, ISO-TP multi-frame output on CAN).
 import { encodeDtc } from './dtc';
 import { Transport } from './transport';
+import { demoMode06, demoMode09 } from '../diag/demo';
 
 export interface DemoCar {
   id: string;
   label: string;
   vin: string;
   diesel: boolean;
-  // Ignition on, engine off (rpm 0): lets the demo car accept coding changes.
+  // Stop-start: the demo car stops now and then with the engine off (rpm 0),
+  // so faults can be cleared and coding changed. See demoDrive.
   engineOff?: boolean;
+  // Standard OBD2 engine codes (mode 03, 07, 0A); petrol or diesel ones by fuel when not set.
+  obdCodes?: { stored: string[]; pending: string[]; permanent: string[] };
   modules: Record<string, SimModule>;
   // Raw answers to maker-specific DIDs, per module request ID.
   extras?: Record<string, Record<string, number[]>>;
@@ -216,6 +220,37 @@ export const DEMO_CARS: DemoCar[] = [
     },
   },
 ];
+// Standard OBD2 engine codes for the demo cars.
+const PETROL_CODES = { stored: ['P0420', 'P0171', 'P0300'], pending: ['P0171'], permanent: ['P0420'] };
+// Diesel faults: DPF efficiency, EGR flow, DPF soot load.
+const DIESEL_CODES = { stored: ['P2002', 'P0401', 'P2463'], pending: ['P0401'], permanent: ['P2002'] };
+
+export function demoCodes(car: Pick<DemoCar, 'diesel' | 'obdCodes'>): { stored: string[]; pending: string[]; permanent: string[] } {
+  const c = car.obdCodes ?? (car.diesel ? DIESEL_CODES : PETROL_CODES);
+  return { stored: [...c.stored], pending: [...c.pending], permanent: [...c.permanent] };
+}
+
+// Demo speed (km/h) and engine speed (rpm) t seconds after connecting.
+// Engine speed follows road speed through a gear, so the car never moves
+// with the engine at 0 rpm. Stop-start cars (engineOff) begin with 45 s
+// stopped, engine off, then stop for 30 s of every 2 minutes; the others
+// idle at about 800 rpm when stopped.
+export const DEMO_STOP_FIRST_S = 45;
+export const DEMO_CYCLE_S = 120;
+export const DEMO_STOP_S = 30;
+export function demoDrive(t: number, engineOff = false): { kmh: number; rpm: number } {
+  const wave = (period: number) => (Math.sin((t * 2 * Math.PI) / period) + 1) / 2;
+  const idle = 780 + 40 * wave(3);
+  if (engineOff) {
+    const stopped = t < DEMO_STOP_FIRST_S || (t - DEMO_STOP_FIRST_S) % DEMO_CYCLE_S >= DEMO_CYCLE_S - DEMO_STOP_S;
+    if (stopped) return { kmh: 0, rpm: 0 };
+  }
+  const kmh = Math.round(30 + 50 * wave(23));
+  // Gears change at 25, 45, 65 and 90 km/h; about 40, 28, 20, 16 and 13 rpm per km/h.
+  const perKmh = kmh < 25 ? 40 : kmh < 45 ? 28 : kmh < 65 ? 20 : kmh < 90 ? 16 : 13;
+  return { kmh, rpm: Math.max(idle, kmh * perKmh + 600 * wave(9)) };
+}
+
 const SUPPORTED = [
   0x01, 0x04, 0x05, 0x06, 0x07, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x14, 0x15, 0x1f, 0x20,
   0x21, 0x2e, 0x2f, 0x30, 0x31, 0x33, 0x3c, 0x40, 0x42, 0x43, 0x44, 0x45, 0x46, 0x49, 0x4c, 0x4d, 0x4e, 0x5c,
@@ -256,6 +291,35 @@ function mask(base: number): number[] {
   return out;
 }
 
+// Test only: how long a real adapter and car take per kind of request, so a
+// run on a demo car takes about as long as on the real car. Figures are from
+// the owner's adapter logs (replica/learn-speed-2026-11-16.md). Off unless a
+// test passes a profile; the demo mode never uses one.
+export interface SimTiming {
+  // AT command round trip over the Bluetooth link (ms).
+  link: number;
+  // Protocol switch (AT SP) and adapter reset (AT Z).
+  protocol: number;
+  reset: number;
+  // A module's answer, added to the link time, when the adapter returns at once.
+  reply: number;
+  // Each further frame of a multi-frame answer.
+  frame: number;
+  // Added to the adapter's own wait (AT ST x 4 ms) when it waits it out.
+  overhead: number;
+  // Engine fault code and freeze frame requests (03, 07, 0A, 02), answered.
+  obdCodes: number;
+  // The engine refuses a TP2.0 channel this long after a standard request.
+  engineQuietMs?: number;
+}
+
+// Measured on the 2007 SEAT Leon Cupra (ELM327 clone) and the 2016 Mazda6
+// (OBDLink, STN1151) logs of 13 to 15 Nov 2026.
+export const SIM_TIMING: Record<'leon' | 'mazda', SimTiming> = {
+  leon: { link: 60, protocol: 91, reset: 868, reply: 30, frame: 15, overhead: 70, obdCodes: 200, engineQuietMs: 6000 },
+  mazda: { link: 31, protocol: 71, reset: 960, reply: 30, frame: 15, overhead: 25, obdCodes: 90 },
+};
+
 export class SimTransport implements Transport {
   readonly kind = 'simulated' as const;
   readonly label: string;
@@ -263,8 +327,14 @@ export class SimTransport implements Transport {
   private lastObdAt = 0;
   // How long the client must leave the engine after a standard request.
   get quietNeededMs(): number {
-    return this.car.engineBusyAfterObdMs ?? 0;
+    return this.car.engineBusyAfterObdMs ?? this.timing?.engineQuietMs ?? 0;
   }
+  // Adapter settings that change how long it waits (timing profile only).
+  private st = 0x32;
+  private adaptive = true;
+  // Requests sent, by kind, for the timing measurement.
+  readonly counts: Record<string, number> = {};
+  timing: SimTiming | null = null;
   // Raw CAN mode (protocol B, headers on) and the open TP2.0 channel.
   private raw = false;
   private cra = '';
@@ -277,9 +347,9 @@ export class SimTransport implements Transport {
   private unlocked: Record<string, boolean> = {};
   private static SEED = 0x12345678;
   private busyCount: Record<string, number> = {};
-  private stored = ['P0420', 'P0171', 'P0300'];
-  private pending = ['P0171'];
-  private permanent = ['P0420'];
+  private stored: string[];
+  private pending: string[];
+  private permanent: string[];
   private started = Date.now();
   private monitorsIncomplete = 0x04; // evaporative system not yet complete
   private freeze: Record<number, number[]> | null = {
@@ -305,12 +375,59 @@ export class SimTransport implements Transport {
     this.car = JSON.parse(JSON.stringify(car)) as DemoCar;
     this.label = `Demo car (${car.label})`;
     if (car.diesel) this.monitorsIncomplete = 0x40; // particulate filter not yet complete
+    const codes = demoCodes(car);
+    this.stored = codes.stored;
+    this.pending = codes.pending;
+    this.permanent = codes.permanent;
+    // The freeze frame belongs to the first stored code.
+    if (this.freeze && codes.stored.length) this.freeze[0x02] = encodeDtc(codes.stored[0]);
   }
 
   async send(command: string): Promise<string> {
     if (this.closed) throw new Error('Simulated adapter is disconnected.');
+    const cmd = command.replace(/\s/g, '').toUpperCase();
+    if (this.timing) {
+      // The answer first, then the time a real adapter would have taken.
+      const raw = this.raw;
+      const reply = this.answer(cmd);
+      const ms = this.costOf(cmd, reply, raw, this.timing);
+      if (ms > 0) await new Promise((r) => setTimeout(r, ms));
+      return `${reply}\r\r>`;
+    }
     if (this.delayMs) await new Promise((r) => setTimeout(r, this.delayMs * (0.6 + Math.random() * 0.8)));
-    return `${this.answer(command.replace(/\s/g, '').toUpperCase())}\r\r>`;
+    return `${this.answer(cmd)}\r\r>`;
+  }
+
+  // Time one request takes on the real adapter (timing profile only): AT
+  // commands one link round trip; no answer the adapter's whole wait (AT ST);
+  // an answer the link plus the module's reply, or the whole wait when
+  // adaptive timing is off (the adapter listens for more) or in raw CAN.
+  private costOf(cmd: string, reply: string, raw: boolean, t: SimTiming): number {
+    const kind = (k: string) => (this.counts[k] = (this.counts[k] ?? 0) + 1);
+    if (cmd.startsWith('AT') || cmd === 'STI' || cmd.startsWith('STP')) {
+      kind('at');
+      if (/^ATST[0-9A-F]{1,2}$/.test(cmd)) this.st = parseInt(cmd.slice(4), 16);
+      if (/^ATAT[0-2]$/.test(cmd)) this.adaptive = cmd !== 'ATAT0';
+      if (cmd === 'ATZ' || cmd === 'ATD') {
+        this.st = 0x32;
+        this.adaptive = true;
+      }
+      return cmd === 'ATZ' ? t.reset : /^ATSP/.test(cmd) ? t.protocol : t.link;
+    }
+    const wait = this.st * 4 + t.overhead;
+    const lines = reply.split('\r').filter(Boolean).length;
+    if (/^NO DATA$/.test(reply)) {
+      kind(raw ? 'tp20 silent' : 'silent');
+      return wait;
+    }
+    if (raw) {
+      kind('tp20 frame');
+      // A trailing response count (the channel request) returns at the first frame.
+      return /^[0-9A-F]{2}C0[0-9A-F]{10}1$/.test(cmd) ? t.link + t.reply : wait + (lines - 1) * t.frame;
+    }
+    kind('answered');
+    if (/^(03|07|0A|02)/.test(cmd) && this.header === '7DF') return t.obdCodes;
+    return (this.adaptive ? t.link + t.reply : wait) + (lines - 1) * t.frame;
   }
 
   async close(): Promise<void> {
@@ -368,7 +485,8 @@ export class SimTransport implements Transport {
       this.longWait = true;
       return 'OK';
     }
-    if (cmd === 'ATST32') {
+    // Any shorter wait ends the long one (the sweep restores AT ST 4B or its own).
+    if (/^ATST[0-9A-F]{1,2}$/.test(cmd)) {
       this.longWait = false;
       return 'OK';
     }
@@ -424,6 +542,9 @@ export class SimTransport implements Transport {
       return '44';
     }
     if (cmd === '0902' && !this.car.noObdVin) return frames([0x49, 0x02, 0x01, ...toBytes(this.car.vin)]);
+    // Emissions test results and calibration info (src/diag/demo.ts).
+    const info = mode === '06' ? demoMode06(cmd) : mode === '09' ? demoMode09(cmd, this.car.diesel) : null;
+    if (info) return frames(info);
     return 'NO DATA';
   }
 
@@ -542,7 +663,7 @@ export class SimTransport implements Transport {
       const address = data[0];
       const mods = this.car.tp20;
       if (!mods || !(address in mods) || data[1] !== 0xc0) return 'NO DATA';
-      if (address === 0x01 && this.car.engineBusyAfterObdMs && Date.now() - this.lastObdAt < this.car.engineBusyAfterObdMs) {
+      if (address === 0x01 && this.quietNeededMs && Date.now() - this.lastObdAt < this.quietNeededMs) {
         return `${(0x200 + address).toString(16).toUpperCase()}${hexOf([0x00, 0xd7, 0x00, 0x00, 0x04, 0x00, 0x07, 0x01])}`;
       }
       const left = this.car.tp20Busy?.[address] ?? 0;
@@ -684,7 +805,8 @@ export class SimTransport implements Transport {
   private mode01Table(): Record<number, number[]> {
     const t = (Date.now() - this.started) / 1000;
     const wave = (period: number) => (Math.sin((t * 2 * Math.PI) / period) + 1) / 2;
-    const rpm = this.car.engineOff ? 0 : Math.round((800 + 2200 * wave(9)) * 4);
+    const drive = demoDrive(t, this.car.engineOff);
+    const rpm = Math.round(drive.rpm * 4);
     const two = (v: number) => [(v >> 8) & 0xff, v & 0xff];
     const sinceClear = this.clearedAt ? (Date.now() - this.clearedAt) / 1000 : 4 * 3600;
     const temp = Math.min(90, 20 + t * 2);
@@ -695,16 +817,16 @@ export class SimTransport implements Transport {
       0x01: this.car.diesel
         ? [(this.stored.length ? 0x80 : 0) | this.stored.length, 0x0f, 0xeb, this.monitorsIncomplete]
         : [(this.stored.length ? 0x80 : 0) | this.stored.length, 0x07, 0x65, this.monitorsIncomplete],
-      0x04: [Math.round(40 + 120 * wave(7))],
+      0x04: [drive.rpm ? Math.round(40 + 120 * wave(7)) : 0],
       0x05: [Math.round(40 + temp)],
       0x06: [Math.round(128 + 10 * Math.sin(t * 3))],
       0x07: [this.stored.includes('P0171') ? 147 : 131],
       0x0b: [Math.round(35 + 60 * wave(7))],
       0x0c: two(rpm),
-      0x0d: [Math.round(30 + 50 * wave(23))],
+      0x0d: [drive.kmh],
       0x0e: [Math.round((10 + 20 * wave(7) + 64) * 2)],
       0x0f: [62],
-      0x10: two(Math.round((3 + 25 * wave(9)) * 100)),
+      0x10: two(drive.rpm ? Math.round((3 + 25 * wave(9)) * 100) : 0),
       0x11: [Math.round(20 + 90 * wave(7))],
       0x14: [Math.round(200 * (0.1 + 0.8 * wave(1.3))), 0xff],
       0x15: [Math.round(200 * 0.65), 0xff],

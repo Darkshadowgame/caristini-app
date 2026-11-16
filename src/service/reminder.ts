@@ -23,6 +23,13 @@ export const PLANS: { label: string; everyKm: number; everyMonths: number }[] = 
   { label: 'Every 18,000 miles or 24 months', everyKm: 28968, everyMonths: 24 },
 ];
 
+// A plan in the owner's unit: the miles label as it is, or kilometres to the
+// nearest 1,000 (the plans are set in miles).
+export function planLabel(p: { label: string; everyKm: number; everyMonths: number }, miles = true): string {
+  if (miles) return p.label;
+  return `Every ${(Math.round(p.everyKm / 1000) * 1000).toLocaleString('en-GB')} km or ${p.everyMonths} months`;
+}
+
 export function serviceDue(plan: ServicePlan, odometerKm: number | undefined, now = new Date()): ServiceDue {
   const kmLeft = plan.lastKm != null && odometerKm != null ? plan.lastKm + plan.everyKm - odometerKm : null;
   let daysLeft: number | null = null;

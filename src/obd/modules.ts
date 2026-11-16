@@ -137,8 +137,9 @@ export const MODULES: ModuleDef[] = [
   ford('bcm', 'Body control (BCM / SJB)', '726', '72E', 'FFG; FSC'),
   ford('pscm', 'Power steering', '730', '738', 'opendbc; FSC'),
   ford('apim', 'SYNC (APIM)', '7D0', '7D8', 'FFG; opendbc; FSC'),
-  ford('hvac', 'Heating and air conditioning', '733', '73B', 'FFG'),
-  ford('acm', 'Audio', '727', '72F', 'FFG; FSC'),
+  ford('hvac', 'Heating and air conditioning', '733', '73B', 'FFG; on MS-CAN on Focus Mk3 (focus-st-sources 1.3)', true),
+  ford('acm', 'Audio', '727', '72F', 'FFG; FSC; on MS-CAN on Focus Mk3 (focus-st-sources 1.3)', true),
+  ford('gpsm', 'GPS (if fitted)', '701', '709', 'focus-st-sources 1.3 (FS5, FS6, FS9); on MS-CAN', true),
   ford('fcim', 'Front controls', '7A7', '7AF', 'FFG'),
   ford('fdim', 'Front display', '7A6', '7AE', 'FFG'),
 

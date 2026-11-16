@@ -29,7 +29,8 @@ interface Connection {
   // The adapter used last time, for auto-connect.
   lastAdapter: { id: string; name: string } | null;
   disconnect(): Promise<void>;
-  refreshStatus(): Promise<void>;
+  // Reads the engine light and self-tests again; returns them too.
+  refreshStatus(): Promise<Awaited<ReturnType<ElmClient['readStatus']>> | null>;
 }
 
 const Ctx = createContext<Connection | null>(null);
@@ -198,9 +199,10 @@ export function ConnectionProvider({ children }: { children: React.ReactNode }) 
       },
       refreshStatus: async () => {
         const c = clientRef.current;
-        if (!c) return;
+        if (!c) return null;
         const s = await c.readStatus();
         setInfo((v) => (v ? { ...v, ...s } : v));
+        return s;
       },
     }),
     [status, step, error, client, info, vin, vinSource, garage, start, dropClient, lastAdapter],

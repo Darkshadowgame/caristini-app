@@ -6,7 +6,7 @@
 // Experimental: the TP2.0 addresses of MLB modules are not published, so the
 // scan probes likely addresses. Reads and clears faults only.
 import { ObdError } from './elm';
-import { Transport } from './transport';
+import { LinkLost, Transport } from './transport';
 
 export interface Tp20Fault {
   // VW 5-digit fault number (16-bit DTC in decimal), as workshop tools show it.
@@ -105,7 +105,10 @@ export class Tp20Session {
     let raw: string;
     try {
       raw = await this.send(c, timeout);
-    } catch {
+    } catch (e) {
+      // The adapter has gone: stop here. Swallowing it would make the wait
+      // loop in exchange() spin on failing sends and freeze the app.
+      if (e instanceof LinkLost) throw e;
       return [];
     }
     return parseRawFrames(raw).filter((f) => f.id === this.rx || (f.id & 0xf00) === 0x200);

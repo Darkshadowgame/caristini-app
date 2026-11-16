@@ -7,7 +7,10 @@ import { SECTIONS } from '../help';
 import { MONO, radius, space, type, useTheme } from '../theme';
 import { Button, GlowCard, Group, Icon, IconName, ListRow, Notice, Pill, Screen, success, tap } from '../ui';
 import { partsOf, useGarage, vehicleTitle } from '../vehicle/garage';
-import { catalogueLinks, CODE_FIELDS, CodeKey, idsText, labelHint, ModuleId, PartItem } from '../vehicle/ids';
+import { catalogueLinks, CODE_FIELDS, CodeKey, idsText, labelHint, ModuleId, PartItem, withOlderModules } from '../vehicle/ids';
+import { modulesFor } from '../obd/modules';
+import { tp20Name } from '../obd/tp20';
+import { useConnection } from '../state';
 import { decodeVin, vagModelFromParts } from '../vehicle/vin';
 
 // Parts and IDs: one car's identity numbers and codes, every module's part
@@ -16,6 +19,7 @@ import { decodeVin, vagModelFromParts } from '../vehicle/vin';
 export default function CarIds() {
   const t = useTheme();
   const garage = useGarage();
+  const conn = useConnection();
   const { vin } = useLocalSearchParams<{ vin: string }>();
   const v = garage.get(vin);
   const [open, setOpen] = useState<string | null>(null);
@@ -40,9 +44,16 @@ export default function CarIds() {
   const decoded = decodeVin(v.vin);
   const ids = v.ids ?? {};
   // Earlier versions kept part numbers only in the coding backup.
-  const modules: ModuleId[] =
-    ids.modules ??
-    (v.codingBackup?.modules ?? []).map((m) => ({ id: m.module, name: m.module, part: m.part, coding: m.coding, at: Date.parse(v.codingBackup!.date) }));
+  // Older VW modules found by the health check add their part numbers too.
+  const modules: ModuleId[] = withOlderModules(
+    ids.modules ?? (v.codingBackup?.modules ?? []).map((m) => ({ id: m.module, name: m.module, part: m.part, coding: m.coding, at: Date.parse(v.codingBackup!.date) })),
+    v.deepFound,
+    (id, address) => {
+      const def = modulesFor(v.group).find((d) => d.id === id);
+      return def ? { name: def.name, code: def.code } : { name: tp20Name(address) };
+    },
+  );
+  const connected = conn.status === 'connected' && conn.vehicle?.vin === v.vin;
   const latest = modules.reduce((n, m) => Math.max(n, m.at), 0);
   const parts = v.partsList;
   const groups = [...new Set((parts?.items ?? []).map((p) => p.group))];
@@ -204,10 +215,10 @@ export default function CarIds() {
       <Group
         header={`Control modules${modules.length ? ` (${modules.length})` : ''}`}
         help={SECTIONS.idsModules}
-        footer={modules.length ? `From your last reads, ${new Date(latest).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}. Tap a module for its part number, software and coding; press and hold a line to copy it.` : 'Connect, then open Read part numbers once: every module’s part number, software and coding is kept here.'}
+        footer={modules.length ? `From your last reads, ${new Date(latest).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}. Tap a module for its part number, software and coding; press and hold a line to copy it.` : `${connected ? 'Open' : 'Connect, then open'} Read part numbers once: every module’s part number, software and coding is kept here.`}
       >
         {modules.length ? modules.map(moduleRow) : <ListRow first title="Nothing read yet" noChevron />}
-        <ListRow icon="chip" iconColour="indigo" title="Read part numbers from the car" subtitle="Needs the adapter connected" onPress={() => router.push('/modules')} />
+        <ListRow icon="chip" iconColour="indigo" title="Read part numbers from the car" subtitle={connected ? undefined : 'Needs the adapter connected'} onPress={() => router.push('/modules')} />
       </Group>
 
       <Group header="Parts diagrams by VIN" help={SECTIONS.idsCatalogues} footer="Opening a catalogue sends the VIN to that site. The VIN is copied first, ready to paste.">

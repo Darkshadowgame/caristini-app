@@ -5,7 +5,7 @@ import { MakeBadge } from '../brand/MakeBadge';
 import { Fuse, FUSE_CARS, FuseCar } from '../data/fuses';
 import { useConnection } from '../state';
 import { MONO, radius, space, type, useTheme } from '../theme';
-import { Group, ListRow, Notice, Pill, Screen, SearchField } from '../ui';
+import { Group, Icon, ListRow, Pill, Screen, SearchField } from '../ui';
 import { Vehicle } from '../vehicle/garage';
 import { SECTIONS } from '../help';
 
@@ -26,6 +26,8 @@ export default function Fuses() {
   const params = useLocalSearchParams<{ car?: string }>();
   const [picked, setPicked] = useState<string | undefined>(params.car);
   const [q, setQ] = useState('');
+  // The caveats about this fuse list, behind a row under the list.
+  const [notes, setNotes] = useState(false);
   const car = FUSE_CARS.find((c) => c.id === picked) ?? fuseCarFor(conn.vehicle);
 
   if (!car) {
@@ -52,8 +54,6 @@ export default function Fuses() {
         </View>
       </View>
 
-      {car.caveats.length ? <Notice icon="information-outline" text={car.caveats.join(' ')} /> : null}
-
       <View style={{ marginBottom: space.lg }}>
         <SearchField value={q} onChange={setQ} placeholder="What stopped working? For example radio" />
       </View>
@@ -78,6 +78,30 @@ export default function Fuses() {
           </Group>
         );
       })}
+
+      {car.caveats.length ? (
+        <Group>
+          <ListRow
+            first
+            icon="information-outline"
+            iconColour="grey"
+            title="Notes on this list"
+            subtitle={notes ? undefined : `${car.caveats.length} note${car.caveats.length === 1 ? '' : 's'} on where this list comes from and where it may differ`}
+            right={<Icon name={notes ? 'chevron-up' : 'chevron-down'} size={13} color={t.faint} />}
+            noChevron
+            onPress={() => setNotes(!notes)}
+          />
+          {notes ? (
+            <View style={{ paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.sm }}>
+              {car.caveats.map((c) => (
+                <Text key={c} style={[type.sub, { color: t.text }]}>
+                  {c}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+        </Group>
+      ) : null}
 
       <Group header="Manuals and wiring" help={SECTIONS.fusesManuals} footer="Workshop manuals and wiring diagrams are sold by the maker; these are the official portals.">
         {car.links.map((l, i) => (

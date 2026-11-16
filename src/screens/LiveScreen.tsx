@@ -2,8 +2,9 @@ import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { router, useIsFocused } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
-import { CATEGORY_COLOUR, CATEGORY_ICON, CATEGORY_ORDER, categoryOf, displaySensor, readKey, sensorId, sensorsForCar, SensorValue, unitOf } from '../obd/sensors';
+import { Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { CATEGORY_COLOUR, CATEGORY_ICON, CATEGORY_ORDER, categoryOf, displaySensor, isPlausible, readKey, sensorId, sensorsForCar, SensorValue, unitOf } from '../obd/sensors';
+import { groupValuesText, sensorCount, sensorCountText } from '../vehicle/counts';
 import { extrasFor, formatExtra } from '../obd/extras';
 import { DEFAULT_WATCH, LivePid, PID_GROUPS } from '../obd/pids';
 import { suggestedSensors } from '../obd/sensorSearch';
@@ -12,31 +13,43 @@ import { useConnection } from '../state';
 import { useGarage } from '../vehicle/garage';
 import { ModuleDef } from '../obd/modules';
 import { MeasuringCell } from '../obd/tp20';
-import { groupLabels } from '../data/groupLabels';
+import { groupLabels, groupName, GROUP_NAMES } from '../data/groupLabels';
 import { SECTIONS } from '../help';
 import { radius, space, type, useTheme } from '../theme';
 void Title;
-import { Body, Button, Group, Icon, IconName, Label, ListRow, NeedsConnection, Notice, ProgressBar, Title } from '../ui';
+import { Body, Button, Group, Icon, IconName, Label, ListRow, NeedsConnection, Notice, ProgressBar, SearchField, Title } from '../ui';
+import { AlertLevel, alertLevel, AlertRule, AlertTracker, holdPeak, needsRpm, Peak, setRule } from '../live/alerts';
+import { RateMeter, rateText } from '../live/rate';
+import { filterPids, loadSet, removeSet, saveSet, ValueSet } from '../live/sets';
+import { BOOST_PID } from '../live/boost';
+import { TileSheet } from '../live/LiveTiles';
 
 const HISTORY = 60; // samples kept per value for the trend line
+const RPM = 0x0c;
 
 interface Series {
   last: number | null;
   min: number;
   max: number;
   points: number[];
+  peak?: Peak;
 }
 
 export function LiveScreen({ active = true }: { active?: boolean }) {
+  // Off screen (Fuel trims or Boost opened on top): stop reading, so the page
+  // on screen gets the adapter to itself.
+  const onScreen = useIsFocused();
   const t = useTheme();
   const conn = useConnection();
   const garageMain = useGarage();
   const [available, setAvailable] = useState<LivePid[] | null>(null);
+  const [has70, setHas70] = useState(false);
   const [watch, setWatch] = useState<number[]>([]);
   const [series, setSeries] = useState<Record<number, Series>>({});
   const [paused, setPaused] = useState(false);
   const [picking, setPicking] = useState(false);
-  const [rate, setRate] = useState<number | null>(null);
+  const [rate, setRate] = useState<{ readings: number; updates: number } | null>(null);
+  const meter = useRef(new RateMeter());
   const { settings } = useSettings();
   // Recording: every reading with its time, for a CSV.
   const [recording, setRecording] = useState(false);
@@ -44,8 +57,13 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
   const recStart = useRef(0);
   const [recCount, setRecCount] = useState(0);
   const [recorded, setRecorded] = useState<{ t: number; pid: number; v: number }[] | null>(null);
-  // Alerts while watching: coolant over 110 °C.
+  // Alerts while watching: coolant over 110 °C, and the owner's own limits.
   const [alert, setAlert] = useState<string | null>(null);
+  const [rules, setRules] = useState<AlertRule[]>([]);
+  const rulesRef = useRef<AlertRule[]>([]);
+  rulesRef.current = rules;
+  const tracker = useRef(new AlertTracker());
+  const [editing, setEditing] = useState<LivePid | null>(null);
   const watchRef = useRef<number[]>([]);
   watchRef.current = watch;
 
@@ -54,6 +72,8 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
     const client = conn.client;
     setAvailable(null);
     setSeries({});
+    setRules(conn.vehicle?.liveAlerts ?? []);
+    tracker.current.reset();
     if (!client) return;
     client.livePidsForCar().then(
       (list) => {
@@ -66,61 +86,93 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
       },
       () => setAvailable([]),
     );
+    client.supportedPids().then(
+      (s) => setHas70(s.has(BOOST_PID)),
+      () => setHas70(false),
+    );
   }, [conn.client]);
 
   // Poll the watched values in turn while the tab is open and not paused.
   useEffect(() => {
     const client = conn.client;
-    if (!client || !active || paused || !available) return;
+    if (!client || !active || !onScreen || paused || !available) return;
     let running = true;
+    meter.current.reset();
+    setRate(null);
     (async () => {
+      let lastRpm: number | null = null;
       while (running) {
         const list = available.filter((p) => watchRef.current.includes(p.pid));
         if (!list.length) {
           await new Promise((r) => setTimeout(r, 500));
           continue;
         }
-        // Another screen is talking to a module: wait for it, rather than draw gaps.
+        // An alert that only counts above an engine speed needs engine speed too.
+        const rpmPid = available.find((p) => p.pid === RPM);
+        const read = rpmPid && needsRpm(rulesRef.current) && !list.includes(rpmPid) ? [...list, rpmPid] : list;
+        // Another screen is talking to a module: wait for it, so the trend shows no gaps.
         if (client.moduleBusy) {
           await client.whenIdle();
           continue;
         }
-        const started = Date.now();
-        const got = await client.readLiveMany(list).catch(() => new Map<number, number | null>());
+        const got = await client.readLiveMany(read).catch(() => new Map<number, number | null>());
         if (!running) break;
         const busy = client.moduleBusy;
         let any = false;
+        let answered = 0;
         const now = Date.now();
+        const rpmRead = got.get(RPM);
+        if (rpmRead != null) lastRpm = rpmRead;
+        const levels = new Map<number, AlertLevel>();
         for (const p of list) {
           const v = got.get(p.pid) ?? null;
           any = any || v != null;
+          if (v != null) answered++;
           if (v != null && recRef.current) recRef.current.push({ t: now - recStart.current, pid: p.pid, v });
           if (p.pid === 0x05 && v != null) {
             const shown = toUserUnits(v, '°C', settings);
             setAlert(v > 110 ? `Coolant at ${Math.round(shown.value)} ${shown.unit}. Stop when safe and let the engine cool.` : null);
           }
+          const rule = rulesRef.current.find((r) => r.pid === p.pid);
+          if (rule && got.has(p.pid)) levels.set(p.pid, alertLevel(rule, v, lastRpm));
+        }
+        // One buzz as a value crosses into its alert.
+        if (tracker.current.update(levels, now).length && Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
         }
         // One screen update per pass; values skipped for a busy adapter draw no gap.
         setSeries((old) => {
           const next = { ...old };
-          for (const p of list) {
+          for (const p of read) {
             const v = got.get(p.pid) ?? null;
             if (v == null && (busy || !got.has(p.pid))) continue;
-            next[p.pid] = push(old[p.pid], v);
+            next[p.pid] = push(old[p.pid], v, now);
           }
           return next;
         });
         if (recRef.current) setRecCount(recRef.current.length);
-        if (running && any) setRate((Date.now() - started) / 1000);
+        if (any) {
+          meter.current.add(answered, Date.now());
+          if (running) setRate(meter.current.rate());
+        }
         if (!any && !busy) await new Promise((r) => setTimeout(r, 1500));
       }
     })();
     return () => {
       running = false;
     };
-  }, [conn.client, active, paused, available]);
+  }, [conn.client, active, onScreen, paused, available]);
 
   const shown = useMemo(() => (available ?? []).filter((p) => watch.includes(p.pid)), [available, watch]);
+  const rpmNow = series[RPM]?.last ?? null;
+  const saveRules = (next: AlertRule[]) => {
+    setRules(next);
+    if (conn.vehicle) garageMain.update(conn.vehicle.vin, { liveAlerts: next });
+  };
+  const petrol = conn.vehicle?.fuel !== 'Diesel';
+  const hasTrims = petrol && !!available?.some((p) => p.pid >= 0x06 && p.pid <= 0x09);
+  // Boost: from PID 70, or on older VW engines (TP2.0) from group 115.
+  const hasBoost = has70 || (conn.vehicle?.group === 'vag' && conn.vehicle?.platform === 'PQ35' && !!conn.client?.supportsModules);
 
   if (!conn.client) {
     return (
@@ -134,12 +186,14 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
       <Label help={SECTIONS.liveStandard}>Standard readings (every car)</Label>
       <Body muted style={{ marginBottom: space.md }}>
         {available
-          ? `Watching ${shown.length} of ${available.length} values${rate ? `, about ${Math.max(0.5, Math.round(rate * 2) / 2)} s per update` : ''}. Fewer values update faster.`
+          ? `Watching ${shown.length} of ${available.length} values${
+              rate && settings.developer ? `: ${rateText(rate.readings)} readings a second, ${rateText(rate.updates)} updates a second` : ''
+            }. Fewer values update faster.`
           : 'Asking the car which values it reports…'}
       </Body>
 
       <View style={{ flexDirection: 'row', gap: space.sm, marginBottom: space.lg }}>
-        <Button label="Choose values" icon="playlist-check" variant="secondary" compact onPress={() => setPicking(true)} style={{ flex: 1 }} disabled={!available} />
+        <Button label="Choose" icon="playlist-check" variant="secondary" compact onPress={() => setPicking(true)} style={{ flex: 1 }} disabled={!available} />
         <Button label={paused ? 'Resume' : 'Pause'} icon={paused ? 'play' : 'pause'} variant="secondary" compact onPress={() => setPaused((p) => !p)} style={{ flex: 1 }} />
         <Button label="Reset" icon="restart" variant="secondary" compact onPress={() => setSeries({})} style={{ flex: 1 }} />
       </View>
@@ -185,28 +239,62 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
       <View style={styles.grid}>
         {shown.map((p) => {
           const s = series[p.pid];
+          const rule = rules.find((r) => r.pid === p.pid);
+          const level = alertLevel(rule, s?.last, rpmNow);
+          const f = (v: number) => toUserUnits(v, p.unit, settings).value.toFixed(p.decimals);
+          const held = s?.peak && s.last != null && s.peak.value > s.last ? s.peak.value : null;
+          const valueText = s?.last == null ? 'No reading' : `${f(s.last)} ${toUserUnits(0, p.unit, settings).unit}`;
           return (
-            <View key={p.pid} style={[styles.tile, { backgroundColor: t.surface, borderColor: t.border }]}>
-              <Text numberOfLines={1} style={[styles.tileLabel, { color: t.muted }]}>{p.label}</Text>
+            <Pressable
+              key={p.pid}
+              accessibilityRole="button"
+              accessibilityLabel={`${p.label}, ${valueText}${level ? ', past the alert limit' : ''}. Opens alerts and lowest and highest.`}
+              onPress={() => setEditing(p)}
+              style={({ pressed }) => [
+                styles.tile,
+                { backgroundColor: level ? t.dangerSoft : pressed ? t.raised : t.surface, borderColor: level ? t.danger : t.border },
+                level ? styles.tileAlert : null,
+              ]}
+            >
+              <View style={styles.tileHead}>
+                <Text numberOfLines={1} style={[styles.tileLabel, { color: level ? t.danger : t.muted, flex: 1 }]}>
+                  {p.label}
+                </Text>
+                {rule ? <Icon name={level ? 'bell-ring' : 'bell-outline'} size={13} color={level ? t.danger : t.faint} /> : null}
+              </View>
               {s && s.last == null ? (
                 // Read, but the car sent no value (an O2 sensor's 1.275 V means none).
                 <Text style={[styles.tileValue, styles.noReading, { color: t.faint }]}>No reading</Text>
               ) : (
-                <Text style={[styles.tileValue, { color: t.text }]} accessibilityLabel={s?.last == null ? 'No reading' : undefined}>
-                  {s?.last == null ? '–' : toUserUnits(s.last, p.unit, settings).value.toFixed(p.decimals)}
+                <Text style={[styles.tileValue, { color: level ? t.danger : t.text }]} accessibilityLabel={s?.last == null ? 'No reading' : undefined}>
+                  {s?.last == null ? '–' : f(s.last)}
                   <Text style={[styles.unit, { color: t.muted }]}> {toUserUnits(0, p.unit, settings).unit}</Text>
                 </Text>
               )}
               <Spark points={s?.points ?? []} />
               <Text style={[styles.minmax, { color: t.muted }]}>
-                {s && s.points.length
-                  ? `min ${toUserUnits(s.min, p.unit, settings).value.toFixed(p.decimals)} · max ${toUserUnits(s.max, p.unit, settings).value.toFixed(p.decimals)}`
-                  : ' '}
+                {s && s.points.length ? `min ${f(s.min)} · max ${f(s.max)}${held != null ? ` · peak ${f(held)}` : ''}` : ' '}
               </Text>
-            </View>
+            </Pressable>
           );
         })}
       </View>
+      {shown.length ? (
+        <Body muted small style={{ marginTop: space.sm }}>
+          Tap a tile for alert limits and its lowest and highest.
+        </Body>
+      ) : null}
+
+      {hasTrims || hasBoost ? (
+        <Group header="Views" help={SECTIONS.liveViews} style={{ marginTop: space.xl, marginBottom: 0 }}>
+          {hasTrims ? (
+            <ListRow first icon={'gas-station' as IconName} iconColour="green" title="Fuel trims" subtitle="Per bank, with lambda and oxygen sensors" onPress={() => router.push('/fuel-trims')} />
+          ) : null}
+          {hasBoost ? (
+            <ListRow first={!hasTrims} icon={'turbine' as IconName} iconColour="indigo" title="Turbo boost" subtitle="Requested and actual" onPress={() => router.push('/boost')} />
+          ) : null}
+        </Group>
+      ) : null}
 
       <MakerData />
       <MeasuringBlocks />
@@ -215,10 +303,34 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
         visible={picking}
         available={available ?? []}
         selected={watch}
+        sets={conn.vehicle?.liveSets ?? []}
+        onSets={(next) => {
+          if (conn.vehicle) garageMain.update(conn.vehicle.vin, { liveSets: next });
+        }}
         onClose={(next) => {
           setWatch(next);
           setPicking(false);
           if (conn.vehicle) garageMain.update(conn.vehicle.vin, { liveWatch: next });
+        }}
+      />
+      <TileSheet
+        pid={editing}
+        rule={editing ? rules.find((r) => r.pid === editing.pid) : undefined}
+        minMax={editing && series[editing.pid]?.points.length ? series[editing.pid] : null}
+        peak={editing ? series[editing.pid]?.peak : null}
+        settings={settings}
+        onClose={() => setEditing(null)}
+        onResetMinMax={() => {
+          if (!editing) return;
+          setSeries((old) => {
+            const next = { ...old };
+            delete next[editing.pid];
+            return next;
+          });
+        }}
+        onSave={(rule) => {
+          if (editing) saveRules(setRule(rules, editing.pid, rule));
+          setEditing(null);
         }}
       />
     </View>
@@ -239,9 +351,15 @@ function SensorHub({ active: shown }: { active: boolean }) {
   const found = useMemo(() => new Set(v?.sensorsFound ?? []), [v?.sensorsFound]);
   const mine = useMemo(() => all.filter((r) => found.has(readKey(r))), [all, found]);
   const chosen = useMemo(() => mine.filter((r) => (v?.pinnedSensors ?? []).includes(sensorId(r))).slice(0, 8), [mine, v?.pinnedSensors]);
+  // Suggested values that read outside a sane range for their unit (a value
+  // from a relative's list that decodes differently on this car): replaced.
+  const [odd, setOdd] = useState<string[]>([]);
   // Nothing pinned yet: show the most useful value from each main system, so
   // Live data opens on real numbers (gearbox oil temperature, DPF soot).
-  const suggested = useMemo(() => (chosen.length ? [] : suggestedSensors(mine, unitOf, 4, conn.vehicle?.fuel)), [mine, chosen.length, conn.vehicle?.fuel]);
+  const suggested = useMemo(
+    () => (chosen.length ? [] : suggestedSensors(mine.filter((r) => !odd.includes(sensorId(r))), unitOf, 4, conn.vehicle?.fuel)),
+    [mine, chosen.length, conn.vehicle?.fuel, odd],
+  );
   const pinned = chosen.length ? chosen : suggested;
   const [values, setValues] = useState<Record<string, SensorValue>>({});
   useEffect(() => {
@@ -253,6 +371,13 @@ function SensorHub({ active: shown }: { active: boolean }) {
         const got = await c.readSensors(pinned, () => !on).catch(() => ({}) as Record<string, SensorValue>);
         if (!on) break;
         setValues((old) => ({ ...old, ...got }));
+        if (!chosen.length) {
+          const bad = pinned.filter((r) => got[sensorId(r)] != null && !isPlausible(r, got[sensorId(r)])).map(sensorId);
+          if (bad.length) {
+            setOdd((old) => [...new Set([...old, ...bad])]);
+            break;
+          }
+        }
         await new Promise((r) => setTimeout(r, 800));
       }
     })();
@@ -260,7 +385,7 @@ function SensorHub({ active: shown }: { active: boolean }) {
       on = false;
     };
   }, [conn.client, active, pinned]);
-  if (!v || !conn.client?.supportsModules || v.group === 'other') return null;
+  if (!v || !conn.client?.supportsModules || v.group === 'other' || !all.length) return null;
   const imperial = { speed: settings.speed === 'mph', temp: settings.temp === '°F' };
   const counts = CATEGORY_ORDER.map((c) => ({ c, n: mine.filter((r) => categoryOf(r) === c).length })).filter((x) => x.n);
 
@@ -302,11 +427,11 @@ function SensorHub({ active: shown }: { active: boolean }) {
           })}
         </View>
       ) : null}
-      <Group header={`${mine.length} sensor${mine.length === 1 ? '' : 's'} on this car`} help={SECTIONS.liveHub} footer={chosen.length ? undefined : 'Open a system and tap the star on a value to pin your own here.'}>
+      <Group header={`${sensorCountText({ ...sensorCount(v), groupValues: 0, groups: 0 })} on this car`} help={SECTIONS.liveHub} footer={chosen.length ? undefined : 'Open a system and tap the star on a value to pin your own here.'}>
         {counts.map(({ c, n }, i) => (
           <ListRow key={c} first={i === 0} icon={CATEGORY_ICON[c] as IconName} iconColour={CATEGORY_COLOUR[c]} title={c} value={String(n)} onPress={() => router.push({ pathname: '/sensors', params: { cat: c } })} />
         ))}
-        <ListRow icon="magnify" iconColour="grey" title="Search all sensors" onPress={() => router.push('/sensors')} />
+        <ListRow icon={'radar' as IconName} iconColour="grey" title="Find my car’s sensors" subtitle="Search by name, or search the car again" onPress={() => router.push('/sensors')} />
       </Group>
     </View>
   );
@@ -383,7 +508,8 @@ function MakerData() {
       ) : null}
       <View style={[styles.maker, { backgroundColor: t.surface, borderColor: t.border }]}>
         <Body muted small style={{ marginBottom: space.md }}>
-          From owner sources, not the maker. Only values your car answers are shown.
+          A short list of extra values from owner sources (the odometer in each module, DPF soot, crash counts).
+          {sensorsForCar(conn.vehicle).length ? ' Find my car’s sensors, at the top, looks for every sensor; Learn my car runs that search for you.' : ''}
         </Body>
         {progress != null ? (
           <ProgressBar value={progress} label="Reading maker data…" />
@@ -418,14 +544,12 @@ function MakerData() {
 
 // Older VW modules (KWP2000 over TP2.0): measuring blocks by group number.
 // Known groups come from replica/leon-sources.md 4.3 (2.0 TFSI engine).
-const PRESETS: { module: string; group: number; label: string }[] = [
-  { module: 'engine', group: 1, label: 'Engine basics (group 1)' },
-  { module: 'engine', group: 115, label: 'Boost (group 115)' },
-  { module: 'engine', group: 114, label: 'Boost control (group 114)' },
-  { module: 'engine', group: 3, label: 'Air mass and timing (group 3)' },
-];
+const PRESETS: { module: string; group: number; label: string }[] = [1, 115, 114, 3]
+  .filter((g) => GROUP_NAMES['01'][g])
+  .map((g) => ({ module: 'engine', group: g, label: groupName('01', g) }));
 
 function MeasuringBlocks() {
+  const focused = useIsFocused();
   const t = useTheme();
   const conn = useConnection();
   const client = conn.client;
@@ -479,6 +603,11 @@ function MeasuringBlocks() {
       setBusy(null);
     }
   };
+  // Another screen opened on top (Boost reads the same engine): stop watching,
+  // or that screen would wait behind this one.
+  useEffect(() => {
+    if (!focused && liveRef.current) liveRef.current = false;
+  }, [focused]);
   const toggleLive = async () => {
     if (!module) return;
     if (liveRef.current) {
@@ -510,11 +639,14 @@ function MeasuringBlocks() {
       <Label help={SECTIONS.liveOlder}>Older VW modules</Label>
       <View style={[styles.maker, { backgroundColor: t.surface, borderColor: t.border }]}>
         <Body muted small style={{ marginBottom: space.md }}>
-          Older VW modules give live values in numbered groups. Units come from each value itself; values with an unknown
-          formula are shown raw.
+          Older VW modules give live values in numbered value groups. Units come from each value itself; values with an unknown
+          formula are shown raw. Learn my car finds these modules and their groups for you.
         </Body>
         {!modules ? (
-          <Button label={busy === 'find' ? 'Looking…' : 'Find older modules'} icon="database-search-outline" variant="secondary" busy={busy === 'find'} onPress={find} />
+          <>
+            <Button label={busy === 'find' ? 'Looking…' : 'Find older modules'} icon="database-search-outline" variant="secondary" busy={busy === 'find'} onPress={find} />
+            <Body muted small style={{ marginTop: space.sm }}>Lists the older modules on this car, without running Learn my car.</Body>
+          </>
         ) : !modules.length ? (
           <Body muted small>No module on this car answered on the older protocol.</Body>
         ) : (
@@ -547,7 +679,8 @@ function MeasuringBlocks() {
             </View>
             <View style={{ gap: space.sm }}>
               <Button label={live ? 'Stop live' : 'Live'} icon="chart-timeline-variant" onPress={toggleLive} disabled={!!busy} />
-              <Button label="Find values in every group" icon="magnify" variant="ghost" busy={busy === 'scan'} disabled={!!busy || live} onPress={scanAll} />
+              <Button label="Read every group of this module" icon="magnify" variant="ghost" busy={busy === 'scan'} disabled={!!busy || live} onPress={scanAll} />
+              <Body muted small>Reads groups 1 to 255 now and shows what each holds. Learn my car reads them too and keeps the list below.</Body>
             </View>
             {cells ? (
               cells.length ? (
@@ -564,23 +697,22 @@ function MeasuringBlocks() {
             {busy === 'scan' ? <ProgressBar value={pct} label="Reading groups 1 to 255" /> : null}
             {!found.length && savedGroups.length ? (
               <Body muted small style={{ marginTop: space.md }}>
-                {savedGroups.length} {savedGroups.length === 1 ? 'group' : 'groups'} with values, found by Learn my car. Tap one to read it.
+                {groupValuesText({ groupValues: savedGroups.reduce((n, g) => n + g.units.length, 0), groups: savedGroups.length })} in the {module?.name.toLowerCase()}, found by Learn my car. Tap one to read it.
               </Body>
             ) : null}
             {found.length
               ? null
               : savedGroups.map((f) => (
                   <Pressable key={f.group} accessibilityRole="button" onPress={() => read(f.group)} style={[styles.makerRow, { borderColor: t.border }]}>
-                    <Text style={[styles.makerLabel, { color: t.text, width: 80 }]}>Group {f.group}</Text>
-                    <Text style={[styles.makerSource, { color: t.muted, flex: 1 }]} numberOfLines={2}>
-                      {(groupLabels(module?.code, f.group)?.filter(Boolean).slice(0, 2).join(', ') || f.units.filter((u) => u !== 'raw').join(' · ')) || `${f.units.length} value${f.units.length === 1 ? '' : 's'}`}
+                    <Text style={[styles.makerLabel, { color: t.text, flex: 1 }]} numberOfLines={2}>{groupName(module?.code, f.group)}</Text>
+                    <Text style={[styles.makerSource, { color: t.muted }]}>
+                      {f.units.length} value{f.units.length === 1 ? '' : 's'}
                     </Text>
                   </Pressable>
                 ))}
             {found.map((f) => (
               <Pressable key={f.group} accessibilityRole="button" onPress={() => read(f.group)} style={[styles.makerRow, { borderColor: t.border }]}>
-                <Text style={[styles.makerLabel, { color: t.text, width: 80 }]}>Group {f.group}</Text>
-                {groupLabels(module?.code, f.group) ? <Text style={[styles.makerSource, { color: t.accentText }]}>{groupLabels(module?.code, f.group)!.filter(Boolean).slice(0, 2).join(', ')}</Text> : null}
+                <Text style={[styles.makerLabel, { color: t.text, width: 120 }]} numberOfLines={2}>{groupName(module?.code, f.group)}</Text>
                 <Text style={[styles.makerSource, { color: t.muted, flex: 1 }]} numberOfLines={2}>
                   {f.cells.map(fmt).join(' · ')}
                 </Text>
@@ -630,11 +762,11 @@ function RecordingSummary({ rows, pids }: { rows: { t: number; pid: number; v: n
   );
 }
 
-function push(old: Series | undefined, v: number | null): Series {
+function push(old: Series | undefined, v: number | null, now = Date.now()): Series {
   // Only answers reach here: a null is the car saying it has no value now.
   if (v == null) return { ...(old ?? { min: Infinity, max: -Infinity, points: [] }), last: null };
   const points = [...(old?.points ?? []), v].slice(-HISTORY);
-  return { last: v, min: Math.min(old?.min ?? Infinity, v), max: Math.max(old?.max ?? -Infinity, v), points };
+  return { last: v, min: Math.min(old?.min ?? Infinity, v), max: Math.max(old?.max ?? -Infinity, v), points, peak: holdPeak(old?.peak, v, now) };
 }
 
 // Trend of the last samples, drawn as thin bars so no chart library is needed.
@@ -665,22 +797,42 @@ function Picker({
   visible,
   available,
   selected,
+  sets,
+  onSets,
   onClose,
 }: {
   visible: boolean;
   available: LivePid[];
   selected: number[];
+  // Named sets saved on this car.
+  sets: ValueSet[];
+  onSets: (next: ValueSet[]) => void;
   onClose: (next: number[]) => void;
 }) {
   const t = useTheme();
   const { settings } = useSettings();
   const [draft, setDraft] = useState<number[]>(selected);
+  const [query, setQuery] = useState('');
+  const [name, setName] = useState('');
+  const [mySets, setMySets] = useState<ValueSet[]>(sets);
   useEffect(() => {
-    if (visible) setDraft(selected);
-  }, [visible, selected]);
+    if (!visible) return;
+    setDraft(selected);
+    setQuery('');
+    setName('');
+    setMySets(sets);
+    // Start fresh each time the sheet opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   const toggle = (pid: number) => setDraft((d) => (d.includes(pid) ? d.filter((x) => x !== pid) : [...d, pid]));
   const ios = Platform.OS === 'ios';
+  const matches = filterPids(available, query);
+  const changeSets = (next: ValueSet[]) => {
+    setMySets(next);
+    onSets(next);
+  };
+  const ids = available.map((p) => p.pid);
 
   // A native page sheet on iPhone: Cancel and Done in the bar, inset grouped
   // rows with a trailing checkmark in the tint.
@@ -702,12 +854,65 @@ function Picker({
             <Text style={[styles.barText, { color: t.accentText, fontWeight: '600' }]}>Done</Text>
           </Pressable>
         </View>
-        <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 60 }}>
+        <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
+          <View style={{ marginBottom: space.md }}>
+            <SearchField value={query} onChange={setQuery} placeholder="Search values, for example trim or temp" caps={false} />
+          </View>
           <Text style={[styles.sheetNote, { color: t.muted }]}>
             Watching {draft.length} of {available.length}. Fewer values update faster.
           </Text>
+
+          {!query.trim() ? (
+            <Group header="Saved sets" help={SECTIONS.liveSets} footer={mySets.length ? 'Tap a set to load it. Values this car does not report are left out.' : undefined}>
+              {mySets.map((s, i) => (
+                <ListRow
+                  key={s.name}
+                  first={i === 0}
+                  title={s.name}
+                  value={`${s.pids.length} value${s.pids.length === 1 ? '' : 's'}`}
+                  noChevron
+                  onPress={() => setDraft(loadSet(s, ids))}
+                  right={
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete the set ${s.name}`}
+                      hitSlop={10}
+                      onPress={() => changeSets(removeSet(mySets, s.name))}
+                      style={styles.trash}
+                    >
+                      <Icon name="trash-can-outline" size={18} color={t.muted} />
+                    </Pressable>
+                  }
+                />
+              ))}
+              <View style={[styles.saveRow, { borderColor: t.border, borderTopWidth: mySets.length ? StyleSheet.hairlineWidth : 0 }]}>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Name for these values"
+                  placeholderTextColor={t.faint}
+                  accessibilityLabel="Name for these values"
+                  returnKeyType="done"
+                  selectionColor={t.accent}
+                  style={[type.body, { flex: 1, color: t.text, paddingVertical: 10 }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
+                />
+                <Button
+                  label="Save set"
+                  compact
+                  variant="secondary"
+                  disabled={!name.trim() || !draft.length}
+                  onPress={() => {
+                    changeSets(saveSet(mySets, name, draft));
+                    setName('');
+                  }}
+                />
+              </View>
+            </Group>
+          ) : null}
+
+          {query.trim() && !matches.length ? <Notice text="No value matches. Try another word, for example speed, fuel or temp." /> : null}
           {PID_GROUPS.map((g) => {
-            const items = available.filter((p) => p.group === g);
+            const items = matches.filter((p) => p.group === g);
             if (!items.length) return null;
             return (
               <Group key={g} header={g}>
@@ -744,6 +949,10 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
   tile: { flexGrow: 1, flexBasis: '45%', borderRadius: radius.lg, padding: space.md },
   tileLabel: { fontSize: 13, fontWeight: '600', marginBottom: space.xs },
+  tileHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  tileAlert: { borderWidth: 2, padding: space.md - 2 },
+  saveRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.xs },
+  trash: { paddingHorizontal: space.md, minHeight: 44, justifyContent: 'center' },
   tileValue: { fontSize: 26, fontWeight: '700', letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
   unit: { fontSize: 14, fontWeight: '500' },
   noReading: { fontSize: 17, lineHeight: 31 },
