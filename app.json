@@ -38,7 +38,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Caristini uses your location only while the data logger records or waits to start, to save the route with the log and keep logging with the screen off.",
+          "locationWhenInUsePermission": "Caristini uses your location only while the data logger or a long read such as Learn my car is running. It keeps the read going when you switch apps or lock the phone, and saves the route with data logs. Your location stays on this phone.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "motionUsagePermission": false,

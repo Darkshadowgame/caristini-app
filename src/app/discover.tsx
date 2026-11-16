@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { allowSleep, stayAwake } from '../keepAwake';
+import { keepRunning, letStop } from '../background';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { aboutTime, addSample, afterQuick, DISCOVER_RANGES, DiscoverModule, Discovery, exploreStatus, fullSeconds, knownName, loadDiscovery, modulesToExplore, quickDone, quickExploreRanges, quickResume, rangeSize, readings, saveDiscovery } from '../discover';
@@ -99,6 +100,8 @@ export default function Discover() {
     stop.current = false;
     setMessage(null);
     stayAwake('discover');
+    void keepRunning('discover');
+    let finished = false;
     try {
       for (const def of list) {
         if (stop.current || !alive.current) break;
@@ -168,10 +171,12 @@ export default function Discover() {
         }
       }
       success();
+      finished = true;
     } catch (e) {
       if (alive.current) setMessage({ tone: 'danger', text: e instanceof Error ? e.message : String(e) });
     } finally {
       allowSleep('discover');
+      letStop('discover', finished);
       void sendLogNow(`Discover ${mode} explore`, v);
       if (discRef.current) await saveDiscovery(discRef.current);
       if (alive.current) {

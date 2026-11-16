@@ -1,5 +1,7 @@
 import { router, Stack } from 'expo-router';
 import { allowSleep, stayAwake } from '../keepAwake';
+import { backgroundNote, keepRunning, letStop } from '../background';
+import type { GpsStart } from '../logger/gps';
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import { estimateSeconds, FULL_READ_DAYS, LEARN_ORDER, learnEstimate, learnMode, LearnStep, learnSummaryHeader, LearnSummary, runLearn, StepOutcome } from '../learn/runLearn';
@@ -58,6 +60,8 @@ export default function LearnCar() {
   const [error, setError] = useState<string | null>(null);
   const stop = useRef(false);
   const [stopping, setStopping] = useState(false);
+  // Whether this run can carry on with Caristini in the background.
+  const [bg, setBg] = useState<GpsStart | null>(null);
   const learnStarted = useRef(0);
   // When the step on screen began, for the time left.
   const stepStarted = useRef(0);
@@ -115,6 +119,9 @@ export default function LearnCar() {
     setSummary(null);
     setOutcomes({});
     stayAwake('learn');
+    setBg(null);
+    let finished = false;
+    void keepRunning('learn').then((b) => alive.current && setBg(b));
     try {
       const r = await runLearn({
         client,
@@ -140,6 +147,7 @@ export default function LearnCar() {
         sendBack: (kind, vin, data) => sendBack(kind, vin, data),
       });
       if (!alive.current) return;
+      finished = true;
       if (r.aborted) setError(r.aborted);
       else success();
       // The final notes: step 1's count takes in modules the health check added.
@@ -149,6 +157,8 @@ export default function LearnCar() {
       if (alive.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
       allowSleep('learn');
+      letStop('learn', finished);
+      if (alive.current) setBg(null);
       if (send) void sendLogNow('Learn my car', v);
       else skipUnsentLog();
       if (alive.current) setRunning(null);
@@ -213,6 +223,8 @@ export default function LearnCar() {
           </View>
         )}
       </GlowCard>
+
+      {running && backgroundNote(bg) ? <Notice icon={bg === 'on' ? 'cellphone-arrow-down' : 'cellphone-lock'} text={backgroundNote(bg)!} /> : null}
 
       {summary && !summary.aborted && !running ? (
         <Group

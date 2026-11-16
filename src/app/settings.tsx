@@ -91,6 +91,10 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
         }, undefined, true)}
       </Group>
 
+      <Group header="Long reads" footer="Learn my car, Find my car’s sensors and Unknown values carry on when you switch apps or lock the phone. iPhone asks once to use your location: that is what lets an app keep running. No position is saved or sent. Swiping Caristini away in the app switcher still stops it.">
+        {toggle('Keep going in the background', settings.backgroundRuns !== false, (v) => set({ backgroundRuns: v }), undefined, true)}
+      </Group>
+
       <Group header="Adapter" help={SECTIONS.settingsAdapter} footer="Reads what the adapter is and how fast it answers. Changes nothing in the car.">
         {report ? (
           <>

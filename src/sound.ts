@@ -9,12 +9,13 @@ import { AudioPlayer, createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
-export type AlertSound = 'alert' | 'shift' | 'warn';
+export type AlertSound = 'alert' | 'shift' | 'warn' | 'done';
 
 const FILES: Record<AlertSound, number> = {
   alert: require('../assets/sounds/alert.wav'),
   shift: require('../assets/sounds/shift.wav'),
   warn: require('../assets/sounds/warn.wav'),
+  done: require('../assets/sounds/done.wav'),
 };
 
 let soundsOn = true;

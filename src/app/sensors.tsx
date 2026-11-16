@@ -1,5 +1,6 @@
 import { Stack, router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { allowSleep, stayAwake } from '../keepAwake';
+import { keepRunning, letStop } from '../background';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { addHistory } from '../history';
@@ -129,6 +130,8 @@ export default function Sensors() {
     setMessage(null);
     setLiveFound(0);
     stayAwake('sensors');
+    void keepRunning('sensors');
+    let finished = false;
     scanStarted.current = Date.now();
     const rows = mode === 'quick' ? quickList : fullList;
     const scope = new Set(rows.map(readKey));
@@ -171,11 +174,13 @@ export default function Sensors() {
       const r = await sendBack('sensors', v.vin, { car: { brand: v.brand, model: v.model, year: v.year, platform: v.platform, group: v.group }, found: [...keys], samples }).catch(
         (e) => ({ via: 'none' as const, detail: e instanceof Error ? e.message : String(e) }),
       );
+      finished = true;
       if (alive.current) setMessage({ tone: 'ok', text: `${note} ${r.via === 'github' ? 'Sent back so other cars learn from it.' : r.detail}` });
     } catch (e) {
       if (alive.current) setMessage({ tone: 'danger', text: e instanceof Error ? e.message : String(e) });
     } finally {
       allowSleep('sensors');
+      letStop('sensors', finished);
       void sendLogNow(`sensor ${mode} search`, v);
       if (alive.current) {
         setSearching(false);

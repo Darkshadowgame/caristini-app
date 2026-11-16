@@ -1,0 +1,4 @@
+# Files that do not change the native app, so they must not change the
+# runtime fingerprint (a .gitignore edit on 15 Nov 2026 stopped updates
+# reaching the installed app).
+.gitignore
