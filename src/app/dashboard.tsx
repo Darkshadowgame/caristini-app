@@ -1,4 +1,4 @@
-import * as Haptics from 'expo-haptics';
+import { alertBuzz } from '../sound';
 import { allowSleep, stayAwake } from '../keepAwake';
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, ScrollViewInstance, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -160,9 +160,7 @@ export default function Dashboard() {
           });
           const levels = new Map<number, AlertLevel>();
           for (const r of rulesRef.current) if (got.has(r.pid)) levels.set(r.pid, alertLevel(r, got.get(r.pid), lastRpm));
-          if (tracker.current.update(levels, now).length && Platform.OS !== 'web') {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
-          }
+          if (tracker.current.update(levels, now).length) alertBuzz('alert');
         }
         if (answered) {
           meter.current.add(answered, now);
@@ -193,10 +191,10 @@ export default function Dashboard() {
   const alertKey = alerts.map((a) => a.key).join(',');
   const lastKey = useRef('');
   useEffect(() => {
-    // A warning haptic each time a new alert appears.
+    // A warning buzz and sound each time a new alert appears.
     const fresh = alertKey.split(',').some((k) => k && !lastKey.current.split(',').includes(k));
     lastKey.current = alertKey;
-    if (fresh && Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+    if (fresh) alertBuzz('alert');
   }, [alertKey]);
 
   // Whether the shift light was on at the last reading (for its 150 rpm margin).

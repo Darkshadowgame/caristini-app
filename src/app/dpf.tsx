@@ -1,5 +1,5 @@
 // DPF monitor for diesels. Logic and sources: src/monitors/dpf.ts.
-import * as Haptics from 'expo-haptics';
+import { alertBuzz } from '../sound';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
@@ -64,7 +64,7 @@ export default function Dpf() {
       setReadAt(Date.now());
       if (plan.regen) {
         const on = got[plan.regen.id] != null ? got[plan.regen.id] > 0 : null;
-        if (on && was === false) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+        if (on && was === false) alertBuzz('warn');
         if (on != null) was = on;
         setEvents((e) => trackRegen(e, on, Date.now()));
       }

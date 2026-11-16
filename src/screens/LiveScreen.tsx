@@ -1,4 +1,4 @@
-import * as Haptics from 'expo-haptics';
+import { alertBuzz } from '../sound';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { router, useIsFocused } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -137,9 +137,7 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
           if (rule && got.has(p.pid)) levels.set(p.pid, alertLevel(rule, v, lastRpm));
         }
         // One buzz as a value crosses into its alert.
-        if (tracker.current.update(levels, now).length && Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
-        }
+        if (tracker.current.update(levels, now).length) alertBuzz('alert');
         // One screen update per pass; values skipped for a busy adapter draw no gap.
         setSeries((old) => {
           const next = { ...old };
@@ -461,7 +459,7 @@ function MakerData() {
       if (!alive) return;
       const on = got[regen.id] != null ? got[regen.id] > 0 : null;
       if (on !== was && on != null) {
-        if (on) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+        if (on) alertBuzz('warn');
         was = on;
       }
       setRegenOn(on);

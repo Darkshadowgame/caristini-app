@@ -23,8 +23,7 @@ export interface LogChannel {
   decimals: number;
 }
 
-// #17 GPS trace, preparation only. A row may carry a phone position. Nothing
-// fills these yet: see src/logger/gps.ts for where a GPS source plugs in.
+// A row may carry the phone's position while GPS is on (src/logger/gps.ts).
 export interface GpsFields {
   lat?: number;
   lon?: number;
@@ -55,7 +54,7 @@ export interface DataLog {
   channels: LogChannel[];
   rows: LogRow[];
   markers: LogMarker[];
-  // Set once a GPS source exists; absent means no position was recorded.
+  // Set when the log holds positions; absent means no position was recorded.
   gps?: { source: string };
 }
 

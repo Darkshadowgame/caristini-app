@@ -7,9 +7,10 @@ import { SECTIONS } from '../help';
 import { toUserUnits, useSettings } from '../settings';
 import { radius, space, type, useTheme } from '../theme';
 import { Body, Button, Card, ConfirmSheet, GuideButton, Group, ListRow, Notice, Screen } from '../ui';
-import { chartColours, ChartLine, LogChart } from '../logger/Charts';
+import { chartColours, ChartLine, LogChart, RouteView } from '../logger/Charts';
+import { routeIndexAt, routeKm, routeOf, toGpx } from '../logger/gps';
 import { DataLog, formatDuration, formatWhen, LogChannel, logRate, seriesOf, statsOf, toCsv, valueAt } from '../logger/format';
-import { deleteLog, loadLog, shareCsv } from '../logger/store';
+import { deleteLog, loadLog, shareCsv, shareGpx } from '../logger/store';
 
 type View_ = 'each' | 'all';
 
@@ -47,6 +48,7 @@ export default function LogView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [log, t]);
   const combined = useMemo<ChartLine[]>(() => data.flatMap((d) => d.line), [data]);
+  const route = useMemo(() => (log ? routeOf(log.rows) : []), [log]);
 
   const header = <Stack.Screen options={{ title: log ? formatWhen(log.startedAt) : 'Log', headerRight: () => <GuideButton id="logger" /> }} />;
   if (log === undefined) {
@@ -72,6 +74,10 @@ export default function LogView() {
     return `${u.value.toFixed(c.decimals)}${u.unit ? ` ${u.unit}` : ''}`;
   };
   const rate = logRate(log);
+  const km = route.length > 1 ? routeKm(route) : 0;
+  const dist = toUserUnits(km, 'km', settings);
+  const here = cursor != null && route.length ? route[routeIndexAt(route, cursor)] : null;
+  const hereSpeed = here?.kmh != null ? toUserUnits(here.kmh, 'km/h', settings) : null;
   const near = cursor != null ? log.markers.find((m) => Math.abs(m.t - cursor) < Math.max(250, log.durationMs / 200)) : undefined;
 
   return (
@@ -99,6 +105,21 @@ export default function LogView() {
               shareCsv(`Caristini log ${log.id}`, toCsv(log, (v, u) => toUserUnits(v, u, settings))).catch((e) => setError(`Could not share: ${e instanceof Error ? e.message : String(e)}`));
             }}
           />
+          {route.length > 1 ? (
+            <Button
+              label="Share GPX"
+              icon="map-outline"
+              variant="secondary"
+              compact
+              style={{ flex: 1 }}
+              onPress={() => {
+                setError(null);
+                shareGpx(`Caristini route ${log.id}`, toGpx(`${log.car}, ${formatWhen(log.startedAt)}`, log.startedAt, route, log.markers)).catch((e) =>
+                  setError(`Could not share: ${e instanceof Error ? e.message : String(e)}`),
+                );
+              }}
+            />
+          ) : null}
           <Button label="Delete" icon="trash-can-outline" variant="danger" compact style={{ flex: 1 }} onPress={() => setConfirm(true)} />
         </View>
       </Card>
@@ -173,6 +194,25 @@ export default function LogView() {
         ))
       )}
       {view === 'each' && data.length ? <TimeAxis ms={log.durationMs} /> : null}
+
+      {route.length ? (
+        <View style={{ marginTop: space.lg }}>
+          <View style={styles.chartHead}>
+            <Text style={[type.small, { color: t.text, fontWeight: '600', flex: 1 }]}>
+              {route.length > 1 ? `Route, ${dist.value.toFixed(dist.value < 10 ? 1 : 0)} ${dist.unit}` : 'Route'}
+            </Text>
+            {hereSpeed ? <Text style={[type.small, type.number, { color: t.text }]}>GPS {Math.round(hereSpeed.value)} {hereSpeed.unit}</Text> : null}
+          </View>
+          <RouteView
+            route={route}
+            markers={log.markers}
+            cursor={cursor}
+            onScrub={setCursor}
+            accessibilityLabel={route.length > 1 ? `Route of this log, ${dist.value.toFixed(1)} ${dist.unit}` : 'Route of this log'}
+          />
+          <Text style={[type.caption, { color: t.muted, marginTop: space.xs }]}>Green dot: start. Square: end. North is up.</Text>
+        </View>
+      ) : null}
 
       <Group header="Lowest, highest and average" help={SECTIONS.logViewer} style={{ marginTop: space.lg }}>
         {data.map((d, i) => (

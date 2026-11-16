@@ -11,6 +11,7 @@ import { AdapterReport } from '../obd/elm';
 import { trafficLog } from '../obd/trafficLog';
 import { releaseUrl, versionLine } from '../version';
 import { phoneRegion, regionUnits, useSettings } from '../settings';
+import { playSound, setAlertSounds } from '../sound';
 import { useConnection } from '../state';
 import { radius, space, type, useTheme } from '../theme';
 import { Help, SECTIONS, WHAT_IS_SENT } from '../help';
@@ -78,6 +79,16 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
           true,
         )}
         {toggle('Health check after connecting', settings.autoCheck, (v) => set({ autoCheck: v }), 'Runs a health check straight away')}
+      </Group>
+
+      <Group header="Alerts" footer="Plays with live data alerts, the shift light, the knock monitor and the DPF monitor, even with the phone on silent. The buzz stays on either way.">
+        {toggle('Alert sounds', settings.alertSounds !== false, (v) => {
+          set({ alertSounds: v });
+          if (v) {
+            setAlertSounds(true);
+            playSound('alert');
+          }
+        }, undefined, true)}
       </Group>
 
       <Group header="Adapter" help={SECTIONS.settingsAdapter} footer="Reads what the adapter is and how fast it answers. Changes nothing in the car.">

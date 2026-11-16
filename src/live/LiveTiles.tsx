@@ -1,7 +1,7 @@
 // Shared pieces for Live data, the dashboard and the trim and boost views:
 // dial, bar and line drawings, the tile settings sheet (alert limits and
 // lowest/highest) and the shift light.
-import * as Haptics from 'expo-haptics';
+import { alertBuzz } from '../sound';
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Line, Path, Polyline, Rect } from 'react-native-svg';
@@ -267,9 +267,9 @@ export function ShiftLight({ on }: { on: boolean }) {
   useEffect(() => {
     if (!on) return;
     setLit(true);
-    if (Platform.OS !== 'web' && Date.now() - lastBuzz.current > 3000) {
+    if (Date.now() - lastBuzz.current > 3000) {
       lastBuzz.current = Date.now();
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
+      alertBuzz('shift');
     }
     if (reduce) return;
     const id = setInterval(() => setLit((l) => !l), 200);

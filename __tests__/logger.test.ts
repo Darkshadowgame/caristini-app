@@ -21,7 +21,7 @@ import {
   toCsv,
   valueAt,
 } from '../src/logger/format';
-import { gpsFields, gpsSource } from '../src/logger/gps';
+import { gpsFields, gpsNote, metresBetween, projectRoute, routeIndexAt, routeKm, routeOf, toGpx } from '../src/logger/gps';
 import { RateMeter, SampleScheduler } from '../src/logger/scheduler';
 
 const RPM: LogChannel = { key: obdKey(0x0c), source: 'obd', label: 'Engine speed', unit: 'rpm', decimals: 0 };
@@ -298,17 +298,78 @@ describe('auto-start rules', () => {
   });
 });
 
-describe('GPS preparation and small helpers', () => {
-  test('no GPS source exists yet', () => {
-    expect(gpsSource()).toBeNull();
-  });
-
+describe('GPS on logs and small helpers', () => {
   test('only a fresh fix is stamped on a row', () => {
     const fix = { lat: 51, lon: -1, kmh: 50, at: 1000 };
     expect(gpsFields(fix, 2000)).toEqual({ lat: 51, lon: -1, gpsKmh: 50 });
     expect(gpsFields({ ...fix, kmh: null }, 2000)).toEqual({ lat: 51, lon: -1 });
-    expect(gpsFields(fix, 3001)).toBeUndefined();
+    expect(gpsFields(fix, 4000)).toEqual({ lat: 51, lon: -1, gpsKmh: 50 });
+    expect(gpsFields(fix, 4001)).toBeUndefined();
     expect(gpsFields(null, 0)).toBeUndefined();
+  });
+
+  test('a note only when location is refused or off', () => {
+    expect(gpsNote('on')).toBeNull();
+    expect(gpsNote(null)).toBeNull();
+    expect(gpsNote('unavailable')).toBeNull();
+    expect(gpsNote('denied')).toMatch(/not allowed/);
+    expect(gpsNote('off')).toMatch(/Location Services are off/);
+  });
+
+  test('route: one point per change of position, distance and lookup by time', () => {
+    const rows = [
+      { t: 0, v: [1] },
+      { t: 100, v: [1], lat: 51.5, lon: -0.1, gpsKmh: 30 },
+      { t: 200, v: [1], lat: 51.5, lon: -0.1, gpsKmh: 30 },
+      { t: 1000, v: [1], lat: 51.501, lon: -0.1 },
+    ];
+    const r = routeOf(rows);
+    expect(r).toEqual([
+      { t: 100, lat: 51.5, lon: -0.1, kmh: 30 },
+      { t: 1000, lat: 51.501, lon: -0.1 },
+    ]);
+    // 0.001 degrees of latitude is about 111 m.
+    expect(metresBetween(r[0], r[1])).toBeGreaterThan(110);
+    expect(metresBetween(r[0], r[1])).toBeLessThan(112);
+    expect(routeKm(r)).toBeCloseTo(0.111, 2);
+    expect(routeIndexAt(r, 0)).toBe(0);
+    expect(routeIndexAt(r, 999)).toBe(0);
+    expect(routeIndexAt(r, 1000)).toBe(1);
+    expect(routeIndexAt(r, 5000)).toBe(1);
+    expect(routeIndexAt([], 10)).toBe(-1);
+  });
+
+  test('route drawing: north up, inside the box', () => {
+    const r = [
+      { t: 0, lat: 51.5, lon: -0.1 },
+      { t: 1, lat: 51.51, lon: -0.1 },
+      { t: 2, lat: 51.51, lon: -0.09 },
+    ];
+    const p = projectRoute(r, 200, 100, 10);
+    expect(p).toHaveLength(3);
+    for (const q of p) {
+      expect(q.x).toBeGreaterThanOrEqual(10 - 1e-9);
+      expect(q.x).toBeLessThanOrEqual(190 + 1e-9);
+      expect(q.y).toBeGreaterThanOrEqual(10 - 1e-9);
+      expect(q.y).toBeLessThanOrEqual(90 + 1e-9);
+    }
+    // Going north moves up the screen; going east moves right.
+    expect(p[1].y).toBeLessThan(p[0].y);
+    expect(p[2].x).toBeGreaterThan(p[1].x);
+    // One point sits in the middle.
+    expect(projectRoute([r[0]], 200, 100)).toEqual([{ x: 100, y: 50 }]);
+  });
+
+  test('GPX holds the track and the markers', () => {
+    const r = [
+      { t: 0, lat: 51.5, lon: -0.1 },
+      { t: 1000, lat: 51.501, lon: -0.1 },
+    ];
+    const gpx = toGpx('Leon & test', Date.UTC(2026, 10, 16, 9, 0, 0), r, [{ n: 1, t: 1500 }]);
+    expect(gpx).toContain('<trkpt lat="51.500000" lon="-0.100000"><time>2026-11-16T09:00:00.000Z</time></trkpt>');
+    expect(gpx).toContain('<trkpt lat="51.501000" lon="-0.100000"><time>2026-11-16T09:00:01.000Z</time></trkpt>');
+    expect(gpx).toContain('<wpt lat="51.501000" lon="-0.100000"><time>2026-11-16T09:00:01.500Z</time><name>Marker 1</name></wpt>');
+    expect(gpx).toContain('<name>Leon &amp; test</name>');
   });
 
   test('durations and ids', () => {

@@ -13,6 +13,7 @@ import { Body, Button, GlowCard, GuideButton, Group, Icon, ListRow, NeedsConnect
 import { useGarage, Vehicle, vehicleTitle } from '../vehicle/garage';
 import { AutoRule, clampRule, DEFAULT_AUTO, LIMITS, stepStopDelay, stepThreshold, TRIGGER_LABEL, TRIGGER_PID, TriggerKind, withKind } from '../logger/auto';
 import { formatDuration, formatWhen, LogChannel, LogSummary, obdKey } from '../logger/format';
+import { gpsNote } from '../logger/gps';
 import { ChannelOption, channelOptions, IDLE_STATUS, LoggerSession, LoggerStatus } from '../logger/recorder';
 import { listLogs, loadPrefs, savePrefs } from '../logger/store';
 
@@ -54,6 +55,7 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
   const [options, setOptions] = useState<ChannelOption[] | null>(null);
   const [keys, setKeys] = useState<string[]>([]);
   const [rule, setRule] = useState<AutoRule>(DEFAULT_AUTO);
+  const [gps, setGps] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState<LoggerStatus>(IDLE_STATUS);
   const [logs, setLogs] = useState<LogSummary[] | null>(null);
@@ -72,6 +74,7 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
       setKeys(saved.length ? saved : FIRST_CHOICE.filter((k) => have.has(k)));
       // Auto-start always begins off when the screen opens.
       setRule(clampRule({ ...(prefs?.auto ?? DEFAULT_AUTO), on: false }));
+      setGps(prefs?.gps !== false);
       setLoaded(true);
     })().catch(() => setOptions([]));
     return () => {
@@ -94,9 +97,9 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
 
   useEffect(() => {
     if (!options || !loaded) return;
-    session.current?.configure(options, keys, rule);
-    savePrefs(vin, { keys, auto: rule });
-  }, [options, keys, rule, loaded, vin]);
+    session.current?.configure(options, keys, rule, gps);
+    savePrefs(vin, { keys, auto: rule, gps });
+  }, [options, keys, rule, gps, loaded, vin]);
 
   // The phone stays awake while recording or waiting to start.
   useEffect(() => {
@@ -167,6 +170,7 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
         ) : null}
       </GlowCard>
 
+      {status.phase !== 'idle' && gpsNote(status.gps) ? <Notice icon="map-marker-off-outline" text={gpsNote(status.gps)!} /> : null}
       {status.message ? <Notice tone={status.saved ? 'ok' : 'neutral'} icon={status.saved ? 'check' : 'information-outline'} text={status.message} /> : null}
 
       {recording && status.sources.length ? (
@@ -186,6 +190,28 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
           })}
         </Group>
       ) : null}
+
+      <Group header="Route and screen off" help={SECTIONS.logGps} footer={Platform.OS === 'web' ? 'Not available in the web preview.' : 'Uses the phone’s GPS while recording or waiting to start. A blue mark at the top of the screen shows it is on.'}>
+        <ListRow
+          first
+          icon="map-marker-path"
+          iconColour="teal"
+          title="Record route, keep going with the screen off"
+          subtitle={recording && gps ? (status.gps === 'on' ? 'GPS on' : status.gps ? 'GPS not available' : 'Starting GPS…') : undefined}
+          right={
+            <Switch
+              value={gps}
+              disabled={recording || armed}
+              trackColor={{ true: t.green, false: t.sunken }}
+              accessibilityLabel="Record route and keep going with the screen off"
+              onValueChange={(on) => {
+                tap();
+                setGps(on);
+              }}
+            />
+          }
+        />
+      </Group>
 
       <Group header="Values to record" help={SECTIONS.logValues} footer="Fewer values record faster.">
         <ListRow

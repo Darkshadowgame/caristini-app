@@ -1,5 +1,6 @@
 // App settings kept on the phone: units and connection behaviour.
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAlertSounds } from './sound';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 export interface Settings {
@@ -21,6 +22,8 @@ export interface Settings {
   // Shows the developer controls in Settings (GitHub token, email, version,
   // findings waiting). Only hides them: sending works the same either way.
   developer: boolean;
+  // Play a sound with live data alerts, the shift light and the monitors.
+  alertSounds: boolean;
 }
 
 // The phone's region (for example GB from en-GB), or null.
@@ -44,7 +47,7 @@ export function regionUnits(region: string | null = phoneRegion()): Pick<Setting
   return { speed: MPH.has(region) ? 'mph' : 'km/h', temp: FAHRENHEIT.has(region) ? '°F' : '°C' };
 }
 
-const DEFAULTS: Settings = { speed: 'mph', temp: '°C', autoConnect: false, autoCheck: false, debugLog: true, autoSendLog: true, sendTo: '', speedAuto: true, tempAuto: true, developer: false };
+const DEFAULTS: Settings = { speed: 'mph', temp: '°C', autoConnect: false, autoCheck: false, debugLog: true, autoSendLog: true, sendTo: '', speedAuto: true, tempAuto: true, developer: false, alertSounds: true };
 const KEY = 'caristini.settings.v1';
 
 interface Ctx {
@@ -79,6 +82,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }, []);
+  useEffect(() => setAlertSounds(settings.alertSounds !== false), [settings.alertSounds]);
   const value = useMemo(() => ({ settings, loaded, set }), [settings, loaded, set]);
   return <SettingsCtx.Provider value={value}>{children}</SettingsCtx.Provider>;
 }

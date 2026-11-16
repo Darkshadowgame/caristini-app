@@ -10,6 +10,8 @@ import { ConnectionProvider } from '../state';
 import { useIsDark, useTheme } from '../theme';
 import { GuideButton } from '../ui';
 import { GarageProvider } from '../vehicle/garage';
+// Defines the logger's GPS task at start-up (iOS can hand over positions as soon as the app opens).
+import '../logger/phoneGps';
 
 export default function RootLayout() {
   const t = useTheme();

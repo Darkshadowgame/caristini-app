@@ -101,17 +101,27 @@ export async function deleteLog(vin: string, id: string): Promise<void> {
   await writeIndex(vin, list.filter((s) => s.id !== id));
 }
 
-// Opens the share sheet with the log as a CSV file.
-export async function shareCsv(name: string, csv: string): Promise<void> {
+// Opens the share sheet with text as a file.
+async function shareText(name: string, text: string, ext: string, mimeType: string, UTI: string): Promise<void> {
   if (web || !(await Sharing.isAvailableAsync())) {
-    await Share.share({ title: name, message: csv });
+    await Share.share({ title: name, message: text });
     return;
   }
-  const f = new File(Paths.cache, `${safe(name)}.csv`);
+  const f = new File(Paths.cache, `${safe(name)}.${ext}`);
   if (f.exists) f.delete();
   f.create();
-  await f.write(csv);
-  await Sharing.shareAsync(f.uri, { mimeType: 'text/csv', dialogTitle: name, UTI: 'public.comma-separated-values-text' });
+  await f.write(text);
+  await Sharing.shareAsync(f.uri, { mimeType, dialogTitle: name, UTI });
+}
+
+// The log as a CSV file.
+export function shareCsv(name: string, csv: string): Promise<void> {
+  return shareText(name, csv, 'csv', 'text/csv', 'public.comma-separated-values-text');
+}
+
+// The log's route as a GPX file, for a map app.
+export function shareGpx(name: string, gpx: string): Promise<void> {
+  return shareText(name, gpx, 'gpx', 'application/gpx+xml', 'com.topografix.gpx');
 }
 
 // ---------------------------------------------------------------------------
@@ -121,6 +131,8 @@ export async function shareCsv(name: string, csv: string): Promise<void> {
 export interface LoggerPrefs {
   keys: string[];
   auto: AutoRule;
+  // Record the route and keep logging with the screen off (on unless switched off).
+  gps?: boolean;
 }
 
 const prefsKey = (vin: string) => `caristini.logger.v1.${vin}`;
@@ -130,7 +142,7 @@ export async function loadPrefs(vin: string): Promise<LoggerPrefs | null> {
     const raw = await AsyncStorage.getItem(prefsKey(vin));
     if (!raw) return null;
     const p = JSON.parse(raw) as Partial<LoggerPrefs>;
-    return { keys: Array.isArray(p.keys) ? p.keys.filter((k) => typeof k === 'string') : [], auto: clampRule({ ...DEFAULT_AUTO, ...(p.auto ?? {}) }) };
+    return { keys: Array.isArray(p.keys) ? p.keys.filter((k) => typeof k === 'string') : [], auto: clampRule({ ...DEFAULT_AUTO, ...(p.auto ?? {}) }), gps: p.gps !== false };
   } catch {
     return null;
   }

@@ -1,5 +1,5 @@
 // Knock and timing monitor. Logic and sources: src/monitors/knock.ts.
-import * as Haptics from 'expo-haptics';
+import { alertBuzz } from '../sound';
 import { useKeepAwake } from 'expo-keep-awake';
 import React, { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
@@ -99,7 +99,7 @@ function GroupsMonitor() {
           if (times.length >= 2) setRate((times.length - 1) / ((times[times.length - 1] - times[0]) / 1000));
           const r = retardsFrom(c);
           const level = assessKnock(r).level;
-          if (level === 'warn' && levelRef.current !== 'warn') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+          if (level === 'warn' && levelRef.current !== 'warn') alertBuzz('warn');
           levelRef.current = level;
           setSession((s) => addKnockSample(s, r));
         },

@@ -2,9 +2,10 @@
 // chart to move the cursor; the screen shows every value at that moment.
 import React, { useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, PanResponder, StyleSheet, View } from 'react-native';
-import Svg, { Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { SANS, Theme, useTheme } from '../theme';
 import { decimate, LogMarker, Series } from './format';
+import { projectRoute, routeIndexAt, RoutePoint } from './gps';
 
 // One colour per value, from the app's tool colours.
 export function chartColours(t: Theme): string[] {
@@ -124,6 +125,100 @@ export function LogChart({
               {bottomLabel}
             </SvgText>
           ) : null}
+        </Svg>
+      ) : null}
+    </View>
+  );
+}
+
+// The route of a log with GPS, north up, no map underneath. Green dot: start.
+// Square: end. Numbered dots: markers. Drag on the route to move the cursor
+// to the nearest point.
+export function RouteView({
+  route,
+  markers,
+  cursor,
+  onScrub,
+  height = 240,
+  accessibilityLabel,
+}: {
+  route: RoutePoint[];
+  markers: LogMarker[];
+  cursor: number | null;
+  onScrub: (t: number) => void;
+  height?: number;
+  accessibilityLabel: string;
+}) {
+  const t = useTheme();
+  const [width, setWidth] = useState(0);
+  const pts = useMemo(() => (width ? projectRoute(route, width, height, 14) : []), [route, width, height]);
+  const ptsRef = useRef(pts);
+  ptsRef.current = pts;
+  const scrubRef = useRef(onScrub);
+  scrubRef.current = onScrub;
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const origin = useRef({ x: 0, y: 0 });
+
+  const nearest = (x: number, y: number) => {
+    const p = ptsRef.current;
+    let best = -1;
+    let d = Infinity;
+    for (let i = 0; i < p.length; i++) {
+      const dd = (p[i].x - x) ** 2 + (p[i].y - y) ** 2;
+      if (dd < d) {
+        d = dd;
+        best = i;
+      }
+    }
+    if (best >= 0) scrubRef.current(routeRef.current[best].t);
+  };
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (e) => {
+          origin.current = { x: e.nativeEvent.locationX, y: e.nativeEvent.locationY };
+          nearest(origin.current.x, origin.current.y);
+        },
+        onPanResponderMove: (_, g) => nearest(origin.current.x + g.dx, origin.current.y + g.dy),
+        onPanResponderTerminationRequest: () => true,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const line = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const at = cursor != null && pts.length ? pts[routeIndexAt(route, cursor)] : null;
+  const end = pts[pts.length - 1];
+  return (
+    <View
+      accessible
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint="Drag along the route to read the values at that point"
+      onLayout={(e: LayoutChangeEvent) => setWidth(Math.round(e.nativeEvent.layout.width))}
+      style={[styles.box, { height, backgroundColor: t.sunken + '66' }]}
+      {...pan.panHandlers}
+    >
+      {width && pts.length ? (
+        <Svg width={width} height={height}>
+          {pts.length > 1 ? <Polyline points={line} fill="none" stroke={t.blue} strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" /> : null}
+          <Circle cx={pts[0].x} cy={pts[0].y} r={6} fill={t.green} stroke={t.surface} strokeWidth={2} />
+          {pts.length > 1 ? <Rect x={end.x - 5} y={end.y - 5} width={10} height={10} rx={2} fill={t.text} stroke={t.surface} strokeWidth={2} /> : null}
+          {markers.map((m) => {
+            const p = pts[routeIndexAt(route, m.t)];
+            if (!p) return null;
+            return (
+              <React.Fragment key={m.n}>
+                <Circle cx={p.x} cy={p.y} r={8} fill={t.accent} />
+                <SvgText x={p.x} y={p.y + 3.5} fontFamily={SANS} fontSize={10} fontWeight="700" fill={t.onAccent} textAnchor="middle">
+                  {String(m.n)}
+                </SvgText>
+              </React.Fragment>
+            );
+          })}
+          {at ? <Circle cx={at.x} cy={at.y} r={7} fill="none" stroke={t.text} strokeWidth={2.5} /> : null}
         </Svg>
       ) : null}
     </View>

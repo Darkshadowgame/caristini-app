@@ -13,7 +13,8 @@ import { categoryOf, sensorId, SensorRow, sensorsForCar, unitOf } from '../obd/s
 import { LinkLost } from '../obd/transport';
 import type { Vehicle } from '../vehicle/garage';
 import { ARMED, AutoRule, AutoState, stepAuto, TRIGGER_PID } from './auto';
-import { gpsFields, gpsSource, GpsSource } from './gps';
+import { gpsFields, GpsSource, GpsStart } from './gps';
+import { phoneGps } from './phoneGps';
 import { formatDuration, groupKey, LogBuilder, LogChannel, logId, LogStart, LogSummary, makerKey, obdKey, sourceOf, sourcesFor, summarise } from './format';
 import { RateMeter, SampleScheduler } from './scheduler';
 import { saveLog } from './store';
@@ -122,9 +123,11 @@ export interface LoggerStatus {
   trigger: number | null;
   saved: LogSummary | null;
   message: string | null;
+  // The phone's GPS for this log (null: not asked, or GPS switched off).
+  gps: GpsStart | null;
 }
 
-const IDLE: LoggerStatus = { phase: 'idle', start: null, elapsedMs: 0, rows: 0, rate: null, sources: [], last: {}, markers: 0, trigger: null, saved: null, message: null };
+const IDLE: LoggerStatus = { phase: 'idle', start: null, elapsedMs: 0, rows: 0, rate: null, sources: [], last: {}, markers: 0, trigger: null, saved: null, message: null, gps: null };
 
 export function sourceLabel(id: string, options: ChannelOption[]): string {
   if (id === 'obd') return 'Standard values';
@@ -160,17 +163,28 @@ export class LoggerSession {
   private last: Record<string, number> = {};
   private emitted = 0;
   private triedTp20 = false;
+  // The phone's GPS, held while recording or waiting to start. It records the
+  // route and keeps the app running with the screen off (src/logger/phoneGps.ts).
   private gps: GpsSource | null = null;
+  private useGps = true;
 
   constructor(
     private client: ElmClient,
     private car: { vin: string; title: string },
     private onStatus: (s: LoggerStatus) => void,
+    private makeGps: () => GpsSource | null = phoneGps,
   ) {}
 
-  configure(options: ChannelOption[], keys: string[], rule: AutoRule): void {
+  configure(options: ChannelOption[], keys: string[], rule: AutoRule, useGps = true): void {
     this.options = options;
     this.keys = keys;
+    if (useGps !== this.useGps) {
+      this.useGps = useGps;
+      if (!useGps) {
+        this.releaseGps();
+        this.set({ gps: null }, true);
+      } else if (this.status.phase !== 'idle') this.holdGps();
+    }
     const wasOn = !!this.rule?.on;
     this.rule = rule;
     if (this.status.phase === 'recording') return;
@@ -193,8 +207,31 @@ export class LoggerSession {
     return !!this.triggerOption();
   }
 
+  private holdGps(): void {
+    if (!this.useGps || this.gps || this.disposed) return;
+    const g = this.makeGps();
+    if (!g) return;
+    this.gps = g;
+    g.start()
+      .catch((): GpsStart => 'unavailable')
+      .then((r) => {
+        if (this.gps !== g) return;
+        if (r !== 'on') {
+          g.stop();
+          this.gps = null;
+        }
+        this.set({ gps: r }, true);
+      });
+  }
+
+  private releaseGps(): void {
+    this.gps?.stop();
+    this.gps = null;
+  }
+
   private set(patch: Partial<LoggerStatus>, now = false): void {
     this.status = { ...this.status, ...patch };
+    if (patch.phase === 'idle') this.releaseGps();
     const t = Date.now();
     if (now || t - this.emitted > 200) {
       this.emitted = t;
@@ -205,6 +242,7 @@ export class LoggerSession {
   private arm(): void {
     this.auto = ARMED;
     this.set({ phase: 'armed', start: null, trigger: null, message: null }, true);
+    this.holdGps();
     this.loop();
   }
 
@@ -227,8 +265,7 @@ export class LoggerSession {
     this.total = new RateMeter();
     this.last = {};
     this.auto = start === 'auto' ? { phase: 'recording', belowSince: null } : ARMED;
-    this.gps = gpsSource();
-    this.gps?.start().catch(() => false);
+    this.holdGps();
     if (firstValues) this.builder.add(0, firstValues);
     this.set({ phase: 'recording', start, elapsedMs: 0, rows: this.builder.rows.length, rate: null, sources: [], last: {}, markers: 0, saved: null, message: null }, true);
   }
@@ -250,9 +287,7 @@ export class LoggerSession {
   private async finish(message: string | null): Promise<void> {
     const b = this.builder;
     this.builder = null;
-    this.gps?.stop();
-    const gpsName = this.gps?.name;
-    this.gps = null;
+    const gpsName = this.gps?.name ?? 'phone';
     const next: Phase = this.rule?.on && !this.disposed ? 'armed' : 'idle';
     this.auto = ARMED;
     if (!b || !b.rows.length) {
@@ -266,7 +301,7 @@ export class LoggerSession {
       startedAt: this.startedAt,
       durationMs: Math.max(b.rows[b.rows.length - 1].t, Date.now() - this.startedAt),
       start: this.start,
-      gps: gpsName && b.rows.some((r) => r.lat != null) ? { source: gpsName } : undefined,
+      gps: b.rows.some((r) => r.lat != null) ? { source: gpsName } : undefined,
     });
     // The screen shows the new state at once; the file is written after.
     this.set({ phase: next, start: null, trigger: null }, true);
@@ -283,6 +318,7 @@ export class LoggerSession {
   async dispose(): Promise<void> {
     this.disposed = true;
     if (this.status.phase === 'recording') await this.finish(null);
+    this.releaseGps();
     this.status = { ...this.status, phase: 'idle' };
   }
 
@@ -373,7 +409,15 @@ export class LoggerSession {
     if (t1 - Math.max(this.checkpointAt, this.startedAt) >= 45000 && b.rows.length) {
       this.checkpointAt = t1;
       // Same id as the final save, which replaces it.
-      const snap = b.finish({ id: logId(this.startedAt), vin: this.car.vin, car: this.car.title, startedAt: this.startedAt, durationMs: t1 - this.startedAt, start: this.start });
+      const snap = b.finish({
+        id: logId(this.startedAt),
+        vin: this.car.vin,
+        car: this.car.title,
+        startedAt: this.startedAt,
+        durationMs: t1 - this.startedAt,
+        start: this.start,
+        gps: b.rows.some((r) => r.lat != null) ? { source: this.gps?.name ?? 'phone' } : undefined,
+      });
       const copy = { ...snap, rows: [...snap.rows], markers: [...snap.markers] };
       this.saving = this.saving.then(() => saveLog(copy)).catch(() => undefined);
     }

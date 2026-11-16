@@ -407,6 +407,7 @@ export const GUIDES: Record<GuideId, Help> = {
     how: [
       'Speed and distance: miles or kilometres. Temperature: Celsius or Fahrenheit.',
       'Connecting: connect when the app opens, and run a health check straight after.',
+      'Alerts: switch the alert sounds on or off. The buzz stays on.',
       'Adapter: check what the adapter is and how fast it answers.',
       'Troubleshooting: keep an adapter log and share it when something does not work.',
       'Developer options: the GitHub token, the email address, the app version and the findings waiting to send.',
@@ -420,6 +421,7 @@ export const GUIDES: Record<GuideId, Help> = {
       'Tap Record, or turn on Auto-start to begin when engine speed, the accelerator or the throttle goes above a set value.',
       'While recording, tap Marker to number a moment you want to find later.',
       'Tap Stop. The log appears under Saved logs; open it to see the charts, drag across a chart to read every value at that moment, and share it as a CSV.',
+      'With Record route on, the log keeps going with the screen locked, and the viewer shows the route you drove.',
     ],
     note: 'Fewer values record faster. The rate shown is what the adapter achieved. Set up the log before you drive and keep your eyes on the road.',
   },
@@ -1189,6 +1191,17 @@ export const SECTIONS: Record<string, Help> = {
       'Each start makes a new log. Tap Stop to end one early; turn Auto-start off to stop waiting.',
     ],
   },
+  logGps: {
+    title: 'Route and screen off',
+    what: 'Uses the phone’s GPS while the logger records or waits to start. Each reading gets the phone’s position and GPS speed, and the logger keeps reading the car with the screen off.',
+    how: [
+      'The first time, iPhone asks to use your location. Choose Allow While Using App.',
+      'You can lock the phone while it records. A blue mark at the top of the screen shows Caristini is still using the GPS.',
+      'The GPS stops when you stop the log, leave the logger, or the adapter disconnects.',
+      'The CSV gets Latitude, Longitude and GPS speed columns. Share GPX gives the route for a map app.',
+    ],
+    note: 'With this off, or location not allowed, iPhone pauses Caristini soon after the screen turns off, and the log stops reading until you open the app again.',
+  },
   logMarkers: {
     title: 'Markers',
     what: 'A numbered line on the charts at the moment you tapped.',
@@ -1213,7 +1226,7 @@ export const SECTIONS: Record<string, Help> = {
       'Lowest, highest and average are worked out from every reading in the log.',
       'Share CSV gives one row per reading in your units, for Numbers or Excel.',
     ],
-    note: 'Phone position (GPS) is not recorded in this version.',
+    note: 'Logs recorded with Record route on show the route under the charts, with a dot at the cursor. Share GPX opens it in a map app.',
   },
   diagScanChanges: {
     title: 'Since the last check',

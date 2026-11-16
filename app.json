@@ -36,6 +36,24 @@
         }
       ],
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Caristini uses your location only while the data logger records or waits to start, to save the route with the log and keep logging with the screen off.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "motionUsagePermission": false,
+          "isIosBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": true
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
