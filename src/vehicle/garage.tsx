@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { LearnedSetting, Snapshot } from '../coding/learn';
 import type { ServiceReset } from '../service/obdReset';
+import type { BatteryTest } from '../obd/battery';
 import type { CarIds, PartsList } from './ids';
 import type { Route } from '../obd/modules';
 import type { AlertRule } from '../live/alerts';
@@ -30,6 +31,13 @@ export interface Vehicle {
   // Last odometer reading from the car (km) and when it was read.
   odometerKm?: number;
   odometerAt?: number;
+  // Odometer typed by the owner under Service > Reminder (km) and when, for a
+  // car that does not report it. The reminder counts from the newer of the 2.
+  odometerTypedKm?: number;
+  odometerTypedAt?: number;
+  // The last battery test (src/obd/battery.ts): each completed step, saved
+  // as it is read so the test survives leaving the page.
+  batteryTest?: BatteryTest;
   // Last battery voltage read at the OBD port, when, and by which screen
   // (Health check, Learn my car), shown on the Battery test before it reads.
   battery?: { volts: number; at: number; from: string };
@@ -165,7 +173,7 @@ export function quickCheckDue(v: Pick<Vehicle, 'fullChecks' | 'fullCheckAt' | 'm
 
 export function vehicleTitle(v: Pick<Vehicle, 'brand' | 'model' | 'year' | 'nickname'>): string {
   if (v.nickname) return v.nickname;
-  return [v.brand, v.model].filter(Boolean).join(' ') || 'Unknown vehicle';
+  return [v.brand, v.model].filter(Boolean).join(' ') || 'Unknown car';
 }
 
 export function GarageProvider({ children }: { children: React.ReactNode }) {
@@ -178,7 +186,14 @@ export function GarageProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(KEY)
       .then((raw) => {
-        current.current = raw ? (JSON.parse(raw) as Vehicle[]) : [];
+        try {
+          const list = raw ? JSON.parse(raw) : [];
+          current.current = Array.isArray(list) ? (list as Vehicle[]) : [];
+        } catch {
+          // A damaged list is kept aside before the first save replaces it.
+          if (raw) AsyncStorage.setItem(`${KEY}.damaged`, raw).catch(() => undefined);
+          current.current = [];
+        }
         setVehicles(current.current);
       })
       .catch(() => setVehicles([]))

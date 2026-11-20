@@ -95,7 +95,7 @@ export default function EmissionsTests() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Emissions self-tests', headerRight: () => <GuideButton id="diagTests" /> }} />
-        <NeedsConnection what="test results" />
+        <NeedsConnection title="Connect your car to read the emissions self-tests" />
       </Screen>
     );
   }
@@ -143,12 +143,12 @@ export default function EmissionsTests() {
           <ListRow
             first
             icon={incomplete ? 'progress-clock' : 'check-circle-outline'}
-            iconColour={incomplete ? 'orange' : 'green'}
+            iconColour={incomplete ? 'grey' : 'green'}
             title={readinessSummary(monitors).text}
             noChevron
           />
           {monitors.map((m) => (
-            <ListRow key={m.name} title={m.name} subtitle={monitorMeaning(m.name)} right={<Pill text={MONITOR_STATE_LABEL[m.state]} tone={m.state === 'complete' ? 'ok' : 'accent'} />} />
+            <ListRow key={m.name} title={m.name} subtitle={monitorMeaning(m.name)} right={<Pill text={MONITOR_STATE_LABEL[m.state]} tone={m.state === 'complete' ? 'ok' : 'neutral'} />} />
           ))}
         </Group>
       ) : null}
@@ -163,8 +163,8 @@ export default function EmissionsTests() {
                 icon={failed ? 'alert-circle-outline' : 'check'}
                 text={
                   failed
-                    ? `${failed} test${failed === 1 ? ' is' : 's are'} outside the car's own limits, so the car counts ${failed === 1 ? 'it' : 'them'} as failed.`
-                    : `${tests.results.length} test result${tests.results.length === 1 ? '' : 's'}, all inside the car's own limits where they could be checked.`
+                    ? `${failed} test${failed === 1 ? ' is' : 's are'} outside the car’s own limits, so the car counts ${failed === 1 ? 'it' : 'them'} as failed.`
+                    : `${tests.results.length} test result${tests.results.length === 1 ? '' : 's'}, all inside the car’s own limits where they could be checked.`
                 }
               />
             ) : (

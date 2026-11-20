@@ -34,8 +34,8 @@ const ICON: Record<GuideId, IconName> = {
   partNumbers: 'chip',
   learnCar: 'school-outline',
   discover: 'telescope' as IconName,
-  listen: 'record-circle-outline',
-  settings: 'tune-variant',
+  listen: 'ear-hearing',
+  settings: 'cog-outline',
   logger: 'chart-line',
   diagTests: 'clipboard-check-outline',
   diagChanges: 'timeline-text-outline',
@@ -61,7 +61,7 @@ export default function Guide() {
   return (
     <Screen>
       <Text style={[type.sub, { color: t.muted, marginBottom: space.lg }]}>
-        What each screen does and how to use it. On any screen, tap the ? at the top right for its guide, or the ? beside a section for that section.
+        What each screen does and how it works. On any screen, tap the ? at the top right for its guide, or the ? beside a section for that section.
       </Text>
       {GUIDE_GROUPS.map((g) => (
         <Group key={g.title} header={g.title}>

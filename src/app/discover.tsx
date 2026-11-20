@@ -1,8 +1,9 @@
 import { Stack } from 'expo-router';
 import { allowSleep, stayAwake } from '../keepAwake';
+import { dateTimeText } from '../timeText';
 import { keepRunning, letStop } from '../background';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { aboutTime, addSample, afterQuick, DISCOVER_RANGES, DiscoverModule, Discovery, exploreStatus, fullSeconds, knownName, loadDiscovery, modulesToExplore, quickDone, quickExploreRanges, quickResume, rangeSize, readings, saveDiscovery } from '../discover';
 import { routeFor, scanValueGroups } from '../learn/valueGroups';
 import { groupName } from '../data/groupLabels';
@@ -16,9 +17,10 @@ import { useSettings } from '../settings';
 import { canSendAutomatically, sendBack } from '../share/sendBack';
 import { useConnection } from '../state';
 import { MONO, radius, space, type, useTheme } from '../theme';
-import { Button, GlowCard, Group, Icon, ListRow, NeedsConnection, Notice, Pill, ProgressBar, ScanPulse, Screen, success, tap } from '../ui';
+import { Button, Field, GlowCard, Group, Icon, ListRow, NeedsConnection, Notice, Pill, ProgressBar, ScanPulse, Screen, success, tap, tool, TOOLS } from '../ui';
 import { useGarage, vehicleTitle } from '../vehicle/garage';
 import { SECTIONS } from '../help';
+import { LeaveRunGuard } from '../leaveRun';
 
 // Discover: asks each module for every value number in the usual ranges and
 // keeps whatever answers, named or not. Nothing is written to the car. The
@@ -77,7 +79,7 @@ export default function Discover() {
   if (!client || !v) {
     return (
       <Screen>
-        <NeedsConnection title="Connect your car to discover its values" />
+        <NeedsConnection title="Connect your car to explore unknown values" />
       </Screen>
     );
   }
@@ -163,7 +165,7 @@ export default function Discover() {
         await saveDiscovery(next);
         const count = Object.keys(next.modules[def.id]?.found ?? {}).length;
         if (res.finished) {
-          await addHistory({ vin: v.vin, kind: 'discover', title: `${def.name}: ${count} value${count === 1 ? '' : 's'} found`, detail: 'Discover sweep finished' });
+          await addHistory({ vin: v.vin, kind: 'discover', title: `${def.name}: ${count} value${count === 1 ? '' : 's'} found`, detail: 'Unknown values: explore finished' });
           if (await canSendAutomatically()) {
             const r = await sendBack('discover', v.vin, { car: { title: vehicleTitle(v), brand: v.brand, model: v.model, year: v.year, platform: v.platform }, module: next.modules[def.id] });
             if (r.via === 'github') update((d) => ({ ...d, sentAt: Date.now() }));
@@ -253,6 +255,8 @@ export default function Discover() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Unknown values' }} />
+      {/* Back while an explore runs asks first; leaving the app or locking the phone does not. */}
+      <LeaveRunGuard active={!!running && !running.startsWith('sample') && running !== 'send'} onStop={() => (stop.current = true)} />
       {message ? <Notice tone={message.tone} icon={message.tone === 'danger' ? 'alert-circle-outline' : 'information-outline'} text={message.text} /> : null}
 
       {running && !running.startsWith('sample') && running !== 'send' ? (
@@ -262,31 +266,31 @@ export default function Discover() {
           <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: 4, marginBottom: space.lg }]}>
             {(() => {
               const def = defs?.find((d) => d.id === running);
-              return def && older(def) ? statusOf(def).text.replace(/, carries on$/, '') : `${Object.keys(disc?.modules[running]?.found ?? {}).length} values found`;
+              return def && older(def) ? statusOf(def).text.replace(/, carries on$/, '') : valuesFound(Object.keys(disc?.modules[running]?.found ?? {}).length);
             })()}
             . Ignition on; running the engine keeps the battery up.
           </Text>
           <View style={{ alignSelf: 'stretch' }}>
             <ProgressBar
               value={progress ? progress.done / progress.total : 0}
-              label={progress ? (progress.did < 0 ? 'Reading value groups' : `Asking value ${progress.did.toString(16).toUpperCase().padStart(4, '0')}`) : 'Saying hello'}
+              label={progress ? (progress.did < 0 ? 'Reading value groups' : `Asking value ${progress.did.toString(16).toUpperCase().padStart(4, '0')}`) : 'Starting'}
               done={progress?.done}
               total={progress?.total}
               startedAt={startedAt.current}
             />
           </View>
           <View style={{ alignSelf: 'stretch', marginTop: space.lg }}>
-            <Button label="Pause" variant="secondary" icon="pause" onPress={() => (stop.current = true)} />
+            <Button label="Stop and keep results" variant="secondary" onPress={() => (stop.current = true)} />
           </View>
         </GlowCard>
       ) : (
-        <GlowCard tone="brand">
+        <GlowCard tone="plain">
           <View style={styles.heroRow}>
-            <View style={[styles.heroIcon, { backgroundColor: t.accentSoft }]}>
-              <Icon name="telescope" size={30} color={t.accent} />
+            <View style={[styles.heroIcon, { backgroundColor: t[TOOLS.discover.colour] }]}>
+              <Icon name={TOOLS.discover.icon} size={30} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[type.title3, { color: t.text }]}>{allOlder ? 'Read every value group' : "Explore a module's unknown values"}</Text>
+              <Text style={[type.title3, { color: t.text }]}>{allOlder ? 'Read every value group' : 'Explore a module’s unknown values'}</Text>
               <Text style={[type.sub, { color: t.muted, marginTop: 2 }]}>
                 {allOlder
                   ? 'This car’s modules give their values in numbered value groups. Learn my car reads them too, and both keep the same list and carry on from the same place. Read-only.'
@@ -294,9 +298,9 @@ export default function Discover() {
               </Text>
             </View>
           </View>
-          <Button label={allOlder ? 'Read value groups in every module' : 'Quick explore every module'} icon="lightning-bolt" disabled={!defs?.length} onPress={() => defs && sweep(defs, 'quick')} />
+          <Button label={allOlder ? 'Read every value group' : 'Quick explore every module'} icon="lightning-bolt" disabled={!defs?.length} onPress={() => defs && sweep(defs, 'quick')} />
           {allOlder ? null : <View style={{ marginTop: space.sm }}>
-            <Button label={totalFound ? 'Full explore (carries on)' : 'Full explore every module'} icon="play" variant="secondary" disabled={!defs?.length} onPress={() => defs && sweep(defs, 'full')} />
+            <Button label={totalFound ? 'Carry on: full explore' : 'Full explore every module'} icon="play" variant="secondary" disabled={!defs?.length} onPress={() => defs && sweep(defs, 'full')} />
             {fullTime ? (
               <Text style={[type.small, { color: t.muted, marginTop: 4, textAlign: 'center' }]}>
                 {left} module{left === 1 ? '' : 's'}: {fullTime} in all
@@ -314,7 +318,7 @@ export default function Discover() {
       <Group
         header="Modules"
         help={SECTIONS.discoverModules}
-        footer={`${checked ? 'The modules that answered your last health check.' : 'Every module this make can have. Run a health check to list only the ones on your car.'}${(defs ?? []).some(older) ? ' Older VW modules give their values in numbered value groups; Live data shows them.' : ''} ${disc?.sentAt ? `Findings last sent ${new Date(disc.sentAt).toLocaleString('en-GB')}.` : 'Findings are kept on this phone until you send them.'}`}
+        footer={`${checked ? 'The modules that answered your last health check.' : 'Every module this make can have. Run a health check to list only the ones on your car.'}${(defs ?? []).some(older) ? ' Older VW modules give their values in numbered value groups; Live data shows them.' : ''} ${disc?.sentAt ? `Findings last sent ${dateTimeText(disc.sentAt)}.` : 'Findings are kept on this phone until you send them.'}`}
       >
         {(defs ?? []).map((def, i) => {
           const st = statusOf(def);
@@ -358,7 +362,7 @@ export default function Discover() {
                     {!entries.length ? (
                       <Text style={[type.small, { color: t.muted }]}>{mod.silent ? 'This module did not answer.' : 'No values found here yet. Explore it to look for values.'}</Text>
                     ) : (
-                      <Text style={[type.small, { color: t.muted }]}>Named values are already in Caristini's lists. Moving values change between samples and are most likely sensors. Tap one for its readings.</Text>
+                      <Text style={[type.small, { color: t.muted }]}>Named values are already in Caristini’s lists. Moving values change between samples and are most likely sensors. Tap one for its readings.</Text>
                     )}
                   </View>
                   {entries.map(([did, f]) => (
@@ -375,6 +379,9 @@ export default function Discover() {
     </Screen>
   );
 }
+
+// "1 value found", "12 values found".
+const valuesFound = (n: number) => `${n.toLocaleString('en-GB')} value${n === 1 ? '' : 's'} found`;
 
 function FoundRow({ did, f, known, onName }: { did: string; f: { samples: string[]; moves?: boolean; label?: string; guess?: string }; known: string | null; onName: (l: string) => void }) {
   const t = useTheme();
@@ -406,15 +413,7 @@ function FoundRow({ did, f, known, onName }: { did: string; f: { samples: string
           {readings(last).map((r) => (
             <Text key={r} style={[type.small, { color: t.text }]}>• {r}</Text>
           ))}
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            onEndEditing={() => onName(name.trim())}
-            onBlur={() => onName(name.trim())}
-            placeholder="Name it if you know what it is"
-            placeholderTextColor={t.muted}
-            style={[type.body, styles.input, { backgroundColor: t.sunken, color: t.text }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
-          />
+          <Field value={name} onChange={setName} onEndEditing={() => onName(name.trim())} onBlur={() => onName(name.trim())} placeholder="Name it if you know what it is" style={{ marginTop: space.sm }} />
         </View>
       ) : null}
     </Pressable>
@@ -425,5 +424,5 @@ const styles = StyleSheet.create({
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.lg },
   heroIcon: { width: 56, height: 56, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   found: { paddingHorizontal: space.lg, paddingVertical: space.md, borderTopWidth: StyleSheet.hairlineWidth },
-  input: { borderRadius: radius.sm + 2, paddingHorizontal: space.md, paddingVertical: 10, marginTop: space.sm },
+
 });

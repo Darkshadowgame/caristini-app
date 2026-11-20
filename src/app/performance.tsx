@@ -1,13 +1,14 @@
-import { useKeepAwake } from 'expo-keep-awake';
+import { useStayAwake } from '../keepAwake';
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { pidInfo } from '../obd/pids';
 import { KMH_PER_MPH, speedIn, useSettings } from '../settings';
 import { useConnection } from '../state';
-import { radius, space, type, useTheme } from '../theme';
+import { space, type, useTheme } from '../theme';
 import { SECTIONS } from '../help';
 import { addRun, clearRuns, CustomRange, loadRanges, loadRuns, saveRanges, SavedRun } from '../monitors/store';
-import { Button, ConfirmSheet, GlowCard, Group, Icon, ListRow, NeedsConnection, Notice, Screen, success, tap } from '../ui';
+import { Button, ConfirmSheet, Field, GlowCard, Group, Icon, ListRow, NeedsConnection, Notice, Screen, success, tap } from '../ui';
+import { dateTimeText } from '../timeText';
 
 // ---------------------------------------------------------------------------
 // Timing logic (pure, tested in __tests__/perf.test.ts).
@@ -164,8 +165,8 @@ export function stepRun(test: PerfTest, run: Run, s: Sample): Run {
     }
     case 'running':
       if (isReady(test, s.kmh)) return { phase: 'ready', last: s };
-      if (s.t - run.last.t > MAX_GAP_MS) return { phase: 'aborted', reason: 'Speed readings stopped for more than 2 s. Try again.' };
-      if (s.t - run.start > MAX_RUN_MS) return { phase: 'aborted', reason: 'The run took longer than 60 s. Try again.' };
+      if (s.t - run.last.t > MAX_GAP_MS) return { phase: 'aborted', reason: 'Speed readings stopped for more than 2 seconds. Try again.' };
+      if (s.t - run.start > MAX_RUN_MS) return { phase: 'aborted', reason: 'The run took longer than 60 seconds. Try again.' };
       return advance(test, { ...run, count: run.count + 1 }, s);
     default:
       return run;
@@ -219,7 +220,7 @@ export default function Performance() {
   const t = useTheme();
   const conn = useConnection();
   const { settings } = useSettings();
-  useKeepAwake();
+  useStayAwake('performance');
   const [supported, setSupported] = useState<boolean | null>(null);
   const [kmh, setKmh] = useState<number | null>(null);
   const [rate, setRate] = useState<number | null>(null);
@@ -230,6 +231,8 @@ export default function Performance() {
   const [fromText, setFromText] = useState('');
   const [toText, setToText] = useState('');
   const [rangeError, setRangeError] = useState<string | null>(null);
+  // The speed range the owner asked to delete; deleted only after the confirm.
+  const [removing, setRemoving] = useState<{ id: string; label: string } | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const runRef = useRef<Run | null>(null);
@@ -391,7 +394,7 @@ export default function Performance() {
     if (!b || h.seconds < b.seconds) best.set(h.testId, h);
   }
   const listed = showAll ? history : history.slice(0, 10);
-  const inputStyle = [type.body, type.number, styles.input, { backgroundColor: t.sunken, color: t.text }];
+
 
   return (
     <Screen>
@@ -430,7 +433,6 @@ export default function Performance() {
             noChevron
             selected={x.id === testId}
             disabled={armed}
-            right={<Icon name="check" size={18} color={x.id === testId ? t.accentText : 'transparent'} />}
             onPress={() => pick(x.id)}
           />
         ))}
@@ -438,7 +440,7 @@ export default function Performance() {
 
       <View style={{ marginBottom: space.xl }}>
         {armed ? (
-          <Button label="Cancel" icon="stop" variant="secondary" onPress={cancel} />
+          <Button label="Stop" icon="stop" variant="secondary" onPress={cancel} />
         ) : (
           <Button label={run?.phase === 'done' ? 'Ready again' : 'Get ready'} icon="play" onPress={arm} disabled={!supported} />
         )}
@@ -451,34 +453,16 @@ export default function Performance() {
             first={i === 0}
             title={rangeLabel(r)}
             right={
-              <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${rangeLabel(r)}`} hitSlop={10} disabled={armed} onPress={() => removeRange(r.id)}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${rangeLabel(r)}`} hitSlop={10} disabled={armed} onPress={() => setRemoving({ id: r.id, label: rangeLabel(r) })}>
                 <Icon name="trash-can-outline" size={18} color={armed ? t.faint : t.danger} />
               </Pressable>
             }
           />
         ))}
         <View style={[styles.addRow, ranges.length ? { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border } : null]}>
-          <TextInput
-            value={fromText}
-            onChangeText={setFromText}
-            placeholder="From"
-            placeholderTextColor={t.muted}
-            keyboardType="decimal-pad"
-            accessibilityLabel={`Start speed in ${settings.speed}`}
-            selectionColor={t.accent}
-            style={inputStyle}
-          />
+          <Field value={fromText} onChange={setFromText} placeholder="From" keyboard="decimal-pad" number accessibilityLabel={`Start speed in ${settings.speed}`} style={styles.input} />
           <Text style={[type.body, { color: t.muted }]}>to</Text>
-          <TextInput
-            value={toText}
-            onChangeText={setToText}
-            placeholder="To"
-            placeholderTextColor={t.muted}
-            keyboardType="decimal-pad"
-            accessibilityLabel={`Target speed in ${settings.speed}`}
-            selectionColor={t.accent}
-            style={inputStyle}
-          />
+          <Field value={toText} onChange={setToText} placeholder="To" keyboard="decimal-pad" number accessibilityLabel={`Target speed in ${settings.speed}`} style={styles.input} />
           <Button label="Add" icon="plus" compact variant="secondary" onPress={addRange} disabled={armed} />
         </View>
       </Group>
@@ -486,13 +470,13 @@ export default function Performance() {
       <Group
         header={vin ? 'Runs on this car' : 'This session'}
         help={SECTIONS.perfSession}
-        footer="Each time shows plus or minus how far it could be off, from the gap between speed readings at the start and finish and the car's whole-km/h speed. A faster adapter gives a smaller figure."
+        footer="Each time shows plus or minus how far it could be off, from the gap between speed readings at the start and finish and the car’s whole-km/h speed. A faster adapter gives a smaller figure."
       >
         {listed.length ? (
           listed.map((r, i) => {
             const parts = [`± ${r.plusMinus != null ? r.plusMinus.toFixed(2) : '?'} s`, `${r.rate.toFixed(1)} readings a second`];
             if (r.finishKmh != null) parts.push(`${speedWord(r.finishKmh)} at the line`);
-            parts.push(new Date(r.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
+            parts.push(dateTimeText(r.at));
             return <ListRow key={`${r.at}-${i}`} first={i === 0} title={r.label} subtitle={parts.join(', ')} value={`${r.seconds.toFixed(2)} s`} />;
           })
         ) : (
@@ -501,6 +485,19 @@ export default function Performance() {
         {history.length > 10 ? <ListRow title={showAll ? 'Show fewer' : `Show all ${history.length}`} onPress={() => setShowAll((v) => !v)} /> : null}
         {history.length > 0 && vin ?<ListRow title="Clear runs for this car" onPress={() => setConfirmClear(true)} /> : null}
       </Group>
+
+      <ConfirmSheet
+        visible={!!removing}
+        title="Delete this speed range?"
+        lines={removing ? [`${removing.label}. Runs already saved for it stay.`] : []}
+        confirmLabel="Delete"
+        onCancel={() => setRemoving(null)}
+        onConfirm={() => {
+          const r = removing;
+          setRemoving(null);
+          if (r) void removeRange(r.id);
+        }}
+      />
 
       <ConfirmSheet
         visible={confirmClear}
@@ -520,6 +517,6 @@ export default function Performance() {
 
 const styles = StyleSheet.create({
   addRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
-  input: { flex: 1, minWidth: 0, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: 8, minHeight: 40 },
+  input: { flex: 1, minWidth: 0 },
 });
 

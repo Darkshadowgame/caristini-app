@@ -17,7 +17,7 @@ export async function githubReady(): Promise<boolean> {
 
 async function call(path: string, init: RequestInit = {}, accept = 'application/vnd.github+json'): Promise<Response> {
   const t = await token();
-  if (!t) throw new Error('The knowledge base needs the GitHub token (set up in the build, or pasted in Settings).');
+  if (!t) throw new Error('Research notes need the GitHub token (set up in the build, or pasted in Settings).');
   return fetch(`${API}${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${t}`, Accept: accept, 'X-GitHub-Api-Version': '2022-11-28', ...(init.body ? { 'Content-Type': 'application/json' } : {}) },

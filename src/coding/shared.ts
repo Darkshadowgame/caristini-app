@@ -1,7 +1,8 @@
 // Settings one car learned (Learn from Carista), offered on the owner's other
-// cars when the same module is fitted. Always unconfirmed on the new car: they
-// go through Try mode (backup, write, read back, ask, restore) before they
-// are kept. Rules, strictest first:
+// cars when the same module is fitted. Always unconfirmed on the new car: the
+// switch writes like any other (backup, write, read back, original put back
+// if the module does not keep it), and a setting the module keeps is added to
+// the new car's own learned list. Rules, strictest first:
 // - same maker family (VW group; Ford with Mazda; otherwise the same make);
 // - coding only (no adaptation values), in a comfort or display module on the
 //   allow-list: never the gateway, engine, gearbox, brakes, steering or airbags;

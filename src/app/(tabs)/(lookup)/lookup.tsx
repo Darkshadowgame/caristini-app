@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { codeAnatomy, DTC_LIBRARY, searchDtc } from '../../../data/dtcLibrary';
 import { vagFaultText } from '../../../data/vagFaults';
+import { faultMeaning, sentenceCase } from '../../../diag/faults';
 import { useConnection } from '../../../state';
-import { MONO, radius, space, type, useTheme } from '../../../theme';
+import { space, type, useTheme } from '../../../theme';
 import { GUIDES } from '../../../help';
-import { Body, Group, Icon, Label, ListRow, Screen, SearchField, tap } from '../../../ui';
+import { Body, Chip, Group, Icon, Label, ListRow, Screen, SearchField, tap, tool } from '../../../ui';
 
 const POPULAR = ['P0420', 'P0171', 'P0300', 'P0401', 'P2002', 'P0299', 'P0128', 'P0455'];
 
@@ -31,8 +32,9 @@ export default function Lookup() {
   return (
     <Screen title="Lookup" guide={GUIDES.lookup}>
       <SearchField value={q} onChange={setQ} placeholder="Code or keyword, like P0171 or DPF" />
-      <Text style={[type.small, { color: t.muted, marginTop: space.sm, marginLeft: space.xs }]}>
-        {DTC_LIBRARY.length} codes with likely causes and fixes, offline.
+      {/* At the 16 pt inset of the section headers below. */}
+      <Text style={[type.small, type.number, { color: t.muted, marginTop: space.sm, marginHorizontal: space.lg }]}>
+        {DTC_LIBRARY.length.toLocaleString('en-GB')} codes with likely causes and fixes, offline.
       </Text>
 
       {!query ? (
@@ -41,8 +43,9 @@ export default function Lookup() {
             <>
               <Label>On your car now</Label>
               <View style={styles.chips}>
+                {/* Red only for a serious code, as in the health check's fault list. */}
                 {recent.map((c) => (
-                  <Chip key={c} code={c} onPress={() => open(c)} strong />
+                  <Chip key={c} label={c} mono tone={faultMeaning(c, { brand: conn.vehicle?.brand }).entry?.severity === 'high' ? 'danger' : undefined} onPress={() => open(c)} />
                 ))}
               </View>
             </>
@@ -50,7 +53,7 @@ export default function Lookup() {
           <Label style={{ marginTop: recent.length ? space.lg : 0 }}>Common codes</Label>
           <View style={styles.chips}>
             {POPULAR.map((c) => (
-              <Chip key={c} code={c} onPress={() => open(c)} />
+              <Chip key={c} label={c} mono onPress={() => open(c)} />
             ))}
           </View>
           <Group
@@ -58,17 +61,18 @@ export default function Lookup() {
             style={{ marginTop: space.xl }}
             footer="A 0 or 2 after the letter means a generic code, the same on every car. A 1 means the maker defines it."
           >
-            <ListRow first icon="engine-outline" iconColour="red" title="P" value="Engine and gearbox" />
-            <ListRow icon="steering" iconColour="blue" title="C" value="Chassis" />
-            <ListRow icon="car-door" iconColour="green" title="B" value="Body" />
-            <ListRow icon="chip" iconColour="indigo" title="U" value="Network" />
+            {/* Grey squares: these are facts about a code, not tools or states. */}
+            <ListRow first icon="engine-outline" iconColour="grey" title="P" monoTitle value="Engine, gearbox" />
+            <ListRow icon="steering" iconColour="grey" title="C" monoTitle value="Chassis" />
+            <ListRow icon="car-door" iconColour="grey" title="B" monoTitle value="Body" />
+            <ListRow icon="chip" iconColour="grey" title="U" monoTitle value="Network" />
           </Group>
-          <Group header="Fuses and manuals">
+          <Group>
             <ListRow
               first
-              icon="flash-outline"
-              iconColour="orange"
-              title={conn.vehicle ? 'Fuses for this car' : 'Fuse boxes'}
+              {...tool('fuses')}
+              title="Fuses and manuals"
+              subtitle={conn.vehicle ? 'For this car' : undefined}
               onPress={() => router.push('/fuses')}
             />
           </Group>
@@ -81,7 +85,8 @@ export default function Lookup() {
               icon="alert-circle-outline"
               iconColour="grey"
               title={vwNumber}
-              subtitle={`VW fault number · ${vagFaultText(vwNumber)}`}
+              monoTitle
+              subtitle={`VW fault number · ${sentenceCase(vagFaultText(vwNumber) ?? '')}`}
               onPress={() => open(vwNumber)}
             />
           ) : null}
@@ -91,6 +96,7 @@ export default function Lookup() {
               icon="code-tags"
               iconColour="blue"
               title={query.toUpperCase()}
+              monoTitle
               subtitle={codeAnatomy(query) ? `${codeAnatomy(query)!.scope} · ${codeAnatomy(query)!.area}` : 'Not in the library: tap for what the letters mean'}
               onPress={() => open(query)}
             />
@@ -100,9 +106,10 @@ export default function Lookup() {
               key={r.code}
               first={i === 0 && !exactMissing && !vwNumber}
               icon={r.severity === 'high' ? 'alert-octagon-outline' : 'alert-circle-outline'}
-              iconColour={r.severity === 'high' ? 'red' : r.severity === 'medium' ? 'orange' : 'grey'}
+              iconColour={r.severity === 'high' ? 'red' : 'grey'}
               title={r.code}
-              subtitle={r.title}
+              monoTitle
+              subtitle={sentenceCase(r.title)}
               onPress={() => open(r.code)}
             />
           ))}
@@ -120,23 +127,6 @@ export default function Lookup() {
   );
 }
 
-function Chip({ code, onPress, strong }: { code: string; onPress: () => void; strong?: boolean }) {
-  const t = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.chip,
-        { backgroundColor: strong ? t.dangerSoft : t.surface, opacity: pressed ? 0.6 : 1 },
-      ]}
-    >
-      <Text style={[type.sub, type.number, { color: strong ? t.danger : t.text, fontWeight: '600', fontFamily: MONO }]}>{code}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  chip: { borderRadius: radius.md, paddingHorizontal: 12, minHeight: 36, justifyContent: 'center' },
 });

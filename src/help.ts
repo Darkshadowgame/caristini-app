@@ -53,12 +53,13 @@ export const GUIDES: Record<GuideId, Help> = {
     title: 'Car',
     what: 'The home page for the connected car: its health at a glance and every tool one tap away.',
     how: [
-      'Plug the adapter into the OBD2 port under the dashboard, switch the ignition on and tap Connect adapter.',
-      'The card at the top shows the last health check, the engine warning light, the emissions self-tests and the battery voltage, read every 10 seconds while this page is open.',
+      'Plug the adapter into the OBD port under the dashboard, switch the ignition on and tap Connect adapter.',
+      'The card at the top shows the last health check, the engine light, the emissions self-tests and the battery voltage, read every 10 seconds while this page is open.',
       'Tap Run health check to check the car for faults. Tap the battery figure for a full battery test.',
-      'The 4 tiles open History, Live data, Customise and Service. More tools, For experts and Driving list everything else.',
-      'Not connected? You can still open History, Code lookup and the service reset guides.',
-      'The button at the top right disconnects from the car.',
+      'The 4 tiles open History, Live data, Customise and Service. This car, Driving and Expert list everything else.',
+      'Not connected? No adapter needed lists the last car’s History and MOT check, and its saved logs, last battery reading and emissions self-tests where there are any, with Lookup and the service reset guides.',
+      'If the adapter link drops, Caristini tries the same adapter again 4 times over about 60 seconds and shows Reconnecting. Tap Stop trying, or open Connect, to end it. A recording or trip that ended when the link dropped stays ended, with what it had saved.',
+      'Tap Disconnect, under the car’s name, to disconnect from the car.',
     ],
   },
   connect: {
@@ -70,6 +71,7 @@ export const GUIDES: Record<GuideId, Help> = {
       'Tap your adapter. The first connection can take up to 30 seconds while the adapter finds the car’s protocol.',
       'Caristini reads the VIN (the car’s identity number), works out which car it is and saves it under Your cars.',
       'Settings can connect for you when the app opens, and run a health check straight after connecting.',
+      'Opening this page stops any reconnect tries, so you can choose an adapter yourself.',
     ],
     note: 'Only one app can use the adapter at a time. Close Carista or other OBD apps first.',
   },
@@ -95,14 +97,15 @@ export const GUIDES: Record<GuideId, Help> = {
     note: 'Check part numbers against a catalogue by VIN before ordering.',
   },
   vehicle: {
-    title: 'Vehicle details',
+    title: 'Car details',
     what: 'One of your cars: its last health check, its records and the details Caristini uses for it.',
     how: [
-      'The last health check, History, Research notes and Diary work without the adapter.',
+      'Records work without the adapter: the last health check, Parts and IDs, History, the MOT check, Research notes and Diary. Saved logs, the last battery reading and the emissions self-tests show for the connected car, or with no adapter for the car used last, when there is something saved.',
       'Detected from the VIN shows what Caristini read from the car’s identity number.',
       'Under Your details you can add a nickname and correct the make, model, year and fuel.',
       'Maker group decides which service guides and settings Caristini offers, so set it right if the VIN was not recognised.',
       'Tap Save to keep your changes. Remove this car deletes the car’s details from this phone; diary entries stay.',
+      'Save writes only the details on this page (nickname, make, model, year, maker group, platform and fuel). Anything else saved on the car, such as Parts and IDs, is left as it is.',
       'Your details come first. Platform shows which models it covers; leave it on Not sure if you do not know it.',
     ],
   },
@@ -111,16 +114,20 @@ export const GUIDES: Record<GuideId, Help> = {
     what: 'Checks the control modules in the car for stored faults and shows what each one means. A control module is a small computer that runs one part of the car, such as the engine, the airbags or the doors.',
     how: [
       'It starts by itself. Each dot around the car is a module: green has no faults, red has faults, orange could not be read, dim is not fitted or asleep.',
-      'The first 2 checks ask every address and, on VW group cars, look once for older modules. After that a check asks only the modules your car has, which is about 3 times quicker on an Audi A6.',
+      'The first 2 checks ask every address and, on VW group cars, look once for older VW modules. After that a check asks only the modules your car has, which is about 3 times quicker on an Audi A6.',
       'Every address is asked again by itself after 30 days, or when you tap Check every address.',
       'The odometer is read too, so service reminders know the distance.',
       'Tap Stop and keep results to end after the module being read. The time left shows after a few modules.',
+      'Going back while it runs asks first: Stop and go back keeps what was found, Keep running carries on. Switching to another app or locking the phone asks nothing and does not stop it.',
       'Tap any fault for what it means and, where Caristini knows them, the likely causes and how to fix it.',
       'Clear one module or Clear all faults. Faults that come straight back mean the cause is still there.',
-      'Under the result: Clear all faults, Make a PDF health report.',
+      'Under the result: Clear all faults, Make health report.',
+      'After Clear all faults the car is checked again, and the message then says whether anything came back.',
+      'The saved result (See faults on the Car tab) has the same next steps: Clear all faults checks the car again first and then asks, Make health report and MOT check.',
+      'Engine light is the engine warning light on the dashboard, as the car reports it.',
       'Each check is saved to History. From the Car tab, See faults opens the last check with no new one. With no adapter, this page shows the last check saved on this phone.',
     ],
-    note: 'Clear faults with the engine off and the ignition on: Caristini refuses while the engine runs. Clearing also resets the emissions self-tests, so an MOT can fail until you have driven enough for them to complete.',
+    note: 'Faults can be cleared with the engine running. A few modules only clear with the engine off and the ignition on; the result names any that refused. Clearing also resets the emissions self-tests, so an MOT can fail until you have driven enough for them to complete.',
   },
   code: {
     title: 'Fault code',
@@ -140,7 +147,7 @@ export const GUIDES: Record<GuideId, Help> = {
       'Type a code like P0171 or a word like DPF.',
       'On your car now lists the codes from your last health check.',
       'Tap a code for its meaning, causes and fixes.',
-      'Fuses and manuals opens the fuse box layouts.',
+      'Fuses and manuals opens the fuse box layouts and links to the maker’s manuals.',
     ],
   },
   history: {
@@ -159,11 +166,11 @@ export const GUIDES: Record<GuideId, Help> = {
     what: 'Makes a one-page PDF about this car, for an MOT, a sale or a garage visit.',
     how: [
       'Run a health check first so the report lists every module’s faults.',
-      'Tap Make PDF. Caristini reads the engine codes, the battery voltage and the odometer where the car reports it.',
+      'Tap Make health report. Caristini reads the engine codes, the battery voltage and the odometer where the car reports it.',
       'The report holds the car, engine light, emissions codes, the faults from the last health check and the emissions self-tests.',
       'Share the PDF or save it to Files.',
     ],
-    note: 'It is read by the owner from the diagnostic port. It is not an MOT test or a garage inspection.',
+    note: 'It is read by the owner from the OBD port. It is not an MOT test or a garage inspection.',
   },
   live: {
     title: 'Live data',
@@ -173,8 +180,10 @@ export const GUIDES: Record<GuideId, Help> = {
       'Standard readings: tap Choose to pick which values to watch, search for a value, or save and load named sets. Fewer values update faster. With Developer options on, the readings and updates a second are shown too.',
       'Each tile shows the value, a short trend line and the lowest and highest since you opened the page. Reset starts them again.',
       'Tap a tile to set alert limits. Past a limit the tile turns red and the phone buzzes.',
-      'Record saves every reading with its time. Tap Stop, then Share CSV to open it in Numbers or Excel.',
-      'Coolant above 110 °C shows a warning.',
+      'Record saves every reading with its time. Tap Stop recording, then Share CSV to send it as a file that opens in Numbers or Excel.',
+      'A recording is kept until you record again or close Caristini, so you can leave this page and come back to share it. For recordings saved on the phone with charts, use the Data logger.',
+      'Coolant above 110 °C (230 °F) shows a warning.',
+      'The phone stays awake while this page is open.',
       'Views: Fuel trims on petrol cars, and Turbo boost where the car reports it.',
       'Maker data and Older VW modules read values that only some cars have.',
     ],
@@ -183,7 +192,8 @@ export const GUIDES: Record<GuideId, Help> = {
     title: 'Find my car’s sensors',
     what: 'Every maker sensor your car answers, by system, with live values. The list of possible sensors comes from the open OBDb project.',
     how: [
-      'Tap Quick search once. Caristini asks first what other cars of your make answered, then the rest, and keeps the ones your car answers. You can stop and keep what was found.',
+      'Tap Quick search once. Caristini asks first what other cars of your make answered, then the rest, and keeps the ones your car answers. Tap Stop and keep results to end early.',
+      'Going back while it runs asks first: Stop and go back keeps what was found, Keep running carries on. Switching to another app or locking the phone asks nothing and does not stop it.',
       'Full search asks everything again, to confirm or correct. Modules to search lets you leave some out, for example the engine.',
       'Open a system, or search in your own words, for example oil, boost or gearbox temp.',
       'Values refresh while the page is open.',
@@ -198,7 +208,8 @@ export const GUIDES: Record<GuideId, Help> = {
     what: 'Large gauges to watch while driving, on as many pages as you like, with alerts for an overheating engine or a low battery.',
     how: [
       'Tap a gauge to choose which value it shows. Press and hold it for alert limits and its lowest and highest.',
-      'Swipe or tap a page name to switch pages. Edit page sets the name, the tile style (number, dial, bar or graph) and the number of tiles.',
+      'Gauges take standard values. Maker values and older VW value groups are in Live data and the Data logger.',
+      'Swipe or tap a page name to switch pages. Edit page sets the name, the gauge style (number, dial, bar or graph) and the number of gauges.',
       'Shift light sets the engine speed at which the whole screen flashes red.',
       'Windscreen view mirrors the screen so you can lay the phone under the windscreen at night and read it in the glass.',
       'Alerts show for coolant too hot and for low voltage, with the engine running or off.',
@@ -213,8 +224,10 @@ export const GUIDES: Record<GuideId, Help> = {
       'Step 1: engine off, ignition on, lights and fan off. Tap Read rest voltage.',
       'Step 2: engine off. Tap Start, then start the engine within 10 seconds. Caristini records the lowest voltage while cranking.',
       'Step 3: engine idling. Read at idle, then switch on the headlights, heated rear screen and fan and read again.',
-      'Results gives a verdict for each reading.',
-      'The figure at the top is read when the page opens and every 10 seconds between steps, the same reading as on the Car tab.',
+      'A step 1 reading above 13.0 V is not taken as a rest voltage: the engine is running, or the battery holds surface charge from a drive or a charger. Switch off, wait a few minutes and read again.',
+      'Results gives a verdict for each reading. Each reading is saved as it is taken, and the test is listed in History.',
+      'The page opens on your last test with its date, with or without the adapter. A test left part-way carries on if you come back within 30 minutes.',
+      'The figure at the top is read when the page opens and every 10 seconds between steps, the same reading as on the Car tab. This page shows it to 2 decimal places; other pages show 1.',
     ],
     note: 'The port reads slightly lower than the battery itself. The figures are general lead-acid guides.',
   },
@@ -222,7 +235,7 @@ export const GUIDES: Record<GuideId, Help> = {
     title: 'Performance',
     what: 'Times 0 to 60 mph, 30 to 70 mph, 0 to 100 km/h, the quarter mile and your own speed ranges from the speed the car reports.',
     how: [
-      'Pick a test and tap Get ready.',
+      'Choose a test and tap Get ready. Tap Stop to give up a run.',
       'Stop the car (or slow below the start speed). The timer starts when you pass the start speed and stops at the target.',
       'Runs are saved for each car, with plus or minus how far each time could be off.',
       'Accuracy depends on how fast the adapter answers, usually 5 to 10 readings a second, so treat results as a guide.',
@@ -231,20 +244,23 @@ export const GUIDES: Record<GuideId, Help> = {
   },
   customise: {
     title: 'Customise',
-    what: 'Switch hidden settings on your car on and off, such as the needle sweep or the lights. Each setting is a change to a module’s coding, the list of options stored in that module.',
+    what: 'Switch hidden settings on your car on and off, such as how the lights or the locking behave. Each setting is a change to a module’s coding, the list of options stored in that module.',
     how: [
       'The list opens on the coding read last time. Each switch unlocks once its module has answered again, so nothing is written from old data.',
       'Tap a setting’s name for what it does, where it lives (byte and bit) and its source.',
-      'Before each change Caristini checks the battery and the engine, saves the module’s current coding as the original, writes the change and reads it back.',
+      'Flip a switch and Caristini writes the change at once: it saves the module’s current coding as the original, writes the change and reads it back.',
       'If the module does not keep the change, Caristini puts the original coding back.',
+      'While a change is written the row shows Writing. Keep this page open. If you leave anyway, the change is still saved.',
       'Switch the ignition off and on to see a change. Every change is saved to History and your diary.',
+      'Built-in switches are for VW group cars (VW, Audi, SEAT, Skoda and Cupra) whose model Caristini knows. Other cars have guides only, and the page says so at the top.',
+      'On a car with no built-in switches, Learn from Carista is the first row: change a setting once in Carista and Caristini learns it as a switch for your car.',
       'Backups lets you put a module’s original coding back at any time.',
     ],
-    note: 'Ignition on and engine off is best. A battery below 10.5 V at the port stops any change.',
+    note: 'Nothing stops a change: not the engine running, a low battery or a coding of a different length. If a change does not save on a battery below 10.5 V, run the engine or connect a charger and try again.',
   },
   customiseGuide: {
-    title: 'Customisation guide',
-    what: 'How one customisation is done on your kind of car, where it lives and where the information comes from.',
+    title: 'Settings guide',
+    what: 'How one setting is changed on your kind of car, where it lives and where the information comes from.',
     how: [
       'The label says who can make the change: you with the car’s own controls, a documented setting Caristini does not write yet, or the dealer’s tool only.',
       'Where it lives names the module and the setting.',
@@ -268,29 +284,33 @@ export const GUIDES: Record<GuideId, Help> = {
     what: 'Step-by-step guides to reset the service or oil reminder after a service, a reset with the adapter for cars that need a tool, and a reminder of when the next service is due.',
     how: [
       'The methods use the car’s own buttons and menus, or the adapter for cars that need a tool. Each shows whether it comes from the maker or a third party.',
-      'Tap I did this reset to save it to your diary.',
+      'Tap I did this reset to save it to your diary, and to History when the car is connected.',
       'Under Common service intervals tap the one that matches your service book; a tick shows the one chosen. Caristini counts time, and distance too once it knows the odometer: Read the odometer under Reminder reads it straight away.',
-      'Mark service done today saves it to your diary and starts the count again from today.',
+      'For a car serviced before today, type the last service date and its mileage under Reminder, and the odometer now, in the unit set in Settings, then tap Save.',
+      'Mark service done today saves it to History and your diary, and starts the count again from today.',
+      'With no adapter connected the reminder shows for your last car.',
     ],
     note: 'For cars that need a tool, use Reset with the adapter at the bottom of the page.',
   },  serviceReset: {
     title: 'Reset with the adapter',
     what: 'Resets the service or oil reminder through the adapter, for cars where the instrument menu cannot do it.',
     how: [
-      'Resets for this car lists what Caristini can send: learned on this car (green) or from a public source (Try, orange).',
-      'Learn it by compare: save the cluster values, reset the service with another tool, then compare.',
-      'Learn it by recording: record another tool with Listen mode and a Y-splitter.',
+      'No reset is built in for any car yet. Resets for this car lists the ones learned on this car, so it is empty until you learn one.',
+      'Learning needs another tool (Carista, VCDS or a garage tool) to reset the service once.',
+      'Learn it by compare: save the cluster values, reset the service with the other tool, then compare. No extra parts are needed.',
+      'Learn it by recording: record the other tool with Listen mode. This needs an OBD Y-splitter.',
+      'On a car whose instrument cluster uses the older VW protocol, learning by compare is switched off and recording is the only way.',
       'Every step is shown before anything is sent, old values are kept, and they are put back if a step is refused.',
     ],
-    note: 'Nothing is guessed: only steps learned on this car or published for it are sent.',
+    note: 'Nothing is guessed: only steps learned on this car are sent.',
   },
 
   knowledge: {
     title: 'Research notes',
     what: 'Notes saved for your kind of car, such as fuse layouts, common faults and published settings. They are read from your private findings store when the app opens.',
     how: [
-      'Search the saved entries, and tap one to see its sources.',
-      'New knowledge arrives by itself when the app opens, or tap Check for new knowledge.',
+      'Search the saved notes, and tap one to see its sources.',
+      'New notes arrive by themselves when the app opens, or tap Check for new notes.',
     ],
   },
   fuses: {
@@ -308,7 +328,7 @@ export const GUIDES: Record<GuideId, Help> = {
     how: [
       'Tap + to add an entry.',
       'Cleared faults, service resets and setting changes are added for you.',
-      'With more than one car, tap a car to show only its entries.',
+      'With more than one car, tap a car to show only its entries. Entries follow the car, so renaming a car keeps them together.',
       'Tap Delete under an entry to remove it.',
     ],
   },
@@ -338,21 +358,21 @@ export const GUIDES: Record<GuideId, Help> = {
     title: 'Control module',
     what: 'One control module: what it is, its faults, its live values and its coding, in plain words.',
     how: [
-      'The top shows the address, part number and software. Older system means it uses the older VW protocol.',
-      'Faults: the fault memory of this module. Tap a fault for its meaning, Read again, or Clear these faults.',
-      'Values: named values with Read all or Live. Older modules show numbered groups of 4 values. Expert reads any value by its 4-character number.',
+      'The top shows the address, part number and software. Older VW module means it uses the older VW protocol.',
+      'Faults: the fault memory of this module. Tap a fault for its meaning, Read again, or clear this module’s faults.',
+      'Values: named values with Read all or Live. Older VW modules show numbered groups of 4 values. Expert reads any value by its 4-character number.',
       'Coding: named switches and every byte of the coding. Nothing changes in the car until you tap Save to the car.',
-      'Saving checks the battery first, keeps the original coding, reads the new one back and puts the original back if the module does not keep it.',
-      'Restore original coding puts back what the module had before Caristini first changed it.',
+      'Saving keeps the original coding, reads the new one back and puts the original back if the module does not keep it.',
+      'Put back original coding puts back what the module had before Caristini first changed it.',
     ],
-    note: 'Only change bits you know from a trusted source. Clear faults with the engine off and the ignition on.',
+    note: 'Only change bits you know from a trusted source.',
   },
   partNumbers: {
     title: 'Read part numbers',
     what: 'Reads every module’s part number, software, hardware and coding, to save or share.',
     how: [
       'Tap Read part numbers. Modules that answer are listed as they arrive.',
-      'Technical details shows the protocol and the CAN IDs.',
+      'Technical shows the protocol and the CAN IDs.',
       'Copy all or Share sends the list, for example to a parts supplier or a forum.',
       'The coding of each module is kept on this phone as a backup.',
     ],
@@ -365,12 +385,13 @@ export const GUIDES: Record<GuideId, Help> = {
       'Run it with the engine running. The first run reads everything and takes longest; later runs refresh only what changes (the faults of every module, emissions, the MOT read, battery and odometer) and usually take a few minutes. The screen shows the time for your car, from your adapter’s measured pace and your last run, and the time left while it runs.',
       'Module identities and codings, the search for your car’s sensors and the search of every address run again for a new or missing module, every 30 days, or when you switch on Read everything again. Addresses that never answered are not asked again until then.',
       'Step 1 reads each module’s part number, software and coding, and keeps the coding as a backup. If the car is not answering, or fewer than half its known modules answer, it stops and keeps your earlier results.',
-      'Step 2 is a full health check of every module, older VW modules too, with the engine’s codes and freeze frames. It is saved like any health check, so the Car tab, See faults, Lookup, the PDF report and the MOT check use it.',
+      'Step 2 is a full health check of every module, older VW modules too, with the engine’s codes and freeze frames. It is saved like any health check, so the Car tab, See faults, Lookup, the Health report and the MOT check use it.',
       'Step 3 asks the sensors other cars of your make answered first; the full list is on Find my car’s sensors.',
       'Step 4 looks near the values already known for each module for ones no list knows yet. On older VW modules it reads the value groups, named groups first. It gets 2.5 minutes each run and carries on where the last run stopped, until every module is explored.',
       'Step 5 reads the emissions self-tests, test results and calibration IDs. Step 6 reads the MOT items from the car, so only the walk-round is left. Step 7 reads the battery voltage and the odometer.',
       'Step 8 saves what was learned and sends it to your private findings store, filed under the VIN. Switch off Send what this run finds to keep a run, and its adapter log, on this phone.',
       'A step that fails is marked and the run carries on. Stop any time: what was found is kept and saved.',
+      'Going back while it runs asks first: Stop and go back keeps what was found, Keep running carries on. Switching to another app or locking the phone asks nothing and does not stop it. The rows under What Caristini knows about this car open when the run ends.',
       'You can switch to another app or lock the phone while it runs: it carries on and a chime plays when it ends. iPhone asks once to use your location, which is what lets an app keep running. Swiping Caristini away in the app switcher stops the run.',
       'On VW PQ35 cars it uses the gateway’s list of modules and skips the newer-protocol address search and sensor list.',
     ],
@@ -382,12 +403,13 @@ export const GUIDES: Record<GuideId, Help> = {
     how: [
       'Quick explore asks only the blocks around values already known for that module, plus the live-value block. Full explore asks every number in the usual ranges and takes much longer.',
       'Both skip numbers already asked on this car. Open one module to explore it alone.',
-      'Pause any time and carry on later from where it stopped.',
+      'Tap Stop and keep results any time and carry on later from where it stopped.',
       'Open a module to see what it found. Sample again shows which values move: rev the engine, switch something on or drive, then sample again.',
       'Tap a value to name it.',
       'Send findings sends them to your private findings store, filed under the VIN, to be built into Caristini.',
       'The module list shows the modules that answered your last health check. Run one first if the list is long.',
       'Full explore shows the total time for all the modules listed before it starts.',
+      'Going back while it runs asks first: Stop and go back keeps what was found, Keep running carries on. Switching to another app or locking the phone asks nothing and does not stop it.',
     ],
     note: 'Read-only: nothing is written to the car.',
   },
@@ -422,7 +444,8 @@ export const GUIDES: Record<GuideId, Help> = {
       'Tap Choose values and pick what to record: standard values, maker values found by Find my car’s sensors, and older VW groups found by Learn my car.',
       'Tap Record, or turn on Auto-start to begin when engine speed, the accelerator or the throttle goes above a set value.',
       'While recording, tap Marker to number a moment you want to find later.',
-      'Tap Stop. The log appears under Saved logs; open it to see the charts, drag across a chart to read every value at that moment, and share it as a CSV.',
+      'Tap Stop recording. The log appears under Saved logs; open it to see the charts, drag across a chart to read every value at that moment, and share it as a CSV.',
+      'Saved logs open with no adapter too: from the Car tab under No adapter needed, or from the car’s page under Records.',
       'With Record route on, the log keeps going with the screen locked, and the viewer shows the route you drove.',
     ],
     note: 'Fewer values record faster. The rate shown is what the adapter achieved. Set up the log before you drive and keep your eyes on the road.',
@@ -444,7 +467,7 @@ export const GUIDES: Record<GuideId, Help> = {
     how: [
       'Open it from Customise or History.',
       'Share as text for a readable list, or as CSV for a spreadsheet.',
-      'Backup is the coding the module had before Caristini first changed it. Customise > Backups puts it back.',
+      'Backup is the coding the module had before Caristini first changed it. Customise, then Backups puts it back.',
       'Changes made before this list was added show Backup: Not recorded.',
       'Put back opens Customise and asks before it writes. It puts back the coding the module had before Caristini first changed it, so every change to that module is undone.',
     ],
@@ -455,10 +478,13 @@ export const GUIDES: Record<GuideId, Help> = {
     how: [
       'From the car reads the engine light, the engine codes and the faults in the modules whose warning lamps the MOT checks: ABS and stability control, airbags, power steering, tyre pressure and electronic parking brake where fitted, plus lamp, horn and wiper faults. It only reads; nothing is cleared.',
       'If a full health check ran in the last hour, you can use it instead of reading the modules again.',
-      'Walk-round: work down the list and mark each item Pass, Advisory, Fail or Not checked. Each item says what fails, from the MOT manual, with its section number.',
+      'A complete health check that is newer than the car read is used by itself, so a fault cleared or found since is not missed. The top of the page shows how old the car read is.',
+      'Going back while the car is being read asks first. Share and Save wait until the read has ended.',
+      'Walk-round: work down the list and mark each item Pass, Advisory, Fail or To do. Each item says what fails, from the MOT manual, with its section number.',
       'Result lists likely fails and advisories with what to fix. Share sends it as text; Save keeps it in History.',
       'Check MOT history opens the GOV.UK service, where you type the registration yourself.',
       'Your answers are kept on this phone until you start again, so the walk-round can be done over a few days.',
+      'With no adapter, open it from the Car tab under No adapter needed, or from the car’s page under Records.',
     ],
     note: 'A guide only, from the DVSA MOT inspection manual for cars (read 15 Nov 2026). The tester decides on the day.',
   },
@@ -479,6 +505,7 @@ export const GUIDES: Record<GuideId, Help> = {
       'SEAT Leon Cupra and other older VW petrol engines: Caristini reads value group 020 (knock retard, cylinders 1 to 4) over and over, with group 003 (rpm and timing) and 115 (boost).',
       'Watch the readings under load, for example in 3rd gear at full throttle on a closed road.',
       'A warning shows when a cylinder pulls more than 3° or pulls 3° more than every other cylinder.',
+      'The peaks and verdict of the last session are kept on this phone and shown here until a new session has readings.',
       'Other cars: knock values are not known, so only the standard timing advance is shown where the car reports it.',
     ],
     note: 'The 3° figure is an owner forum guide, not a SEAT figure. Other VW engines are reported to allow 0 to 12°. A cylinder that keeps pulling more than the others can point to a plug, coil or injector on that cylinder, or poor fuel.',
@@ -509,7 +536,7 @@ export const GUIDES: Record<GuideId, Help> = {
     what: 'How much the engine computer is correcting the fuel, per bank, with the lambda and oxygen sensors. Plus means it adds fuel because it sees a lean mixture; minus means it takes fuel away (rich).',
     how: [
       'Short term moves all the time. Long term is what the engine has learned. Total is both added together.',
-      'Green: within 10 %. Amber: 10 to 20 %, worth watching. Red: beyond 20 %, where many engines set a lean or rich fault code.',
+      'Green: within 10%. Amber: 10 to 20%, worth watching. Red: beyond 20%, where many engines set a lean or rich fault code.',
       'Judge at a steady speed with the engine warm. A vacuum leak shows as high plus trims at idle that fall with revs.',
       'Bank 2 shows only on V engines. Lambda 1.00 is the ideal mixture; below 1 is rich, above 1 is lean.',
     ],
@@ -581,10 +608,10 @@ export const SECTIONS: Record<string, Help> = {
     how: [
       'Tap a fault for what it means and the likely causes.',
       'Read again asks the module once more.',
-      'Clear these faults wipes this module’s fault memory, then reads it again. Faults still present come back.',
+      'Clear faults wipes this module’s fault memory, then reads it again. Faults that are still present come back.',
       'Clearing is saved to History and your diary.',
     ],
-    note: 'Clear with the engine off and the ignition on: Caristini refuses while the engine runs.',
+    note: 'Works with the engine running. A few modules only clear with the engine off and the ignition on.',
   },
   moduleNamedValues: {
     title: 'Named values',
@@ -626,7 +653,7 @@ export const SECTIONS: Record<string, Help> = {
       'Tap a byte to see its 8 bits. Named bits say what they do; others show Bit 0 to 7.',
       'Bytes with a named bit have an amber outline. Bytes you have changed are highlighted.',
       'Save to the car keeps the original coding first, writes the new one, reads it back and puts the original back if the module does not keep it.',
-      'Undo my changes resets the draft. Restore original coding puts back what the module had before Caristini first changed it.',
+      'Undo my changes resets the draft. Put back original coding puts back what the module had before Caristini first changed it.',
     ],
     note: 'Only change bits you know from a trusted source.',
   },
@@ -648,7 +675,7 @@ export const SECTIONS: Record<string, Help> = {
       'Tap a fault for causes and fixes.',
       'Clear removes this module’s faults only.',
     ],
-    note: 'Ignition on, engine off when clearing.',
+    note: 'Works with the engine running. A few modules only clear with the engine off and the ignition on.',
   },
   diagCouldNotRead: {
     title: 'Could not read',
@@ -661,7 +688,7 @@ export const SECTIONS: Record<string, Help> = {
     how: ['Most are not fitted to your car.', 'Some are not reachable from this port.'],
   },
   diagOlder: {
-    title: 'Older modules',
+    title: 'Older VW modules',
     what: 'Some VW group modules, such as central electronics, comfort and doors, speak an older protocol and are found by a separate look.',
     how: [
       'Caristini looks for them once, at the end of the first health check on a car, and saves what it finds.',
@@ -672,7 +699,7 @@ export const SECTIONS: Record<string, Help> = {
   },
   diagEmissions: {
     title: 'Engine emissions (OBD2)',
-    what: 'The standard emissions fault codes every car reports, and the engine warning light.',
+    what: 'The standard emissions fault codes every car reports, and the engine light.',
     how: [
       'Stored: confirmed faults. Pending: seen once, not yet confirmed.',
       'Permanent: clear themselves once the car sees the fault fixed during normal driving.',
@@ -704,7 +731,7 @@ export const SECTIONS: Record<string, Help> = {
       'Tap a name for details, the byte and bit, and the source.',
       'Reported by owners means one community source. Check the result in the car.',
       'A switch stays grey until its module has answered.',
-      'Flip a switch and confirm. Switch the ignition off and on to see the change.',
+      'Flip a switch to write the change. Switch the ignition off and on to see it. Flip it back to undo it.',
     ],
     note: 'Caristini saves the original coding first and puts it back if the module does not keep the change.',
   },
@@ -713,33 +740,34 @@ export const SECTIONS: Record<string, Help> = {
     what: 'Settings with one vague source each, not yet confirmed on cars like yours.',
     how: [
       'Caristini writes the change and checks the module kept it.',
-      'It then asks whether you saw the change. No, put it back writes the old value again and marks it No effect seen.',
-      'The result shows as a label: Works on your car, Did not take or No effect seen.',
+      'Switch the ignition off and on and check the car. If you see no effect, switch it back off.',
+      'Did not take shows when the module refused the change and the original coding was put back.',
     ],
   },
   customiseLearned: {
     title: 'Learned from your car',
-    what: 'Switches you made with Learn a setting, from the exact bytes Carista changed on this car.',
+    what: 'Switches you made with Learn from Carista, from the exact bytes Carista changed on this car.',
     how: [
       'Flip a switch to write the learned bytes, with the same backup and read-back.',
       'Forget removes the switch from Caristini. The car keeps whatever is set now.',
       'A switch waits if its module does not answer with the coding it had when learned.',
+      'From your other cars lists settings learned on another of your cars with the same module. Switch one on and, if the module keeps it, it moves here. If you see no effect, switch it back off.',
     ],
   },
   customiseMore: {
-    title: 'More settings',
+    title: 'Get more settings',
     what: 'Add a setting Caristini does not know yet by learning it from Carista.',
-    how: ['Caristini saves your coding, you change one setting in Carista, and Caristini compares.'],
+    how: ['Caristini saves your coding, you change one setting in Carista, and Caristini compares.', 'This group is first on the page for a car with no built-in switches.'],
   },
   customiseBackups: {
     title: 'Backups',
     what: 'The coding each module had before Caristini first changed it.',
-    how: ['Tap Restore to put a module’s original coding back.', 'It shows once a module’s coding differs from its original.'],
+    how: ['Tap Put back beside a module to put its original coding back. Caristini asks first.', 'A module shows here once its coding differs from its original.'],
   },
   customiseUnreachable: {
     title: 'Not reachable on this car yet',
-    what: 'Settings in modules that did not answer, or whose coding is not the length the sources describe.',
-    how: ['They are not offered, so nothing is written to a module that may be different.'],
+    what: 'Settings in modules that did not give their coding this time.',
+    how: ['With the ignition on, tap Read settings again. A setting appears as soon as its module’s coding is read.'],
   },
   customiseGuides: {
     title: 'Guides',
@@ -769,7 +797,7 @@ export const SECTIONS: Record<string, Help> = {
   learnCompare: {
     title: 'Compare',
     what: 'Reads the modules again and lists what changed in each one.',
-    how: ['Name each change after the setting you changed in that module; leave one empty to skip it.', 'Keep makes them switches and starts the next round straight away.', 'Add a login code only if a module needs one to accept changes.', 'Every compare and every learned setting is sent to the private findings repo.'],
+    how: ['Name each change after the setting you changed in that module; leave one empty to skip it.', 'Keep makes them switches and starts the next round straight away.', 'Add a login code only if a module needs one to accept changes.', 'Every compare and every learned setting is sent to your private findings store.'],
   },
   // All sensors
   sensorsPinned: {
@@ -805,14 +833,14 @@ export const SECTIONS: Record<string, Help> = {
   liveHub: {
     title: 'Sensors on this car',
     what: 'The maker sensors your car answered in Find my car’s sensors.',
-    how: ['Open a system for its live values.', 'Tap the star on a value to pin it to the top of this page.', 'Search all sensors finds a value by name.'],
+    how: ['Open a system for its live values.', 'Tap the star on a value to pin it to the top of this page.', 'Find my car’s sensors finds a value by name, or searches the car again.'],
   },
   liveStandard: {
     title: 'Standard readings (every car)',
     what: 'The standard values cars report over OBD2, such as speed, engine speed and coolant temperature.',
     how: [
       'Choose picks which values to watch. Fewer values update faster.',
-      'Pause stops reading. Reset clears the lowest and highest.',
+      'Pause stops reading until you tap Resume. Reset clears the lowest and highest.',
       'Record keeps every reading. Stop, then Share CSV.',
     ],
   },
@@ -835,7 +863,7 @@ export const SECTIONS: Record<string, Help> = {
     title: 'Older VW modules',
     what: 'Live values from modules on the older VW protocol, in numbered groups.',
     how: [
-      'Tap Find older modules, then pick one.',
+      'Tap Look for older VW modules, then pick one.',
       'Use − and + or a preset to pick a group. Live keeps reading it.',
       'Read every group of this module reads groups 1 to 255 and lists the ones with values. Learn my car reads them too and keeps the list.',
       'Values with an unknown formula are shown raw.',
@@ -862,7 +890,7 @@ export const SECTIONS: Record<string, Help> = {
     what: 'The 8 steps of Learn my car, in order.',
     how: [
       'The step running now is marked Now. A step gets a green tick only when it finished.',
-      'Failed: the step hit an error; the run carried on. Stopped or Not run: you tapped Stop. Carries on next time: the value step reached its time limit.',
+      'Failed: the step hit an error; the run carried on. Stopped or Not run: you tapped Stop and keep results. Carries on next time: the value step reached its time limit.',
       'What it finds is sent to your private findings store, unless Send what this run finds is off.',
     ],
   },
@@ -876,9 +904,9 @@ export const SECTIONS: Record<string, Help> = {
     ],
   },
   learnCarKnows: {
-    title: 'What Caristini knows',
+    title: 'What Caristini knows about this car',
     what: 'The modules found on this car, with plain names and part numbers.',
-    how: ['Tap one to open it in the Workshop.'],
+    how: ['Tap one to open it in Workshop.'],
   },
   // Listen mode
   listenSetup: {
@@ -903,12 +931,12 @@ export const SECTIONS: Record<string, Help> = {
   batteryRest: {
     title: 'Rest voltage',
     what: 'The battery’s charge with the engine off.',
-    how: ['Best after the car has stood for a few hours.', 'About 12.6 V is full, 12.2 V about half, below 12.0 V flat.'],
+    how: ['Best after the car has stood for a few hours.', 'About 12.6 V is full, 12.2 V about half, below 12.0 V flat.', 'Above 13.0 V is not a rest reading: the engine is running or the battery holds surface charge. Wait a few minutes and read again.'],
   },
   batteryCrank: {
     title: 'Cranking',
     what: 'The lowest voltage while the starter turns the engine.',
-    how: ['Above 9.6 V is generally fine. Lower suggests a weak battery or a poor connection.', 'A short dip can fall between readings.'],
+    how: ['Above 9.6 V is generally fine. Lower suggests a weak battery or a poor connection.', 'A short dip can fall between readings.', 'The 10 second start window counts down in seconds (for example 8 s left); other waits count in minutes.'],
   },
   batteryCharge: {
     title: 'Charging',
@@ -922,7 +950,7 @@ export const SECTIONS: Record<string, Help> = {
     how: ['Standing starts begin when the car moves. 30 to 70 begins as you pass 30 mph.', 'You cannot change the test while the timer is ready.'],
   },
   perfSession: {
-    title: 'This session',
+    title: 'Runs on this car',
     what: 'Your runs on this car, newest first, saved on this phone.',
     how: [
       'Each shows the time, plus or minus how far it could be off, readings a second and, for the quarter mile, the speed at the line.',
@@ -964,7 +992,7 @@ export const SECTIONS: Record<string, Help> = {
     how: [
       'Switch on Keep an adapter log, repeat what went wrong, then Share adapter log.',
       'With Send the log automatically on, new lines go to your private findings store after each health check, Find my car’s sensors, Learn my car or failed connect.',
-      'Clear log empties it.',
+      'Clear log empties it. Caristini asks first.',
     ],
   },
   // Other screens
@@ -974,7 +1002,7 @@ export const SECTIONS: Record<string, Help> = {
     how: [
       'Part number, software and hardware identify the exact part.',
       'Coding is the list of options stored in the module.',
-      'Technical details shows the protocol and the CAN IDs.',
+      'Technical shows the protocol and the CAN IDs.',
     ],
   },
   fusesBox: {
@@ -998,7 +1026,10 @@ export const SECTIONS: Record<string, Help> = {
     how: [
       'Common service intervals are generic, not your maker’s plan: pick the one that matches your service book or handbook. A tick shows the one chosen.',
       'Mark service done today when the car has been serviced.',
-      'Distance counts once Caristini knows the odometer: tap Read the odometer here, run a health check or make a health report.',
+      'Serviced before today? Type the last service date (day/month/year) and its mileage, then tap Save.',
+      'Distance counts once Caristini knows the odometer: type it under Odometer now, tap Read the odometer, run a health check or make a health report.',
+      'The distance left is counted from the last odometer figure, so read or type it again now and then.',
+      'With no adapter connected the reminder shows for your last car.',
     ],
   },
   serviceObd: {
@@ -1006,17 +1037,16 @@ export const SECTIONS: Record<string, Help> = {
     what: 'A service reset sent through the adapter, for cars whose reminder only resets with a diagnostic tool.',
     how: [
       'The commands are not publicly documented for most cars, so Caristini learns them on your car: by comparing the instrument cluster before and after another tool resets it, or by recording that tool with Listen mode.',
-      'Methods from public sources are offered as Try until they have worked on your car.',
+      'No reset is built in for any car yet. Until one is learned, use the buttons in the car where the Service page gives a method.',
     ],
   },
   serviceResets: {
     title: 'Resets for this car',
     what: 'The service resets Caristini can send to this car.',
     how: [
-      'Green ones were learned on this car, by recording or by compare. Orange Try ones come from a public source and are not yet confirmed on this car.',
+      'Each one was learned on this car, by recording or by compare. None is built in, so the list is empty until you learn one.',
       'Tap one to see every step before anything is sent. Nothing is sent until you confirm.',
       'Before each write Caristini reads and keeps the old value. If the module refuses a step, the values already written are put back.',
-      'A Try that works on this car is kept as confirmed.',
     ],
     note: 'A routine the module has already run cannot be undone; the steps list shows any routine before you confirm.',
   },
@@ -1041,7 +1071,7 @@ export const SECTIONS: Record<string, Help> = {
     what: 'Codes parts counters ask for that the car does not send over the OBD port.',
     how: [
       'Type each code as printed on the car’s data label. They are kept on this phone.',
-      'Codes marked Found by AI were saved by an earlier version from a web search, with the page shown under them. Check them against the label.',
+      'Codes marked From a web search, check were saved by an earlier version, with the page shown under them. Check them against the label.',
       'Your own entry always replaces a saved one.',
     ],
   },
@@ -1115,9 +1145,9 @@ export const SECTIONS: Record<string, Help> = {
     note: 'Recordings with flashing, output tests or a module restart are refused.',
   },
   knowledgeEntries: {
-    title: 'Saved knowledge',
-    what: 'Entries saved for your make, model or platform, by earlier versions or by owners.',
-    how: ['Tap an entry for the full text, who added it and its sources.'],
+    title: 'Saved notes',
+    what: 'Notes saved for your make, model or platform, by earlier versions or by owners.',
+    how: ['Tap a note for the full text, who added it and its sources.'],
   },
   codeWhere: {
     title: 'Where it was found',
@@ -1163,7 +1193,7 @@ export const SECTIONS: Record<string, Help> = {
   monPerfRanges: {
     title: 'Your speed ranges',
     what: 'Add your own timer, for example 50 to 70 mph.',
-    how: ['Type a start and a target speed and tap Add. It joins the test list.', 'A start of 0 is a standing start.', 'Tap the bin to remove a range.'],
+    how: ['Type a start and a target speed and tap Add. It joins the test list.', 'A start of 0 is a standing start.', 'Tap the bin to delete a range. Caristini asks first.'],
   },
   monSecondBus: {
     title: 'Second CAN bus',
@@ -1190,7 +1220,7 @@ export const SECTIONS: Record<string, Help> = {
     how: [
       'Pick engine speed, accelerator pedal or throttle, then set the level and the stop delay.',
       'While waiting, only the trigger value is read, so it reacts quickly.',
-      'Each start makes a new log. Tap Stop to end one early; turn Auto-start off to stop waiting.',
+      'Each start makes a new log. Tap Stop recording to end one early; turn Auto-start off to stop waiting.',
     ],
   },
   logGps: {
@@ -1210,7 +1240,7 @@ export const SECTIONS: Record<string, Help> = {
     how: ['Tap Marker while recording. Markers are numbered 1, 2, 3 in order.', 'In the viewer, tap a marker in the list to put the cursor on it. The CSV has a Marker column.'],
   },
   logRate: {
-    title: 'Reads a second',
+    title: 'Readings a second',
     what: 'How many times a second the adapter answered, for all values together and for each kind of value.',
     how: ['Standard values read in one request where the car allows it.', 'Each maker module or older VW group adds its own wait, so it reads fewer times a second.'],
   },
@@ -1234,7 +1264,7 @@ export const SECTIONS: Record<string, Help> = {
     title: 'Since the last check',
     what: 'This health check compared with the last one of the same car that ran to the end, module by module.',
     how: [
-      'New: not there last time. Seen before: also in the last check, so it has not gone away. Cleared: there last time, gone now.',
+      'New: not there last time. Seen before: there at the last check too, so it has not gone away. Cleared: there last time, gone now.',
       'Checks that stopped early, or that no module answered, are not used for the comparison.',
       'Not read: the module did not answer this time, so its faults are not counted as cleared.',
     ],
@@ -1285,7 +1315,7 @@ export const SECTIONS: Record<string, Help> = {
     what: 'Named lists of values for this car, so you can switch between jobs, for example trims or a cold start.',
     how: [
       'Tick the values, type a name and tap Save set. The same name replaces the old set.',
-      'Tap a set to load it, then Done. The bin deletes it.',
+      'Tap a set to load it, then Done. The bin deletes it, after asking.',
       'Search finds values by name, group or unit, for example trim, temp or kPa.',
     ],
   },
@@ -1309,11 +1339,11 @@ export const SECTIONS: Record<string, Help> = {
   liveBoost: GUIDES.boost,
   liveDashPages: {
     title: 'Dashboard pages',
-    what: 'Several dashboard pages for this car, each with its own values and tile style.',
+    what: 'Several dashboard pages for this car, each with its own values and gauge style.',
     how: [
       'Swipe or tap a page name to switch. Only the page on screen is read, so it updates faster.',
-      'Edit page sets its name, its tile style (number, dial, bar or graph) and how many tiles it has, 1 to 8.',
-      'Tap a tile to change its value. Press and hold a tile for alerts and its lowest and highest.',
+      'Edit page sets its name, its gauge style (number, dial, bar or graph) and how many gauges it has, 1 to 8. Delete this page asks first.',
+      'Tap a gauge to change its value. Press and hold a gauge for alerts and its lowest and highest.',
     ],
   },
   liveShift: {

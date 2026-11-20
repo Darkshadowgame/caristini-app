@@ -12,9 +12,11 @@ import { Button, GlowCard, Group, ListRow, NeedsConnection, Notice, Screen, succ
 import { useGarage, vehicleTitle } from '../vehicle/garage';
 import { SECTIONS } from '../help';
 import { faultLabel } from '../diag/faults';
-import { useLastScan, when } from '../components/LastScan';
+import { NO_MEANING, useLastScan, when } from '../components/LastScan';
+import { dateTimeText, shareFileName } from '../timeText';
+import { File, Paths } from 'expo-file-system';
 
-const odometer = (km: number, miles: boolean) => (miles ? `${Math.round(km / 1.609344).toLocaleString('en-GB')} miles` : `${Math.round(km).toLocaleString('en-GB')} km`);
+const odometer = (km: number, miles: boolean) => (miles ? `${Math.round(km / 1.609344).toLocaleString('en-GB')} mi` : `${Math.round(km).toLocaleString('en-GB')} km`);
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -53,7 +55,7 @@ export default function Report() {
       if (firstOdo) await garage.update(v.vin, { odometerKm: odo[firstOdo.id], odometerAt: Date.now() });
       // Each fault of the last scan with its module and meaning.
       const lastFaults = last?.faults ?? (await loadHistory(v.vin)).find((e) => e.kind === 'scan')?.faults ?? [];
-      const checked = v.lastCheckedAt ? new Date(v.lastCheckedAt).toLocaleString('en-GB') : null;
+      const checked = v.lastCheckedAt ? dateTimeText(v.lastCheckedAt) : null;
       const obd = [...new Set([...codes.stored, ...codes.pending, ...codes.permanent])];
       const row = (k: string, val: string) => `<tr><th>${esc(k)}</th><td>${esc(val)}</td></tr>`;
       const html = `<!doctype html><html><head><meta charset="utf-8"><style>
@@ -63,33 +65,45 @@ export default function Report() {
         .ok{font-weight:600} .bad{font-weight:600} .small{font-size:10px}
       </style></head><body>
         <h1>${esc(vehicleTitle(v))}</h1>
-        <div>VIN ${esc(v.vin)} · Report made ${esc(new Date().toLocaleString('en-GB'))} with Caristini</div>
+        <div>VIN ${esc(v.vin)} · Report made ${esc(dateTimeText(Date.now()))} with Caristini</div>
         <h2>Car</h2><table>
           ${row('Make and model', `${v.brand} ${v.model}`.trim())}
           ${v.year ? row('Model year', String(v.year)) : ''}
           ${v.fuel ? row('Fuel', v.fuel) : ''}
           ${odoRows.map(([k, val]) => row(k, val)).join('')}
-          ${volts != null ? row('Voltage at the diagnostic port', `${volts.toFixed(1)} V`) : ''}
+          ${volts != null ? row('Voltage at the OBD port', `${volts.toFixed(1)} V`) : ''}
         </table>
         <h2>Engine light and emissions codes</h2><table>
-          ${row('Engine warning light', info.milOn ? 'On' : 'Off')}
+          ${row('Engine light', info.milOn ? 'On' : 'Off')}
           ${row('Emissions codes', obd.length ? obd.join(', ') : 'None')}
         </table>
         <h2>All control modules</h2><table>
           ${checked ? row('Last full health check', checked) : row('Last full health check', 'Not run yet')}
           ${checked && !lastFaults.length ? row('Faults found then', v.lastCodes.length ? [...new Set(v.lastCodes)].join(', ') : 'None') : ''}
         </table>
-        ${lastFaults.length ? `<table>${lastFaults.map((f) => row(`${f.module} · ${f.code}`, faultLabel(f) ?? 'Meaning not in the library')).join('')}</table>` : ''}
+        ${lastFaults.length ? `<table>${lastFaults.map((f) => row(`${f.module} · ${f.code}`, faultLabel(f) ?? NO_MEANING)).join('')}</table>` : ''}
         <h2>Emissions self-tests</h2><table>
           ${info.monitors.map((m) => row(m.name, m.state === 'complete' ? 'Complete' : 'Not yet run')).join('') || row('Self-tests', 'Not reported')}
         </table>
-        <p class="small">Read from the car's diagnostic port by the owner. This is not an MOT test or a garage inspection.</p>
+        <p class="small">Read from the car’s OBD port by the owner. This is not an MOT test or a garage inspection.</p>
       </body></html>`;
       if (Platform.OS === 'web') {
         await Print.printAsync({ html });
       } else {
         const { uri } = await Print.printToFileAsync({ html });
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Health report', UTI: 'com.adobe.pdf' });
+        // A named copy, so the shared file says what it is, like every file
+        // the app shares: Caristini-health-report-<VIN>-<date>.pdf. If the
+        // copy cannot be made the system's own file is shared.
+        let shareUri = uri;
+        try {
+          const named = new File(Paths.cache, `${shareFileName('health report', v.vin)}.pdf`);
+          if (named.exists) named.delete();
+          await new File(uri).copy(named);
+          shareUri = named.uri;
+        } catch {
+          shareUri = uri;
+        }
+        await Sharing.shareAsync(shareUri, { mimeType: 'application/pdf', dialogTitle: 'Health report', UTI: 'com.adobe.pdf' });
       }
       success();
     } catch (e) {
@@ -101,25 +115,25 @@ export default function Report() {
 
   return (
     <Screen>
-      <GlowCard tone="brand" style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg }}>
+      <GlowCard tone={busy ? 'brand' : 'plain'} style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg }}>
         <Mascot mood={busy ? 'scanning' : 'happy'} size={88} />
         <View style={{ flex: 1 }}>
-          <Text style={[type.sub, { color: t.muted }]}>A one-page PDF of this car: odometer, engine warning light, faults, emissions self-tests and battery. Handy for an MOT, a sale or a garage.</Text>
+          <Text style={[type.sub, { color: t.muted }]}>A one-page PDF of this car: odometer, engine light, faults, emissions self-tests and battery. Handy for an MOT, a sale or a garage.</Text>
         </View>
       </GlowCard>
       {error ? <Notice tone="danger" icon="alert-circle-outline" text={error} /> : null}
-      <Group header="Included" help={SECTIONS.reportIncluded} footer={last ? undefined : "Run a health check first so the report lists every module's faults."}>
+      <Group header="Included" help={SECTIONS.reportIncluded} footer={last ? undefined : "Run a health check first so the report lists every module’s faults."}>
         {last ? (
-          <ListRow first title="Faults" value={`${last.faults?.length ?? 0} (from ${when(last.at)} check)`} noChevron />
+          <ListRow first title="Faults" subtitle={`From the health check of ${when(last.at)}`} value={String(last.faults?.length ?? 0)} noChevron />
         ) : (
           <ListRow first title="Last health check" value="Not run yet" noChevron />
         )}
         <ListRow title="Odometer" value={v.odometerKm == null ? 'Read for the PDF' : odometer(v.odometerKm, settings.speed === 'mph')} noChevron />
-        <ListRow title="Engine warning light" value={info.milOn ? 'On' : 'Off'} noChevron />
-        <ListRow title="Emissions self-tests" value={`${info.monitors.filter((m) => m.state === 'complete').length} of ${info.monitors.length} complete`} noChevron />
-        <ListRow title="Battery" value={v.battery ? `${v.battery.volts.toFixed(1)} V last time; read again for the PDF` : 'Read for the PDF'} noChevron />
+        <ListRow title="Engine light" value={info.milOn ? 'On' : 'Off'} noChevron />
+        <ListRow title="Emissions self-tests" subtitle="Complete" value={`${info.monitors.filter((m) => m.state === 'complete').length} of ${info.monitors.length}`} noChevron />
+        <ListRow title="Battery" subtitle={v.battery ? 'Last time; read again for the PDF' : undefined} value={v.battery ? `${v.battery.volts.toFixed(1)} V` : 'Read for the PDF'} noChevron />
       </Group>
-      <Button label="Make PDF" icon="file-document-outline" busy={busy} disabled={busy} onPress={make} />
+      <Button label="Make health report" icon="file-document-outline" busy={busy} disabled={busy} onPress={make} />
     </Screen>
   );
 }

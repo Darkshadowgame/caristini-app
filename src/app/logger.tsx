@@ -9,7 +9,7 @@ import type { ElmClient } from '../obd/elm';
 import { toUserUnits, useSettings } from '../settings';
 import { useConnection } from '../state';
 import { radius, space, type, useTheme } from '../theme';
-import { Body, Button, GlowCard, GuideButton, Group, Icon, ListRow, NeedsConnection, Notice, Screen, SearchField, success, tap } from '../ui';
+import { TOOLS, Body, Button, GlowCard, GuideButton, Group, Icon, ListRow, NeedsConnection, Notice, Screen, SearchField, Stepper, success, tap, tool } from '../ui';
 import { useGarage, Vehicle, vehicleTitle } from '../vehicle/garage';
 import { AutoRule, clampRule, DEFAULT_AUTO, LIMITS, stepStopDelay, stepThreshold, TRIGGER_LABEL, TRIGGER_PID, TriggerKind, withKind } from '../logger/auto';
 import { formatDuration, formatWhen, LogChannel, LogSummary, obdKey } from '../logger/format';
@@ -42,7 +42,7 @@ export default function Logger() {
 }
 
 function logLine(s: LogSummary): string {
-  const parts = [formatDuration(s.durationMs), `${s.labels.length} value${s.labels.length === 1 ? '' : 's'}`, `${s.rate.toFixed(1)} reads a second`];
+  const parts = [formatDuration(s.durationMs), `${s.labels.length} value${s.labels.length === 1 ? '' : 's'}`, `${s.rate.toFixed(1)} readings a second`];
   if (s.markers) parts.push(`${s.markers} marker${s.markers === 1 ? '' : 's'}`);
   if (s.start === 'auto') parts.push('auto-start');
   return parts.join(', ');
@@ -133,7 +133,7 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
   if (recording) headline = status.start === 'auto' ? 'Recording (auto-start)' : 'Recording';
   else if (armed) headline = 'Waiting for auto-start';
   let line = options == null ? 'Asking the car which values it reports…' : `${keys.length} value${keys.length === 1 ? '' : 's'} chosen.`;
-  if (recording) line = `${status.rows.toLocaleString('en-GB')} reads${status.rate != null ? `, ${status.rate.toFixed(1)} a second` : ''}`;
+  if (recording) line = `${status.rows.toLocaleString('en-GB')} readings${status.rate != null ? `, ${status.rate.toFixed(1)} readings a second` : ''}`;
   else if (armed) {
     const now = status.trigger == null ? 'no reading yet' : `now ${Math.round(status.trigger)} ${lim.unit}`;
     line = `${TRIGGER_LABEL[rule.kind]} ${now}. Starts above ${rule.above} ${lim.unit}.`;
@@ -141,15 +141,16 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
 
   return (
     <View>
-      <GlowCard tone={recording ? 'fault' : 'brand'} style={{ padding: space.xl }}>
-        <Text style={[type.label, { color: recording ? t.danger : t.muted }]}>{headline}</Text>
+      {/* The amber wash only while the car is being read (recording, or watching for the auto-start). Red is kept for faults. */}
+      <GlowCard tone={recording || armed ? 'brand' : 'plain'} style={{ padding: space.xl }}>
+        <Text style={[type.label, { color: t.muted }]}>{headline}</Text>
         <Text accessibilityLabel={`Log length ${formatDuration(status.elapsedMs)}`} style={[styles.big, type.number, { color: t.text }]}>
           {recording ? formatDuration(status.elapsedMs) : '0 s'}
         </Text>
         <Text style={[type.sub, type.number, { color: t.muted }]}>{line}</Text>
         <View style={{ marginTop: space.lg, gap: space.sm }}>
           {recording ? (
-            <Button label="Stop and save" icon="stop" variant="danger" onPress={() => session.current?.stop()} />
+            <Button label="Stop recording" icon="stop" variant="danger" onPress={() => session.current?.stop()} />
           ) : (
             <Button label="Record" icon="record-circle-outline" disabled={!options || !keys.length} onPress={() => session.current?.record()} />
           )}
@@ -174,7 +175,7 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
       {status.message ? <Notice tone={status.saved ? 'ok' : 'neutral'} icon={status.saved ? 'check' : 'information-outline'} text={status.message} /> : null}
 
       {recording && status.sources.length ? (
-        <Group header="Reads a second" help={SECTIONS.logRate}>
+        <Group header="Readings a second" help={SECTIONS.logRate}>
           {status.sources.map((s, i) => (
             <ListRow key={s.id} first={i === 0} title={s.label} value={s.resting ? 'Not answering' : s.rate != null ? s.rate.toFixed(1) : '…'} />
           ))}
@@ -195,7 +196,7 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
         <ListRow
           first
           icon="map-marker-path"
-          iconColour="teal"
+          iconColour={TOOLS.logger.colour}
           title="Record route, keep going with the screen off"
           subtitle={recording && gps ? (status.gps === 'on' ? 'GPS on' : status.gps ? 'GPS not available' : 'Starting GPS…') : undefined}
           right={
@@ -217,7 +218,7 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
         <ListRow
           first
           icon="playlist-check"
-          iconColour="blue"
+          iconColour={TOOLS.logger.colour}
           title="Choose values"
           value={options ? `${keys.length} of ${options.length}` : '…'}
           disabled={!options || recording}
@@ -233,7 +234,7 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
         <ListRow
           first
           icon="play-circle-outline"
-          iconColour="green"
+          iconColour={TOOLS.logger.colour}
           title="Auto-start"
           subtitle={rule.on ? `Above ${rule.above} ${lim.unit}, stops ${rule.stopAfterS} s after` : 'Start and stop by itself'}
           right={
@@ -270,8 +271,7 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
             <ListRow
               key={s.id}
               first={i === 0}
-              icon="chart-line"
-              iconColour="indigo"
+              {...tool('logger')}
               title={formatWhen(s.startedAt)}
               subtitle={logLine(s)}
               onPress={() => router.push({ pathname: '/log-view', params: { vin, id: s.id } })}
@@ -295,26 +295,6 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
   );
 }
 
-function Stepper({ value, onStep, disabled }: { value: string; onStep: (d: 1 | -1) => void; disabled?: boolean }) {
-  const t = useTheme();
-  return (
-    <View style={styles.stepper}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Lower" disabled={disabled} hitSlop={6} onPress={() => {
-          tap();
-          onStep(-1);
-        }} style={[styles.stepButton, { backgroundColor: t.accentSoft, opacity: disabled ? 0.4 : 1 }]}>
-        <Text style={[type.heading, { color: t.accentText }]}>−</Text>
-      </Pressable>
-      <Text style={[type.body, type.number, { color: t.text, minWidth: 78, textAlign: 'center' }]}>{value}</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Higher" disabled={disabled} hitSlop={6} onPress={() => {
-          tap();
-          onStep(1);
-        }} style={[styles.stepButton, { backgroundColor: t.accentSoft, opacity: disabled ? 0.4 : 1 }]}>
-        <Text style={[type.heading, { color: t.accentText }]}>+</Text>
-      </Pressable>
-    </View>
-  );
-}
 
 // Page sheet with every value this car can record, by kind, with a search.
 function ValuePicker({ visible, options, selected, onClose }: { visible: boolean; options: ChannelOption[]; selected: string[]; onClose: (next: string[] | null) => void }) {
@@ -389,8 +369,7 @@ function OtherCarsLogs() {
             <ListRow
               key={s.id}
               first={i === 0}
-              icon="chart-line"
-              iconColour="indigo"
+              {...tool('logger')}
               title={formatWhen(s.startedAt)}
               subtitle={logLine(s)}
               onPress={() => router.push({ pathname: '/log-view', params: { vin: v.vin, id: s.id } })}
@@ -404,9 +383,8 @@ function OtherCarsLogs() {
 
 const styles = StyleSheet.create({
   big: { fontSize: 48, lineHeight: 56, fontWeight: '700', letterSpacing: -1, marginVertical: space.xs },
-  marker: { marginTop: space.md, minHeight: 96, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: space.sm },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  stepButton: { width: 36, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  // A capsule like every button, 96 pt tall so it can be hit without looking.
+  marker: { marginTop: space.md, minHeight: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: space.sm },
   sheetPage: { flex: 1 },
   sheetWeb: { marginTop: 60, borderTopLeftRadius: 14, borderTopRightRadius: 14, overflow: 'hidden' },
   sheetBar: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: space.lg, borderBottomWidth: StyleSheet.hairlineWidth },

@@ -18,6 +18,45 @@ export function recentHealthCheck(entry: HistoryEntry | null | undefined, now = 
   return now - entry.at < REUSE_MS ? entry : null;
 }
 
+// A health check that can stand in for a car read at any age: it ran to the
+// end and a module answered.
+export function completeHealthCheck(entry: HistoryEntry | null | undefined): HistoryEntry | null {
+  if (!entry || entry.kind !== 'scan' || entry.complete === false || entry.noAnswer) return null;
+  return entry;
+}
+
+// When the car's data in an MOT read was read from the car: the health check
+// it came from, or the read itself.
+export function readTakenAt(read: Pick<CarRead, 'at' | 'from' | 'healthCheckAt'>): number {
+  return read.from === 'health-check' && read.healthCheckAt ? read.healthCheckAt : read.at;
+}
+
+// The health check to use in place of the MOT's car read: a complete one that
+// is newer than the read, so a fault cleared or found since is not missed.
+// With no read yet, only a recent one is used by itself (recentHealthCheck).
+export function newerHealthCheck(read: Pick<CarRead, 'at' | 'from' | 'healthCheckAt'> | null, last: HistoryEntry | null | undefined, now = Date.now()): HistoryEntry | null {
+  if (!read) return recentHealthCheck(last, now);
+  const check = completeHealthCheck(last);
+  return check && check.at > readTakenAt(read) ? check : null;
+}
+
+// "4 minutes ago", "3 hours ago", "2 days ago".
+export function ageText(at: number, now = Date.now()): string {
+  const min = Math.max(0, Math.floor((now - at) / 60000));
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} minute${min === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(min / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} days ago`;
+}
+
+// The age of the car read, for the top of the MOT check.
+export function readAgeLine(read: Pick<CarRead, 'at' | 'from' | 'healthCheckAt' | 'by'>, now = Date.now()): string {
+  const what = read.from === 'health-check' && read.healthCheckAt ? 'From the health check' : read.by === 'learn' ? 'From Learn my car' : 'Car read';
+  return `${what} ${ageText(readTakenAt(read), now)}`;
+}
+
 // The modules to ask: those with MOT-checked lamps or lamp circuits. Once a
 // car's modules are known (3 or more answered before), only those are asked.
 export function motModules(defs: ModuleDef[], seen?: string[]): ModuleDef[] {

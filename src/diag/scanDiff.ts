@@ -107,7 +107,7 @@ export function diffSummary(d: ScanDiff): string {
   if (!d.added && !d.recurring && !d.cleared) return 'No faults then and none now.';
   const parts: string[] = [];
   if (d.added) parts.push(`${d.added} new`);
-  if (d.recurring) parts.push(`${d.recurring} also in the last check`);
+  if (d.recurring) parts.push(`${d.recurring} seen before`);
   if (d.cleared) parts.push(`${d.cleared} cleared`);
   return `${parts.join(', ')}.`;
 }

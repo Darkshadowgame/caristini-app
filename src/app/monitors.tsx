@@ -26,7 +26,7 @@ export default function Monitors() {
 
   return (
     <Screen>
-      {!conn.client ? <Notice icon="bluetooth-off" text="Not connected. Connect the adapter to use these tools." /> : null}
+      {!conn.client ? <Notice icon="bluetooth-off" text="Not connected. Connect your car to use these tools." /> : null}
       <Group header="While you drive" footer="Only the tools that work on this car are listed. The performance timer is on the Car tab, under Driving.">
         {showKnock ? (
           <ListRow

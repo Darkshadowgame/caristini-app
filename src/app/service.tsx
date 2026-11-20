@@ -1,18 +1,20 @@
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { addDiary, today } from '../diary';
+import { addDiary, parseUkDate, today, ukDate } from '../diary';
+import { diaryMileage } from '../diaryCars';
 import { addHistory } from '../history';
 import { Make, MAKES, methodsFor, PROCEDURES } from '../service/procedures';
 import { useConnection } from '../state';
 import { radius, space, type, useTheme } from '../theme';
-import { Body, Button, Card, Heading, Icon, Label, Notice, Pill, Screen, tap, success } from '../ui';
-import { describeDue, PLANS, planLabel, serviceDue } from '../service/reminder';
+import { TOOLS, Body, Button, Card, Field, Heading, Icon, Label, Notice, Pill, Screen, Segmented, Step, success, tool } from '../ui';
+import { describeDue, fromKm, markDoneKm, odometerNow, odometerAgeDays, PLANS, planLabel, shouldStoreTypedOdometer, typedService, vehicleServiceDue } from '../service/reminder';
 import { extrasFor } from '../obd/extras';
 import { useSettings } from '../settings';
 import { Group, ListRow } from '../ui';
-import { useGarage, vehicleTitle } from '../vehicle/garage';
+import { useGarage, Vehicle, vehicleTitle } from '../vehicle/garage';
 import { SECTIONS } from '../help';
+import { dateText } from '../timeText';
 
 export default function Service() {
   const t = useTheme();
@@ -25,11 +27,56 @@ export default function Service() {
   const [logged, setLogged] = useState<string | null>(null);
   const garage = useGarage();
   const { settings } = useSettings();
-  const v = conn.vehicle;
+  // The reminder is for the connected car, or for the last car when no
+  // adapter is connected.
+  const v = conn.vehicle ?? garage.vehicles[0];
   const plan = v?.service;
-  const due = plan ? serviceDue(plan, v?.odometerKm) : null;
-  const odo = v?.odometerKm;
+  // The newer of the reading from the car and the figure typed below.
+  const { due, odo: odoNow, distanceStale } = vehicleServiceDue(v);
+  const odo = odoNow?.km;
   const miles = settings.speed === 'mph';
+  const unitWord = miles ? 'miles' : 'km';
+  // Typed fields: the last service and the odometer now, in the unit from
+  // Settings. They follow what is saved for the car.
+  const [lastDateText, setLastDateText] = useState('');
+  const [lastText, setLastText] = useState('');
+  const [odoText, setOdoText] = useState('');
+  const [typedNote, setTypedNote] = useState<{ tone: 'ok' | 'danger'; text: string } | null>(null);
+  // Set when the owner changes the Odometer field, so a prefilled figure is not stored again.
+  const [odoEdited, setOdoEdited] = useState(false);
+  // The last service fields follow what is saved. A read of the odometer must not wipe them.
+  useEffect(() => {
+    setLastDateText(plan?.lastDate ? ukDate(plan.lastDate) : '');
+    setLastText(plan?.lastKm != null ? String(fromKm(plan.lastKm, miles)) : '');
+  }, [v?.vin, plan?.lastDate, plan?.lastKm, miles]);
+  useEffect(() => {
+    setOdoText(odo != null ? String(fromKm(odo, miles)) : '');
+    setOdoEdited(false);
+  }, [v?.vin, odo, miles]);
+  const saveTyped = async () => {
+    if (!v || !plan) return;
+    const r = typedService({ dateText: lastDateText, dateIso: parseUkDate(lastDateText), lastText, odoText }, miles, today());
+    if ('error' in r) {
+      setTypedNote({ tone: 'danger', text: r.error });
+      return;
+    }
+    const { lastDate, odoKm } = r.value;
+    // A figure left as it was keeps its saved value, so converting to miles and back does not shift it.
+    const lastKm = r.value.lastKm != null && plan.lastKm != null && fromKm(r.value.lastKm, miles) === fromKm(plan.lastKm, miles) ? plan.lastKm : r.value.lastKm;
+    // Kept as typed only when the figure was changed, so a reading from the car keeps its own date.
+    const odoChanged = shouldStoreTypedOdometer(odoKm, odoNow, miles, odoEdited);
+    await garage.update(v.vin, {
+      service: { everyKm: plan.everyKm, everyMonths: plan.everyMonths, ...(lastDate ? { lastDate } : {}), ...(lastKm != null ? { lastKm } : {}) },
+      ...(odoChanged ? { odometerTypedKm: odoKm, odometerTypedAt: Date.now() } : {}),
+    });
+    setOdoEdited(false);
+    success();
+    setTypedNote({
+      tone: 'ok',
+      text: lastDate || lastKm != null ? 'Saved. The reminder counts from the last service.' : 'Saved. Type the last service date, its mileage, or both, to start the count.',
+    });
+  };
+
   // Reads the odometer here, the same read-only way the health check does.
   const [reading, setReading] = useState<string | null>(null);
   const readOdometer = async () => {
@@ -48,69 +95,55 @@ export default function Service() {
     }
   };
 
-  const markDone = async (title: string) => {
+  // car: the car the entry is for. A guide's "I did this reset" is for the
+  // connected car (none when not connected); the reminder passes its own car.
+  const markDone = async (title: string, car: Vehicle | null | undefined = conn.vehicle) => {
+    // A typed odometer older than a day is not stored as the mileage of a service done today.
+    const km = markDoneKm(car);
+    const skippedKm = km == null && odometerNow(car) != null;
     await addDiary({
-      vin: conn.vehicle?.vin ?? null,
-      vehicleName: conn.vehicle ? vehicleTitle(conn.vehicle) : MAKES.find((m) => m.id === make)!.label,
+      vin: car?.vin ?? null,
+      vehicleName: car ? vehicleTitle(car) : MAKES.find((m) => m.id === make)!.label,
       date: today(),
       kind: 'Service reset',
-      mileage: null,
+      ...diaryMileage(km ?? car?.odometerKm, miles),
       notes: title,
     });
-    setLogged(title);
-    if (v) await addHistory({ vin: v.vin, kind: 'service', title, detail: 'Marked done', odometerKm: odo });
-    // The reminder restarts from today and the last odometer reading.
-    if (v?.service) await garage.update(v.vin, { service: { ...v.service, lastDate: new Date().toISOString().slice(0, 10), lastKm: odo } });
+    setLogged(skippedKm ? `${title}. The mileage was not saved because the odometer was typed on ${dateText(odometerNow(car)!.at ?? 0)}. Type the odometer now and the mileage, then Save` : title);
+    if (car) await addHistory({ vin: car.vin, kind: 'service', title, detail: 'Marked done', odometerKm: km });
+    // The reminder restarts from today and the last odometer figure.
+    if (car?.service) await garage.update(car.vin, { service: { ...car.service, lastDate: today(), lastKm: km } });
   };
 
   return (
     <Screen>
       <Body muted style={{ marginBottom: space.md }}>
-        Reset the service or oil reminder after a service, with the car's own buttons, or with the adapter for cars that need a tool.
+        Reset the service or oil reminder after a service, with the car’s own buttons, or with the adapter for cars that need a tool.
       </Body>
 
       {detected ? (
         <Notice icon="car-info" tone="info" text={`Showing methods for your ${conn.vehicle!.brand}${conn.vehicle!.model ? ` ${conn.vehicle!.model}` : ''}.`} />
       ) : (
-        <View accessibilityRole="tablist" style={[styles.segment, { backgroundColor: t.sunken }]}>
-          {MAKES.map((m) => {
-            const on = m.id === make;
-            return (
-              <Pressable
-                key={m.id}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: on }}
-                onPress={() => {
-                  tap();
-                  setPicked(m.id);
-                }}
-                style={[styles.segItem, on && { backgroundColor: t.surface, borderColor: t.border }]}
-              >
-                <Text style={[type.small, { fontWeight: '700', color: on ? t.text : t.muted }]}>{m.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Segmented options={MAKES.map((m) => ({ id: m.id, label: m.label }))} value={make} onPick={setPicked} style={{ marginBottom: space.md }} />
       )}
 
       <Body muted style={{ marginBottom: space.lg }}>{guide.intro}</Body>
-      {logged ? <Notice tone="ok" icon="notebook-check-outline" text={`Saved to your Diary: ${logged}.`} /> : null}
+      {logged ? <Notice tone="ok" icon="notebook-check-outline" text={`Saved to your diary: ${logged}.`} /> : null}
 
       {methods.map((m, i) => (
-        <Card key={m.title}>
-          <View style={styles.titleRow}>
-            <Label style={{ marginBottom: 0 }}>Method {i + 1}</Label>
-            <Pill text={m.source.official ? 'Maker source' : 'Third-party source'} tone={m.source.official ? 'ok' : 'neutral'} />
+        <View key={m.title}>
+        <Label>Method {i + 1}</Label>
+        <Card>
+          <Heading>{m.title}</Heading>
+          {/* Blue for where the method comes from; green is kept for a healthy result. */}
+          <View style={{ marginTop: space.xs }}>
+            <Pill text={m.source.official ? 'Maker source' : 'Third-party source'} tone={m.source.official ? 'info' : 'neutral'} />
           </View>
-          <Heading style={{ marginTop: space.sm }}>{m.title}</Heading>
-          <Body muted small style={{ marginBottom: space.md }}>{m.applies}</Body>
+          <Body muted small style={{ marginTop: space.sm, marginBottom: space.md }}>{m.applies}</Body>
           {m.steps.map((s, n) => (
-            <View key={s} style={styles.step}>
-              <View style={[styles.stepNum, { backgroundColor: t.accent }]}>
-                <Text style={{ color: t.onAccent, fontSize: 12.5, fontWeight: '800' }}>{n + 1}</Text>
-              </View>
-              <Body style={{ flex: 1 }}>{s}</Body>
-            </View>
+            <Step key={s} n={n + 1}>
+              {s}
+            </Step>
           ))}
           {m.note ? (
             <View style={[styles.note, { backgroundColor: t.sunken }]}>
@@ -119,12 +152,15 @@ export default function Service() {
             </View>
           ) : null}
           <View style={[styles.footer, { borderColor: t.border }]}>
-            <Pressable accessibilityRole="link" onPress={() => Linking.openURL(m.source.url)} style={{ flex: 1 }}>
-              <Text style={[type.small, { color: t.accentText, fontWeight: '700', textDecorationLine: 'underline' }]}>{m.source.label}</Text>
+            {/* The source opens in the browser: a row with the open glyph, 44 pt. */}
+            <Pressable accessibilityRole="link" accessibilityLabel={`Source: ${m.source.label}`} onPress={() => Linking.openURL(m.source.url)} style={({ pressed }) => [styles.source, { opacity: pressed ? 0.6 : 1 }]}>
+              <Icon name="open-in-new" size={16} color={t.accentText} />
+              <Text style={[type.sub, { color: t.accentText, flex: 1 }]}>{m.source.label}</Text>
             </Pressable>
-            <Button label="I did this reset" icon="check" variant="secondary" style={{ minHeight: 44 }} onPress={() => markDone(`${m.title} (${MAKES.find((x) => x.id === make)!.label})`)} />
+            <Button label="I did this reset" icon="check" variant="secondary" onPress={() => markDone(`${m.title} (${MAKES.find((x) => x.id === make)!.label})`)} />
           </View>
         </Card>
+        </View>
       ))}
 
       {v ? (
@@ -132,7 +168,7 @@ export default function Service() {
           <Group
             header="Common service intervals"
             help={SECTIONS.serviceReminder}
-            footer={`Generic intervals, not a plan from your car's maker: Caristini has no maker service plans. ${plan ? 'Tap another to change it.' : 'Tap the one that matches your service book or handbook, and Caristini counts down to the next service.'}`}
+            footer={`Generic intervals, not a plan from your car’s maker: Caristini has no maker service plans. ${plan ? 'Tap another to change it.' : 'Tap the one that matches your service book or handbook, and Caristini counts down to the next service.'}`}
           >
             {PLANS.map((p, i) => (
               <ListRow
@@ -146,23 +182,66 @@ export default function Service() {
             ))}
           </Group>
           <Group
-            header="Reminder"
+            header={conn.vehicle ? 'Reminder' : `Reminder for ${vehicleTitle(v)}`}
             footer={
-              odo != null
-                ? `Odometer ${Math.round(miles ? odo / 1.609344 : odo).toLocaleString('en-GB')} ${miles ? 'mi' : 'km'}, read from the car${v.odometerAt ? ` on ${new Date(v.odometerAt).toLocaleDateString('en-GB')}` : ''}.`
-                : 'Caristini does not know the odometer yet, so the reminder counts time only. Read it to count distance too.'
+              odoNow
+                ? `Odometer ${fromKm(odoNow.km, miles).toLocaleString('en-GB')} ${miles ? 'mi' : 'km'}, ${odoNow.typed ? 'typed' : 'read from the car'}${odoNow.at ? ` on ${dateText(odoNow.at)}` : ''}. ${distanceStale ? `The distance left is not counted: the odometer was typed ${odoNow.at ? `${odometerAgeDays(odoNow)} days ago` : 'some time ago'} and the car has been driven since. Type it again to count distance.` : 'The distance left is counted from this figure, so read or type it again now and then.'}`
+                : 'Caristini does not know the odometer yet, so the reminder counts time only. Type it above, or read it from the car, to count distance too.'
             }
           >
             {due ? (
-              <ListRow first title={describeDue(due, miles)} right={due.overdue ? <Pill text="Overdue" tone="danger" /> : due.soon ? <Pill text="Soon" /> : undefined} noChevron />
+              <ListRow first title={describeDue(due, miles, distanceStale)} right={due.overdue ? <Pill text="Overdue" tone="danger" /> : due.soon ? <Pill text="Soon" /> : undefined} noChevron />
             ) : (
               <ListRow first title="Pick an interval above to start" noChevron />
             )}
+            {plan ? (
+              <View style={[styles.fields, { borderColor: t.border }]}>
+                <Field
+                  label="Last service date (day/month/year)"
+                  value={lastDateText}
+                  onChange={(x) => {
+                    setLastDateText(x);
+                    setTypedNote(null);
+                  }}
+                  accessibilityLabel="Last service date, day/month/year"
+                  placeholder="For example 12/11/2026"
+                  keyboard="numbers-and-punctuation"
+                  number
+                />
+                <Field
+                  label={`Mileage at the last service, in ${unitWord}`}
+                  value={lastText}
+                  onChange={(x) => {
+                    setLastText(x.replace(/[^\d]/g, ''));
+                    setTypedNote(null);
+                  }}
+                  placeholder="For example 48200"
+                  keyboard="number-pad"
+                  number
+                  style={{ marginTop: space.md }}
+                />
+                <Field
+                  label={`Odometer now, in ${unitWord}`}
+                  value={odoText}
+                  onChange={(x) => {
+                    setOdoText(x.replace(/[^\d]/g, ''));
+                    setOdoEdited(true);
+                    setTypedNote(null);
+                  }}
+                  placeholder="For example 52300"
+                  keyboard="number-pad"
+                  number
+                  style={{ marginTop: space.md }}
+                />
+                {typedNote ? <Text style={[type.small, { color: typedNote.tone === 'ok' ? t.ok : t.danger, marginTop: space.sm }]}>{typedNote.text}</Text> : null}
+                <Button label="Save" icon="content-save-outline" variant="secondary" style={{ marginTop: space.md }} onPress={saveTyped} />
+              </View>
+            ) : null}
             <ListRow
               icon="counter"
-              iconColour="blue"
+              iconColour={TOOLS.service.colour}
               title={reading === 'Reading' ? 'Reading the odometer…' : odo != null ? 'Read the odometer again' : 'Read the odometer'}
-              subtitle={!conn.client ? 'Connect the adapter first' : reading && reading !== 'Reading' ? reading : 'Read-only: nothing is changed in the car'}
+              subtitle={!conn.client ? 'Connect your car first' : reading && reading !== 'Reading' ? reading : 'Read-only: nothing is changed in the car'}
               disabled={!conn.client || reading === 'Reading'}
               onPress={readOdometer}
             />
@@ -171,10 +250,10 @@ export default function Service() {
                 icon="check"
                 iconColour="green"
                 title="Mark service done today"
-                subtitle="Saves it to the diary and starts the reminder again"
+                subtitle="Saves it to History and your diary, and starts the reminder again"
                 onPress={() => {
                   success();
-                  markDone('Service done');
+                  markDone('Service done', v);
                 }}
               />
             ) : null}
@@ -185,8 +264,7 @@ export default function Service() {
       <Group header="Reset with the adapter" help={SECTIONS.serviceObd} footer="For cars that need a tool to reset the reminder. Caristini learns the reset once, then does it in one tap.">
         <ListRow
           first
-          icon="wrench-clock"
-          iconColour="orange"
+          {...tool('service')}
           title="Reset with the adapter"
           subtitle={v?.serviceResets?.length ? `${v.serviceResets.length} learned on this car` : 'Learn it once, then reset with one tap'}
           onPress={() => router.push('/service-reset')}
@@ -197,11 +275,8 @@ export default function Service() {
 }
 
 const styles = StyleSheet.create({
-  segment: { flexDirection: 'row', borderRadius: radius.md, padding: 3, marginBottom: space.md },
-  segItem: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  step: { flexDirection: 'row', gap: space.md, marginBottom: space.sm, alignItems: 'flex-start' },
-  stepNum: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: -1 },
   note: { flexDirection: 'row', gap: space.sm, borderRadius: radius.md, padding: space.md, marginTop: space.xs },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: space.md, borderTopWidth: StyleSheet.hairlineWidth, marginTop: space.md, paddingTop: space.md },
+  footer: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: space.md, paddingTop: space.xs, gap: space.xs },
+  source: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 44 },
+  fields: { padding: space.lg, borderTopWidth: StyleSheet.hairlineWidth },
 });

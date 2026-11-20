@@ -1,17 +1,17 @@
 import { alertBuzz } from '../sound';
 import { allowSleep, stayAwake } from '../keepAwake';
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, ScrollViewInstance, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, ScrollViewInstance, StyleSheet, Text, View } from 'react-native';
 import { SECTIONS } from '../help';
 import { addMinMax, AlertLevel, alertLevel, AlertRule, AlertTracker, holdPeak, MinMax, needsRpm, Peak, setRule } from '../live/alerts';
 import { addPage, DashPage, fraction, MAX_PAGES, MAX_TILES, pagesForCar, rangeFor, removePage, resizePage, SHIFT_MAX_RPM, SHIFT_MIN_RPM, shiftLabel, shiftLightOn, shiftRpmFrom, TILE_STYLES, TileStyle, updatePage } from '../live/dashboards';
-import { Bar, Chips, Dial, LineChart, NumberField, ShiftLight, TileSheet } from '../live/LiveTiles';
+import { Bar, Dial, LineChart, NumberField, ShiftLight, TileSheet } from '../live/LiveTiles';
 import { RateMeter, rateText } from '../live/rate';
 import { DEFAULT_WATCH, LivePid, PID_GROUPS, pidInfo } from '../obd/pids';
 import { Settings, tempIn, toUserUnits, useSettings } from '../settings';
 import { useConnection } from '../state';
 import { radius, space, type, useTheme } from '../theme';
-import { Button, Group, HelpButton, Icon, IconName, ListRow, NeedsConnection, Notice, Screen, SearchField } from '../ui';
+import { Button, Chips, ConfirmSheet, Field, Group, HelpButton, Icon, IconName, ListRow, NeedsConnection, Notice, Screen, SearchField, Segmented } from '../ui';
 import { filterPids } from '../live/sets';
 import { useGarage } from '../vehicle/garage';
 
@@ -43,6 +43,9 @@ export function dashAlerts(coolantC: number | null, rpm: number | null, volts: n
   }
   return out;
 }
+
+// Shown in the gauge picker: which values a gauge takes, and where the others are.
+export const GAUGE_VALUES_NOTE = 'Gauges take standard values. Maker values and older VW value groups are in Live data and the Data logger.';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -202,7 +205,7 @@ export default function Dashboard() {
   if (!conn.client) {
     return (
       <Screen>
-        <NeedsConnection title="Connect your car for the dashboard" />
+        <NeedsConnection title="Connect your car to see the dashboard" />
       </Screen>
     );
   }
@@ -230,9 +233,7 @@ export default function Dashboard() {
         </View>
 
         {pages.length > 1 ? (
-          <View style={styles.tabs}>
-            <Chips options={pages.map((p, i) => ({ id: String(i), label: p.name }))} value={String(pageIdx)} onPick={(id) => goTo(Number(id))} />
-          </View>
+          <Chips options={pages.map((p, i) => ({ id: String(i), label: p.name }))} value={String(pageIdx)} onPick={(id) => goTo(Number(id))} style={styles.tabs} />
         ) : null}
 
         <View style={[styles.gaugeArea, hud && styles.hud]}>
@@ -293,7 +294,7 @@ export default function Dashboard() {
           <HelpButton help={SECTIONS.liveRate} />
         </View>
         <Text style={[type.small, { color: fgMuted, marginTop: space.xs }]}>
-          {`Alerts: coolant above ${coolantLimit}; voltage below ${VOLTS_MIN_RUNNING.toFixed(1)} V with the engine running (above ${RUNNING_RPM} rpm) or below ${VOLTS_MIN_OFF.toFixed(1)} V with it off. Voltage is read every 10 s. Tap a gauge to change it or set its alerts.${shiftRpm ? ` Shift light at ${shiftRpm} rpm.` : ''}`}
+          {`Alerts: coolant above ${coolantLimit}; voltage below ${VOLTS_MIN_RUNNING.toFixed(1)} V with the engine running (above ${RUNNING_RPM} rpm) or below ${VOLTS_MIN_OFF.toFixed(1)} V with it off. Voltage is read every 10 seconds. Tap a gauge to change it or set its alerts.${shiftRpm ? ` Shift light at ${shiftRpm} rpm.` : ''}`}
         </Text>
         {available && !available.length ? <Notice text="The car did not report any standard live values." /> : null}
 
@@ -410,7 +411,7 @@ function DashTile({
   const fgMuted = hud ? 'rgba(255,255,255,0.72)' : t.muted;
   const conv = p && value != null ? toUserUnits(value, p.unit, settings) : null;
   const unit = p ? toUserUnits(0, p.unit, settings).unit : '';
-  const text = !p || !supported ? 'No data' : conv ? conv.value.toFixed(p.decimals) : '–';
+  const text = !p || !supported ? 'Not on this car' : conv ? conv.value.toFixed(p.decimals) : '–';
   const warn = hot || !!level;
   const colour = warn ? t.danger : fg;
   const range = p ? rangeFor(p, stats?.mm) : null;
@@ -431,19 +432,21 @@ function DashTile({
         warn && { borderColor: t.danger, borderWidth: 2 },
       ]}
     >
-      {/* 2 lines: long names ("Intake pressure (MAP)") are not cut off on an iPhone. */}
-      <Text numberOfLines={2} style={[type.sub, { color: warn ? t.danger : fgMuted, fontWeight: '600' }]}>
+      {/* 2 lines: long names ("Intake pressure (MAP)") are not cut off on an iPhone. Room for 2 is kept on
+          every gauge, so the figures of a row sit level whether a name wraps or not. */}
+      <Text numberOfLines={2} style={[type.sub, styles.gaugeLabel, { color: warn ? t.danger : fgMuted, fontWeight: '600' }]}>
         {p?.label ?? 'Choose a value'}
       </Text>
       {tileStyle === 'gauge' ? <Dial frac={frac} peak={peakFrac} colour={warn ? t.danger : t.accent} /> : null}
-      <Text numberOfLines={1} adjustsFontSizeToFit style={[small ? styles.figureSmall : styles.figure, type.number, { color: colour, fontWeight: hud ? '800' : '700' }]}>
+      {/* Under a dial the figure is centred on it, clear of the ends of the arc. */}
+      <Text numberOfLines={1} adjustsFontSizeToFit style={[small ? styles.figureSmall : styles.figure, type.number, { color: colour, fontWeight: hud ? '800' : '700' }, tileStyle === 'gauge' && styles.dialFigure]}>
         {text}
         {small && unit ? <Text style={[type.sub, { color: fgMuted, fontWeight: '500' }]}> {unit}</Text> : null}
       </Text>
       {tileStyle === 'bar' ? <Bar frac={frac} peak={peakFrac} colour={warn ? t.danger : t.accent} /> : null}
       {tileStyle === 'graph' ? <LineChart height={56} series={[{ values: points, colour: warn ? t.danger : t.accent }]} /> : null}
       {small ? (
-        <Text style={[type.caption, type.number, { color: fgMuted, marginTop: space.xs }]}>{stats ? `min ${f(stats.mm.min)} · max ${f(stats.mm.max)}` : ' '}</Text>
+        <Text style={[type.caption, type.number, { color: fgMuted, marginTop: space.xs }, tileStyle === 'gauge' && { textAlign: 'center' }]}>{stats ? `min ${f(stats.mm.min)} · max ${f(stats.mm.max)}` : ' '}</Text>
       ) : (
         <Text style={[type.sub, { color: fgMuted }]}>{unit || ' '}</Text>
       )}
@@ -474,6 +477,8 @@ function PageSheet({
   const [name, setName] = useState(page.name);
   const [style, setStyle] = useState<TileStyle>(page.style);
   const [count, setCount] = useState(page.pids.length);
+  // Delete this page asks first: a page takes work to set up again.
+  const [confirmDelete, setConfirmDelete] = useState(false);
   useEffect(() => {
     if (!visible) return;
     setName(page.name);
@@ -497,19 +502,11 @@ function PageSheet({
         </View>
         <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           <Group header="Page" help={SECTIONS.liveDashPages}>
-            <View style={{ padding: space.lg, paddingTop: space.sm }}>
-              <Text style={[type.small, { color: t.muted, marginBottom: 4, marginTop: space.sm }]}>Name</Text>
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                maxLength={20}
-                accessibilityLabel="Page name"
-                selectionColor={t.accent}
-                style={[type.body, styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.bg }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
-              />
-              <Text style={[type.small, { color: t.muted, marginBottom: 4, marginTop: space.md }]}>Tile style</Text>
-              <Chips options={TILE_STYLES} value={style} onPick={setStyle} />
-              <Text style={[type.small, { color: t.muted, marginBottom: 4 }]}>Tiles</Text>
+            <View style={{ padding: space.lg }}>
+              <Field label="Name" value={name} onChange={setName} maxLength={20} accessibilityLabel="Page name" />
+              <Text style={[type.small, { color: t.muted, marginBottom: space.xs, marginTop: space.md }]}>Gauge style</Text>
+              <Segmented role="radio" label="Gauge style" options={TILE_STYLES} value={style} onPick={setStyle} />
+              <Text style={[type.small, { color: t.muted, marginBottom: space.xs, marginTop: space.md }]}>Gauges</Text>
               <View style={styles.stepper}>
                 <Button label="−" variant="secondary" onPress={() => setCount((c) => Math.max(1, c - 1))} disabled={count <= 1} />
                 <Text style={[type.title3, type.number, { color: t.text, minWidth: 60, textAlign: 'center' }]}>{count}</Text>
@@ -519,9 +516,20 @@ function PageSheet({
           </Group>
           <View style={{ gap: space.sm }}>
             {canAdd ? <Button label="Add a page" icon="plus" variant="secondary" onPress={onAdd} /> : null}
-            {canDelete ? <Button label="Delete this page" icon="trash-can-outline" variant="danger" onPress={onDelete} /> : null}
+            {canDelete ? <Button label="Delete this page" icon="trash-can-outline" variant="danger" onPress={() => setConfirmDelete(true)} /> : null}
           </View>
         </ScrollView>
+        <ConfirmSheet
+          visible={confirmDelete}
+          title="Delete this page?"
+          lines={[`${page.name}, with its ${page.pids.length} gauge${page.pids.length === 1 ? '' : 's'}. This cannot be undone.`]}
+          confirmLabel="Delete"
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => {
+            setConfirmDelete(false);
+            onDelete();
+          }}
+        />
       </View>
     </Modal>
   );
@@ -616,6 +624,8 @@ function PidPicker({
               <SearchField value={query} onChange={setQuery} placeholder="Search values" caps={false} />
             </View>
           ) : null}
+          {/* What a gauge can show, said where the choice is made. */}
+          <Text style={[type.small, { color: t.muted, marginBottom: space.lg }]}>{GAUGE_VALUES_NOTE}</Text>
           {!available.length ? <Notice text="The car did not report any standard live values." /> : null}
           {available.length && !matches.length ? <Notice text="No value matches. Try another word, for example speed, fuel or temp." /> : null}
           {PID_GROUPS.map((g) => {
@@ -631,7 +641,6 @@ function PidPicker({
                     value={p.unit}
                     noChevron
                     selected={p.pid === current}
-                    right={<Icon name="check" size={18} color={p.pid === current ? t.accentText : 'transparent'} />}
                     onPress={() => onClose(p.pid)}
                   />
                 ))}
@@ -648,7 +657,7 @@ const styles = StyleSheet.create({
   page: { flexGrow: 1, paddingHorizontal: space.lg, paddingTop: space.lg, paddingBottom: space.xxl },
   controls: { gap: space.sm, marginBottom: space.lg },
   controlRow: { flexDirection: 'row', gap: space.sm },
-  tabs: { marginBottom: space.xs },
+  tabs: { marginBottom: space.lg },
   gaugeArea: { flexGrow: 1, borderRadius: radius.lg },
   hud: { backgroundColor: '#000000', transform: [{ scaleX: -1 }] },
   banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, borderRadius: radius.md, borderWidth: 2, padding: space.md, marginBottom: space.md },
@@ -656,10 +665,12 @@ const styles = StyleSheet.create({
   gauge: { flexBasis: '45%', flexGrow: 1, minHeight: 160, borderRadius: radius.lg, padding: space.lg, justifyContent: 'space-between' },
   figure: { fontSize: 56, lineHeight: 62, letterSpacing: -1 },
   figureSmall: { fontSize: 34, lineHeight: 40, letterSpacing: -0.5 },
+  gaugeLabel: { minHeight: 40 },
+  dialFigure: { textAlign: 'center' },
   rateRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md },
   sheetWeb: { marginTop: 60, borderTopLeftRadius: 14, borderTopRightRadius: 14, overflow: 'hidden' },
   sheetBar: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: space.lg, borderBottomWidth: StyleSheet.hairlineWidth },
   barButton: { width: 80, minHeight: 44, justifyContent: 'center' },
-  input: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: 10 },
+
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
 });

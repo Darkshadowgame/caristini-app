@@ -25,7 +25,7 @@ import { mergeCodingBackup, mergeModuleIds } from '../vehicle/ids';
 import { inferredFromParts, Vehicle, vehicleTitle } from '../vehicle/garage';
 import { groupValuesText, moduleCount, modulesText, sensorCount, sensorCountText } from '../vehicle/counts';
 import { scanValueGroups } from './valueGroups';
-import { shortDuration } from '../timeText';
+import { dateText, shortDuration } from '../timeText';
 
 export type LearnStep = 'modules' | 'faults' | 'sensors' | 'values' | 'emissions' | 'mot' | 'battery' | 'send';
 // The order the steps run in: what every other screen needs first (modules,
@@ -140,7 +140,7 @@ const sayError = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 // A module name inside a sentence: "the engine", but "the ABS and stability control".
 const inText = (name: string) => name.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase());
-const day = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const day = (ms: number) => dateText(ms);
 // "2.5-minute", "3-minute".
 const minutesText = (ms: number) => `${Math.round(ms / 6000) / 10 || 1}`;
 
@@ -397,8 +397,8 @@ export async function runLearn(d: LearnDeps): Promise<LearnSummary> {
         onModule: (_r, n, total, next) => {
           progress(0.1 + (n / total) * 0.6, next ? `Reading ${inText(next.name)}` : 'Saving the result');
         },
-        onOlderStart: () => progress(0.7, 'Looking for older modules'),
-        onOlderProgress: (n, total) => progress(0.7 + (total ? n / total : 1) * 0.3, 'Looking for older modules'),
+        onOlderStart: () => progress(0.7, 'Looking for older VW modules'),
+        onOlderProgress: (n, total) => progress(0.7 + (total ? n / total : 1) * 0.3, 'Looking for older VW modules'),
       });
       const c = check as HealthCheckResult;
       status = c.status;
@@ -444,7 +444,7 @@ export async function runLearn(d: LearnDeps): Promise<LearnSummary> {
         const read = await client.holdOlder(() => readModules(toRead, new Set(), 0.9, 0.1));
         await saveModules(read);
         fresh.push(...toRead.filter((m) => read.some((r) => r.def.id === m.id)));
-        if (fresh.length) what += `; ${plural(fresh.length, mode.full ? 'older module' : 'new module')} added to the backup`;
+        if (fresh.length) what += `; ${plural(fresh.length, mode.full ? 'older VW module' : 'new module')} added to the backup`;
         // Step 1's count takes in the modules this check added, so every
         // screen says the same number.
         if (fresh.length && mode.full && steps.modules?.state === 'done') {
@@ -455,7 +455,7 @@ export async function runLearn(d: LearnDeps): Promise<LearnSummary> {
       if (!mode.full) countModules();
       if (c.stopped) return { state: 'stopped', note: `${what}; saved in History as stopped early` };
       if (c.noAnswer) return { state: 'failed', note: 'No control module answered, so this is not a clean result. Only the engine’s standard codes were read.' };
-      return { note: c.olderError ? `${what}. The older-module search stopped: ${c.olderError}` : what };
+      return { note: c.olderError ? `${what}. The search for older VW modules stopped: ${c.olderError}` : what };
     },
 
     // 3. Known sensors: the full search on a full read (skipped once it ran to
@@ -494,8 +494,8 @@ export async function runLearn(d: LearnDeps): Promise<LearnSummary> {
         return {
           state,
           note: before
-            ? `No sensor list for this car’s older modules; ${groupValuesText(had)} found before`
-            : 'No sensor list for this car’s older modules; their value groups are read in the next step',
+            ? `No sensor list for this car’s older VW modules; ${groupValuesText(had)} found before`
+            : 'No sensor list for this car’s older VW modules; their value groups are read in the next step',
         };
       }
       if (!summary.sensors) return { state, note: search ? 'No sensors answered' : `No sensors known; searched again after ${FULL_READ_DAYS} days` };

@@ -4,6 +4,7 @@
 // reset it, or taken from a public source and offered as a try.
 //
 // A reset is a short list of UDS steps sent to one module.
+import { dateText } from '../timeText';
 
 export type ResetStep =
   // Diagnostic session (10 xx). Programming (02) is never allowed.
@@ -181,7 +182,7 @@ export function resetFromRecording(text: string, mod: { id: string; tx: string; 
   return {
     reset: {
       id: `rec-${at.getTime()}`,
-      title: `Service reset (recorded ${at.toLocaleDateString('en-GB')})`,
+      title: `Service reset (recorded ${dateText(at)})`,
       module: mod.id,
       tx: mod.tx,
       rx: mod.rx,
@@ -303,7 +304,7 @@ export function resetFromCompare(changes: Change[], mod: { id: string; tx: strin
   if (!use.length) return null;
   return {
     id: `cmp-${at.getTime()}`,
-    title: `Service reset (learned by compare ${at.toLocaleDateString('en-GB')})`,
+    title: `Service reset (learned by compare ${dateText(at)})`,
     module: mod.id,
     tx: mod.tx,
     rx: mod.rx,

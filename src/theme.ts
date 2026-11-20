@@ -10,29 +10,34 @@ export const SANS = Platform.select({ ios: 'Helvetica Neue', android: 'sans-seri
 // tint for everything you can tap, and system colours for state and for each
 // tool's icon square (as in iOS Settings). Dark is the default scene: the
 // driver's seat at night.
+//
+// Contrast: every text colour (text, muted, accentText, danger, ok, info) is
+// at least 4.5:1 on bg, surface, sunken, the glow washes and its own soft
+// wash, in both appearances (WCAG AA, measured 20 Nov 2026). faint is for
+// chevrons and empty-state glyphs only, never for words.
 const light = {
   bg: '#F2F2F7',
   surface: '#FFFFFF',
   raised: '#FFFFFF',
   sunken: '#E5E5EA',
   text: '#000000',
-  muted: 'rgba(60,60,67,0.72)',
+  muted: 'rgba(60,60,67,0.78)',
   faint: 'rgba(60,60,67,0.36)',
   border: 'rgba(60,60,67,0.22)',
   accent: '#FF9F0A',
   accentSoft: 'rgba(255,159,10,0.16)',
-  accentText: '#A65F00',
+  accentText: '#8A4E00',
   onAccent: '#1A1205',
-  danger: '#D70015',
+  danger: '#B80012',
   onDanger: '#FFFFFF',
   dangerSoft: 'rgba(255,59,48,0.12)',
-  ok: '#1F7A35',
+  ok: '#196B2D',
   okSoft: 'rgba(52,199,89,0.14)',
-  info: '#0062CC',
+  info: '#0058BA',
   infoSoft: 'rgba(0,122,255,0.12)',
   hero: '#FFFFFF',
   onHero: '#000000',
-  onHeroMuted: 'rgba(60,60,67,0.72)',
+  onHeroMuted: 'rgba(60,60,67,0.78)',
   // Tool icon squares (white glyph on these).
   red: '#FF3B30',
   blue: '#007AFF',
@@ -61,8 +66,8 @@ const dark: typeof light = {
   accentSoft: 'rgba(255,179,64,0.18)',
   accentText: '#FFB340',
   onAccent: '#1A1205',
-  danger: '#FF6961',
-  onDanger: '#FFFFFF',
+  danger: '#FF857D',
+  onDanger: '#2A0604',
   dangerSoft: 'rgba(255,69,58,0.2)',
   ok: '#30D158',
   okSoft: 'rgba(48,209,88,0.18)',
@@ -70,7 +75,7 @@ const dark: typeof light = {
   infoSoft: 'rgba(10,132,255,0.2)',
   hero: '#1C1C1E',
   onHero: '#FFFFFF',
-  onHeroMuted: 'rgba(235,235,245,0.64)',
+  onHeroMuted: 'rgba(235,235,245,0.72)',
   red: '#FF453A',
   blue: '#0A84FF',
   green: '#30D158',
@@ -97,7 +102,7 @@ export function useIsDark(): boolean {
 
 // 8-point grid.
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
-export const radius = { sm: 8, md: 12, lg: 16, xl: 22 };
+export const radius = { sm: 8, field: 10, md: 12, lg: 16, xl: 22 };
 
 // iOS Dynamic Type sizes at the default reading size; RN scales them with
 // the user's text-size setting.
@@ -110,7 +115,12 @@ export const type = {
   callout: { fontSize: 16, lineHeight: 21, letterSpacing: -0.32 },
   sub: { fontSize: 15, lineHeight: 20, letterSpacing: -0.24 },
   small: { fontSize: 13, lineHeight: 18, letterSpacing: -0.08 },
+  // Chart axes, tile footers and the label over a small figure.
   caption: { fontSize: 12, lineHeight: 16 },
   label: { fontSize: 13, lineHeight: 18, letterSpacing: -0.08, textTransform: 'uppercase' as const },
+  // The headline count (faults, likely fails) and the running figure of a
+  // drive tool (log length, trip distance, knock retard).
+  figure: { fontSize: 56, lineHeight: 62, fontWeight: '700' as const, letterSpacing: -1 },
+  figureMid: { fontSize: 48, lineHeight: 56, fontWeight: '700' as const, letterSpacing: -1 },
   number: { fontVariant: ['tabular-nums' as const] },
 };

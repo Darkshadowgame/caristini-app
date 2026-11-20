@@ -82,12 +82,16 @@ export function csvField(v: string | number | undefined): string {
 
 export const CSV_HEADER = ['Date', 'Time', 'Module', 'Setting', 'Old value', 'New value', 'Old bytes', 'New bytes', 'Backup', 'Made in', 'Odometer km'];
 
-export function timelineCsv(rows: TimelineRow[]): string {
-  const lines = [CSV_HEADER.join(',')];
+// The odometer in the owner's unit (Settings), as the screen shows it.
+const KM_PER_MILE = 1.609344;
+const odometer = (km: number, miles?: boolean) => Math.round(miles ? km / KM_PER_MILE : km);
+
+export function timelineCsv(rows: TimelineRow[], opts: { miles?: boolean } = {}): string {
+  const lines = [(opts.miles ? [...CSV_HEADER.slice(0, -1), 'Odometer mi'] : CSV_HEADER).join(',')];
   for (const r of rows) {
     const { date, time } = stamp(r.at);
     lines.push(
-      [date, time, r.module, r.setting, r.from, r.to, r.before, r.after, r.backup ?? (r.older ? 'Not recorded' : ''), r.source, r.odometerKm == null ? '' : Math.round(r.odometerKm)]
+      [date, time, r.module, r.setting, r.from, r.to, r.before, r.after, r.backup ?? (r.older ? 'Not recorded' : ''), r.source, r.odometerKm == null ? '' : odometer(r.odometerKm, opts.miles)]
         .map(csvField)
         .join(','),
     );
@@ -95,7 +99,7 @@ export function timelineCsv(rows: TimelineRow[]): string {
   return `${lines.join('\r\n')}\r\n`;
 }
 
-export function timelineText(rows: TimelineRow[], car: string): string {
+export function timelineText(rows: TimelineRow[], car: string, opts: { miles?: boolean } = {}): string {
   const out = [`Change timeline: ${car}`, `${rows.length} change${rows.length === 1 ? '' : 's'}, newest first.`, ''];
   for (const r of rows) {
     const { date, time } = stamp(r.at);
@@ -103,7 +107,7 @@ export function timelineText(rows: TimelineRow[], car: string): string {
     if (r.from || r.to) out.push(`  Value: ${r.from ?? '?'} to ${r.to ?? '?'}`);
     if (r.before || r.after) out.push(`  Bytes: ${r.before || '?'} to ${r.after || '?'}`);
     out.push(`  Backup: ${r.backup ?? 'Not recorded'}`);
-    const extra = [r.source ? `Made in ${r.source}` : null, r.odometerKm != null ? `${Math.round(r.odometerKm)} km` : null].filter(Boolean);
+    const extra = [r.source ? `Made in ${r.source}` : null, r.odometerKm != null ? `${odometer(r.odometerKm, opts.miles).toLocaleString('en-GB')} ${opts.miles ? 'mi' : 'km'}` : null].filter(Boolean);
     if (extra.length) out.push(`  ${extra.join(', ')}`);
     out.push('');
   }

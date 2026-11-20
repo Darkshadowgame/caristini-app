@@ -8,12 +8,13 @@ import { describeFailureType, isMakerNumbered } from '../../obd/uds';
 import { useConnection } from '../../state';
 import { MONO, radius, space, type, useTheme } from '../../theme';
 import { SECTIONS } from '../../help';
-import { Button, Card, Group, Icon, IconName, ListRow, Notice, Pill, Screen, Tone } from '../../ui';
+import { Button, Card, Group, Icon, IconName, ListRow, Notice, Pill, Screen, StepNumber, Tone, tool } from '../../ui';
 
-// Severity is about urgency, so "minor" stays neutral rather than green.
+// Severity is about urgency: red for serious only. Moderate and minor are not
+// urgent, so they stay grey (amber is for what you can tap, green for healthy).
 const SEVERITY: Record<string, { text: string; tone: Tone }> = {
   high: { text: 'Serious', tone: 'danger' },
-  medium: { text: 'Moderate', tone: 'accent' },
+  medium: { text: 'Moderate', tone: 'neutral' },
   low: { text: 'Minor', tone: 'neutral' },
 };
 
@@ -84,11 +85,15 @@ export default function CodeDetail() {
         <Stack.Screen options={{ title: code }} />
         <Card style={{ padding: space.xl }}>
           <Text style={[type.title, { color: t.text }]}>{meaning.title}</Text>
-          {vwNumber && vagFaultText(code) ? <Text style={[type.sub, { color: t.muted, marginTop: 4 }]}>VW fault number {code}</Text> : null}
+          {vwNumber && vagFaultText(code) ? (
+            <Text style={[type.sub, { color: t.muted, marginTop: 4 }]}>
+              VW fault number <Text style={styles.code}>{code}</Text>
+            </Text>
+          ) : null}
           <Text style={[type.sub, { color: t.muted, marginTop: space.sm }]}>
             {vwNumber && vagFaultText(code)
-              ? `The meaning comes from public VW fault number lists; the module's own wording may differ slightly.${meaning.pcode ? ` The same fault as the standard code ${meaning.pcode}.` : ''}`
-              : "This module reports faults in the maker's own numbering, not as a standard code, so Caristini has no description for it. A dealer or specialist tool shows the text."}
+              ? `The meaning comes from public VW fault number lists; the module’s own wording may differ slightly.${meaning.pcode ? ` The same fault as the standard code ${meaning.pcode}.` : ''}`
+              : "This module reports faults in the maker’s own numbering, not as a standard code, so Caristini has no description for it. A dealer or specialist tool shows the text."}
           </Text>
           {entry ? (
             <View style={[styles.drive, { backgroundColor: serious ? t.dangerSoft : t.sunken }]}>
@@ -173,13 +178,13 @@ export default function CodeDetail() {
 
       {def ? (
         <Group header="Next steps">
-          <ListRow first icon="wrench-outline" iconColour="orange" title={`Open ${def.name} in Workshop`} onPress={() => router.push({ pathname: '/workshop/[id]', params: { id: def.id } })} />
+          <ListRow first {...tool('workshop')} title={`Open ${def.name} in Workshop`} onPress={() => router.push({ pathname: '/workshop/[id]', params: { id: def.id } })} />
         </Group>
       ) : null}
 
       {anatomy && !meaning.makerUse ? (
         <Group header="Reading the code" help={SECTIONS.codeReading}>
-          <ListRow first title="Code" value={base} />
+          <ListRow first title="Code" value={base} mono />
           <ListRow title="System" value={anatomy.system} />
           <ListRow title="Type" value={anatomy.scope} />
           <ListRow title="Area" value={anatomy.area} />
@@ -225,9 +230,7 @@ function NumberedRow({ n, text, first }: { n: number; text: string; first: boole
   const t = useTheme();
   return (
     <View style={[styles.numbered, { borderColor: t.border, borderTopWidth: first ? 0 : StyleSheet.hairlineWidth }]}>
-      <View style={[styles.num, { backgroundColor: t.sunken }]}>
-        <Text style={[type.small, type.number, { color: t.text, fontWeight: '600' }]}>{n}</Text>
-      </View>
+      <StepNumber n={n} />
       <Text style={[type.body, { color: t.text, flex: 1 }]}>{text}</Text>
     </View>
   );
@@ -237,6 +240,6 @@ const styles = StyleSheet.create({
   drive: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start', borderRadius: radius.md, padding: space.md, marginTop: space.lg },
   para: { paddingHorizontal: space.lg, paddingVertical: space.md },
   numbered: { flexDirection: 'row', gap: space.md, alignItems: 'flex-start', paddingVertical: space.md, paddingRight: space.lg, marginLeft: space.lg },
-  num: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: -1 },
+
   code: { fontFamily: MONO },
 });

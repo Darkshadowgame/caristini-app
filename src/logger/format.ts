@@ -6,6 +6,7 @@
 // from the start. v holds one slot per channel; a channel not read in that
 // row is null. Values are kept in the car's own units (km/h, °C); the screens
 // and the CSV convert to the owner's units.
+import { dateTimeText } from '../timeText';
 
 export const LOG_VERSION = 1;
 
@@ -280,9 +281,9 @@ export function logId(startedAt: number): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-// "15 Nov, 14:22"
+// "15 Nov 2026, 14:22": the app's one date and time format (src/timeText.ts).
 export function formatWhen(ms: number): string {
-  return new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return dateTimeText(ms);
 }
 
 // "2 min 05 s", "45 s", "1 h 02 min"

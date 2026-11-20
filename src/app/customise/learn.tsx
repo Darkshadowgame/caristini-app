@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Mascot } from '../../brand/Mascot';
 import { diffSnapshots, LearnedPart, partKey, Snapshot, splitKey } from '../../coding/learn';
 import { modulePart } from '../../coding/shared';
@@ -10,9 +10,11 @@ import { sendBack } from '../../share/sendBack';
 import { sendLogNow } from '../../share/sendLog';
 import { useConnection } from '../../state';
 import { radius, space, type, useTheme } from '../../theme';
-import { Button, GlowCard, Group, ListRow, NeedsConnection, Notice, ProgressBar, Screen, success } from '../../ui';
+import { TOOLS, Button, Field, GlowCard, Group, Label, ListRow, NeedsConnection, Notice, ProgressBar, Screen, success } from '../../ui';
 import { useGarage } from '../../vehicle/garage';
 import { SECTIONS } from '../../help';
+import { dateTimeText } from '../../timeText';
+import { useStayAwake } from '../../keepAwake';
 
 const hex2 = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
 
@@ -37,6 +39,8 @@ export default function Learn() {
   const [deep, setDeep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // The phone stays awake while the modules are read and compared.
+  useStayAwake('learn-setting', !!progress);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -183,7 +187,7 @@ export default function Learn() {
 
   return (
     <Screen>
-      <GlowCard tone="brand" style={styles.hero}>
+      <GlowCard tone={reading ? 'brand' : 'plain'} style={styles.hero}>
         <Mascot mood={reading ? 'scanning' : 'happy'} size={88} />
         <View style={{ flex: 1 }}>
           <Text style={[type.title3, { color: t.text }]}>Learn settings from Carista</Text>
@@ -203,7 +207,7 @@ export default function Learn() {
         help={SECTIONS.learnSave}
         footer={
           saved
-            ? `${Object.keys(saved.codings).length} value${Object.keys(saved.codings).length === 1 ? '' : 's'} from ${new Date(saved.date).toLocaleString('en-GB')}. Each compare moves this on, so there is no need to save again between rounds.`
+            ? `${Object.keys(saved.codings).length} value${Object.keys(saved.codings).length === 1 ? '' : 's'} from ${dateTimeText(saved.date)}. Each compare moves this on, so there is no need to save again between rounds.`
             : 'Reads the modules your car answered on before. Ignition on.'
         }
       >
@@ -237,7 +241,7 @@ export default function Learn() {
       </Group>
 
       <Group header="3. Compare" help={SECTIONS.learnCompare}>
-        <ListRow first icon="compare-horizontal" iconColour="purple" title="Read again and compare" disabled={!saved || reading} onPress={compare} />
+        <ListRow first icon="compare-horizontal" iconColour={TOOLS.learnSetting.colour} title="Read again and compare" disabled={!saved || reading} onPress={compare} />
       </Group>
 
       {found ? (
@@ -250,28 +254,18 @@ export default function Learn() {
                   <Text style={[type.small, { color: t.muted, fontVariant: ['tabular-nums'] }]}>
                     {g.parts.map((p) => `byte ${p.byte}: ${hex2(p.off)} → ${hex2(p.on)} (bits ${hex2(p.mask)})`).join(', ')}
                   </Text>
-                  <TextInput
+                  <Field
                     value={names[g.key] ?? ''}
-                    onChangeText={(x) => setNames((o) => ({ ...o, [g.key]: x }))}
+                    onChange={(x) => setNames((o) => ({ ...o, [g.key]: x }))}
                     placeholder="Setting name, for example Needle sweep"
-                    placeholderTextColor={t.muted}
-                    selectionColor={t.accent}
                     accessibilityLabel={`Name for the change in ${moduleName(g.key)}`}
-                    style={[type.body, styles.input, { backgroundColor: t.sunken, color: t.text }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
+                    style={{ marginTop: space.sm }}
                   />
                 </View>
               ))}
             </Group>
-            <Text style={[type.label, { color: t.muted, marginBottom: 6, marginLeft: space.lg }]}>Login code (only if a module needs one)</Text>
-            <TextInput
-              value={login}
-              onChangeText={(x) => setLogin(x.replace(/[^0-9]/g, '').slice(0, 5))}
-              placeholder="For example 20103"
-              placeholderTextColor={t.muted}
-              keyboardType="number-pad"
-              selectionColor={t.accent}
-              style={[type.body, styles.input, { backgroundColor: t.sunken, color: t.text, marginHorizontal: 0 }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
-            />
+            <Label>Login code (only if a module needs one)</Label>
+            <Field value={login} onChange={(x) => setLogin(x.replace(/[^0-9]/g, '').slice(0, 5))} placeholder="For example 20103" keyboard="number-pad" number accessibilityLabel="Login code" style={{ marginBottom: space.lg }} />
             <Button label={named ? `Keep ${named} as switch${named === 1 ? '' : 'es'} and start the next round` : 'Skip and start the next round'} icon="check" onPress={keep} />
             <View style={{ height: space.sm }} />
             <Button label="Done learning" variant="secondary" onPress={() => router.back()} />
@@ -287,5 +281,5 @@ export default function Learn() {
 const styles = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg },
   change: { paddingHorizontal: space.lg, paddingVertical: space.md, gap: 6 },
-  input: { borderRadius: radius.sm + 2, paddingHorizontal: space.md, paddingVertical: 10, marginBottom: space.sm },
+
 });

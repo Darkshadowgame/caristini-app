@@ -51,8 +51,8 @@ describe('customise guides', () => {
     for (const c of categoriesFor(modsForVehicle('vag', 'PQ35'))) expect(c.items.length).toBeGreaterThan(0);
   });
 
-  it('says plainly that the steps are not yet tested', () => {
-    expect(STATUS_LABEL.documented).toBe('Steps known, not yet tested by Caristini');
+  it('says plainly that a guide has no switch yet', () => {
+    expect(STATUS_LABEL.documented).toBe('Guide only, no switch yet');
   });
 });
 

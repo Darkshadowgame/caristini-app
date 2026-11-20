@@ -4,7 +4,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { ModuleDef } from '../../obd/modules';
 import { useConnection } from '../../state';
 import { space, type, useTheme } from '../../theme';
-import { Group, ListRow, NeedsConnection, Notice, Pill, Screen, SearchField } from '../../ui';
+import { Group, ListRow, NeedsConnection, Notice, Pill, Screen, SearchField, tool } from '../../ui';
 import { useLastScan } from '../../components/LastScan';
 import { SECTIONS } from '../../help';
 
@@ -36,7 +36,7 @@ export default function Workshop() {
   if (!client || !conn.vehicle) {
     return (
       <Screen>
-        <NeedsConnection title="Connect your car to open the workshop" />
+        <NeedsConnection title="Connect your car to open Workshop" />
       </Screen>
     );
   }
@@ -56,7 +56,7 @@ export default function Workshop() {
   return (
     <Screen>
       <Text style={[type.sub, { color: t.muted, marginBottom: space.md }]}>
-        Pick a control module to read its identity, fault codes, measuring values and coding. Modules that are not fitted do not answer.
+        Choose a control module to read its identity, fault codes, values and coding. Modules that are not fitted do not answer.
       </Text>
       <View style={{ marginBottom: space.lg }}>
         <SearchField value={query} onChange={setQuery} placeholder="Address (17), name or CAN ID" />
@@ -69,11 +69,11 @@ export default function Workshop() {
       ) : (
         <>
           {[
-            { header: seen.size && !q ? 'On this car' : 'Select control module', rows: seen.size && !q ? list.filter((d) => seen.has(d.id)) : list },
+            { header: seen.size && !q ? 'On this car' : 'Control modules', rows: seen.size && !q ? list.filter((d) => seen.has(d.id)) : list },
             ...(seen.size && !q ? [{ header: 'Not found in the last health check', rows: showAll ? list.filter((d) => !seen.has(d.id)) : [] }] : []),
           ].map((g) =>
             g.header.startsWith('Not found') && !showAll ? (
-              <Group key={g.header} help={SECTIONS.workshopNotFound} footer="Not fitted, asleep, or on the older VW protocol. Open one to try it.">
+              <Group key={g.header} header="Not found" help={SECTIONS.workshopNotFound} footer="Not found in the last health check: not fitted, asleep, or on the older VW protocol. Open one to try it.">
                 <ListRow first icon="chevron-down" iconColour="grey" title={`Show ${list.filter((d) => !seen.has(d.id)).length} more modules`} onPress={() => setShowAll(true)} noChevron />
               </Group>
             ) : (
@@ -85,7 +85,7 @@ export default function Workshop() {
                       key={d.id}
                       first={i === 0}
                       title={`${d.code && group === 'vag' ? `${d.code} · ` : ''}${d.name}`}
-                      subtitle={d.tx ? `CAN ${d.tx}` : 'Older VW protocol'}
+                      subtitle={d.tx ? `CAN ${d.tx}` : 'Older VW module'}
                       right={n ? <Pill text={`${n} fault${n === 1 ? '' : 's'}`} tone="danger" /> : undefined}
                       onPress={() => router.push({ pathname: '/workshop/[id]', params: { id: d.id } })}
                     />
@@ -98,7 +98,7 @@ export default function Workshop() {
       )}
       {client.canListen ? (
         <Group header="Record another tool" help={SECTIONS.workshopListen} footer="With a Y-splitter, record what VCDS or another tool sends, to add its functions to Caristini.">
-          <ListRow first icon="record-circle-outline" iconColour="red" title="Listen mode" onPress={() => router.push('/listen')} />
+          <ListRow first {...tool('listen')} title="Listen mode" onPress={() => router.push('/listen')} />
         </Group>
       ) : null}
     </Screen>

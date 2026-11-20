@@ -29,7 +29,7 @@ export default function CarReference() {
 
   const SourceLink = ({ s }: { s: Fact['source'] }) => (
     <Pressable accessibilityRole="link" accessibilityLabel={`Open source: ${s.label}`} onPress={() => Linking.openURL(s.url)} hitSlop={6}>
-      <Text style={[type.caption, { color: t.faint, textDecorationLine: 'underline' }]}>{s.label}</Text>
+      <Text style={[type.caption, { color: t.accentText }]}>{s.label}</Text>
     </Pressable>
   );
 
@@ -90,7 +90,7 @@ export default function CarReference() {
 
   return (
     <Screen>
-      <GlowCard tone="brand" style={{ padding: space.lg, gap: space.xs }}>
+      <GlowCard tone="plain" style={{ padding: space.lg, gap: space.xs }}>
         <Text style={[type.title3, { color: t.text }]}>{pack.title}</Text>
         <Text style={[type.small, { color: t.muted }]}>
           For {vehicleTitle(v)}. Researched {pack.researched} from public pages; every line links to its source.

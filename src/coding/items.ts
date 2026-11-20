@@ -21,7 +21,7 @@ export interface CodingItem {
   bits: number[];
   // A multi-bit field instead: the bits under mask hold on or off.
   field?: { mask: number; on: number; off: number };
-  // low: offered only as "Unconfirmed, try it", always through Try mode.
+  // low: listed under "Try these". The switch writes at once like any other.
   confidence: 'high' | 'medium' | 'low';
   // Login code the module asks for before this change, when sources give one.
   login?: number;
@@ -257,10 +257,11 @@ export function bitsLabel(item: CodingItem): string {
   return bits.length === 1 ? `bit ${bits[0]}` : `bits ${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}`;
 }
 
-// The setting's line in Customise, matching what the car has now: "Off on
-// your car. When on, the headlights stay on ..." The summary says what the
+// The setting's line in Customise, matching what the car has now: "Off now.
+// When on, the headlights stay on ..." or "On now: the headlights stay on
+// ...". The summary says what the
 // setting does when on; source notes stay behind Technical.
 export function stateText(item: Pick<CodingItem, 'summary'>, on: boolean): string {
   const what = item.summary.charAt(0).toLowerCase() + item.summary.slice(1);
-  return on ? `On on your car: ${what}` : `Off on your car. When on, ${what}`;
+  return on ? `On now: ${what}` : `Off now. When on, ${what}`;
 }

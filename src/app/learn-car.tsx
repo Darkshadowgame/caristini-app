@@ -5,15 +5,16 @@ import type { GpsStart } from '../logger/gps';
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import { estimateSeconds, FULL_READ_DAYS, LEARN_ORDER, learnEstimate, learnMode, LearnStep, learnSummaryHeader, LearnSummary, runLearn, StepOutcome } from '../learn/runLearn';
-import { aboutRange, shortDuration } from '../timeText';
+import { aboutRange, dateText, dateTimeText, leftText, shortDuration } from '../timeText';
 import { modulesText, sensorCountText } from '../vehicle/counts';
 import { sendBack } from '../share/sendBack';
 import { sendLogNow, skipUnsentLog } from '../share/sendLog';
 import { useConnection } from '../state';
 import { space, type, useTheme } from '../theme';
-import { Button, GlowCard, Group, Icon, IconName, ListRow, NeedsConnection, Notice, Pill, ProgressBar, ScanPulse, Screen, success } from '../ui';
+import { Button, GlowCard, Group, Icon, IconName, ListRow, NeedsConnection, Notice, Pill, ProgressBar, ScanPulse, Screen, success, tool, TOOLS } from '../ui';
 import { useGarage } from '../vehicle/garage';
 import { SECTIONS, WHAT_IS_SENT } from '../help';
+import { LeaveRunGuard } from '../leaveRun';
 
 const STEPS: Record<LearnStep, { title: string; icon: IconName; detail: string }> = {
   modules: { title: 'Find every module', icon: 'chip', detail: 'Part number, software and a backup of the coding of each module. Works on any make.' },
@@ -102,7 +103,7 @@ export default function LearnCar() {
   const about = `${aboutRange(lo, hi)} on this car${pace ? ' at your adapter’s pace' : ''}, engine running.`;
   const intro =
     mode.why === 'repeat'
-      ? `Repeat run: refreshes the faults of every module, emissions, the MOT read, battery and odometer, and carries on exploring values. ${about} Modules and sensors were read on ${new Date(v.learnFullAt!).toLocaleDateString('en-GB')}.`
+      ? `Repeat run: refreshes the faults of every module, emissions, the MOT read, battery and odometer, and carries on exploring values. ${about} Modules and sensors were read on ${dateText(v.learnFullAt!)}.`
       : mode.why === 'first'
         ? `First run: everything is read once (modules, faults, sensors, values, emissions, MOT and battery). ${about} Later runs are quicker.`
         : `Full read${mode.why === 'old' ? `, due every ${FULL_READ_DAYS} days` : ''}: reads modules, sensors and every address again. ${about}`;
@@ -183,18 +184,27 @@ export default function LearnCar() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Learn my car' }} />
+      {/* Back while a run is active asks first; leaving the app or locking the phone does not. */}
+      <LeaveRunGuard
+        active={!!running}
+        onStop={() => {
+          stop.current = true;
+          setStopping(true);
+        }}
+      />
       {error ? <Notice tone="danger" icon="alert-circle-outline" text={error} /> : null}
 
-      <GlowCard tone="brand" style={{ alignItems: 'center' }}>
+      {/* Amber only while the run is reading the car; waiting to start, the card is plain and the icon wears the tool's own square. */}
+      <GlowCard tone={running ? 'brand' : 'plain'} style={{ alignItems: 'center' }}>
         <ScanPulse active={!!running} size={128}>
-          <View style={[styles.core, { backgroundColor: t.accentSoft }]}>
-            <Icon name="school-outline" size={40} color={t.accent} />
+          <View style={[styles.core, { backgroundColor: running ? t.accentSoft : t[TOOLS.learn.colour] }]}>
+            <Icon name={TOOLS.learn.icon} size={40} color={running ? t.accent : '#FFFFFF'} />
           </View>
         </ScanPulse>
         <Text style={[type.title3, { color: t.text, marginTop: space.md, textAlign: 'center' }]}>{running ? STEPS[running].title : 'Learn my car'}</Text>
         {running ? (
           <Text style={[type.small, type.number, { color: t.muted, marginTop: 2, textAlign: 'center' }]}>
-            Step {LEARN_ORDER.indexOf(running) + 1} of {LEARN_ORDER.length} · {shortDuration(Date.now() - learnStarted.current)} so far{left >= 5 ? ` · about ${shortDuration(left * 1000)} left` : ''}
+            Step {LEARN_ORDER.indexOf(running) + 1} of {LEARN_ORDER.length} · {shortDuration(Date.now() - learnStarted.current)} so far{left >= 5 ? ` · ${leftText(left)}` : ''}
           </Text>
         ) : null}
         <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: 4, marginBottom: space.lg }]}>
@@ -207,7 +217,7 @@ export default function LearnCar() {
             <ProgressBar value={progress.value} label={progress.label} />
             <View style={{ marginTop: space.lg }}>
               <Button
-                label={stopping ? 'Stopping…' : 'Stop and keep what was found'}
+                label={stopping ? 'Stopping…' : 'Stop and keep results'}
                 variant="secondary"
                 disabled={stopping}
                 onPress={() => {
@@ -233,7 +243,7 @@ export default function LearnCar() {
           footer={
             [
               failedSteps.length ? `${failedSteps.map((s) => STEPS[s].title).join(', ')} failed; the rest carried on. Run Learn my car again to try ${failedSteps.length === 1 ? 'it' : 'them'} again.` : null,
-              sent ? (sent.via === 'github' ? 'Sent to your findings store.' : sent.detail) : null,
+              sent ? (sent.via === 'github' ? 'Sent to your private findings store.' : sent.detail) : null,
             ]
               .filter(Boolean)
               .join(' ') || undefined
@@ -288,7 +298,9 @@ export default function LearnCar() {
           const s = STEPS[key];
           const o = outcomes[key];
           const now = running === key;
-          const look = o ? LOOK[o.state] : null;
+          // Saved but not sent is not a green tick: the step ended, and its line says nothing was sent.
+          const notSent = key === 'send' && o?.state === 'done' && (/not sent/i.test(o.note ?? '') || (!!sent && sent.via !== 'github'));
+          const look = notSent ? { icon: s.icon, colour: 'grey' as const } : o ? LOOK[o.state] : null;
           return (
             <ListRow
               key={key}
@@ -305,15 +317,20 @@ export default function LearnCar() {
       </Group>
 
       {k.length ? (
-        <Group header="What Caristini knows about this car" help={SECTIONS.learnCarKnows} footer={v.learnRun ? `Last learned ${new Date(v.learnRun.at).toLocaleString('en-GB')}.` : undefined}>
+        <Group
+          header="What Caristini knows about this car"
+          help={SECTIONS.learnCarKnows}
+          footer={running ? 'These open when the run ends, so nothing else talks to the car while it is being read.' : v.learnRun ? `Last learned ${dateTimeText(v.learnRun.at)}.` : undefined}
+        >
           {k.map(([id, info], i) => (
-            <ListRow key={id} first={i === 0} icon="chip" iconColour="indigo" title={info.plainName} subtitle={[info.part, info.what].filter(Boolean).join(' · ') || undefined} onPress={() => router.push(`/workshop/${id}`)} />
+            // Not tappable during a run: Workshop would talk to the car at the same time.
+            <ListRow key={id} first={i === 0} {...tool('module')} title={info.plainName} subtitle={[info.part, info.what].filter(Boolean).join(' · ') || undefined} disabled={!!running} onPress={() => router.push(`/workshop/${id}`)} />
           ))}
         </Group>
       ) : null}
 
       <Group footer="For experts: explore one module for values no list names yet. What Learn my car explored is shown there too, and either carries on where the other stopped.">
-        <ListRow first icon={'telescope' as IconName} iconColour="indigo" title="Unknown values" onPress={() => router.push('/discover')} />
+        <ListRow first {...tool('discover')} title="Unknown values" disabled={!!running} onPress={() => router.push('/discover')} />
       </Group>
     </Screen>
   );

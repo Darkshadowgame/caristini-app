@@ -403,3 +403,168 @@ describe('listen time on older VW modules (Leon logs of 15 Nov 2026)', () => {
     expect(Date.now() - started).toBeLessThan(60000);
   }, 120000);
 });
+
+// Replays of the 2007 Leon's adapter logs of 16 and 20 Nov 2026.
+describe('2007 Leon channel behaviour', () => {
+  const session = (reply: (c: string, sent: string[]) => string) => {
+    const sent: string[] = [];
+    const s = new Tp20Session(async (c) => {
+      sent.push(c);
+      const r = c === '20C000100003011' ? '22000D00003390301' : c === 'A00F8AFF32FF1' ? '300A10F8AFF4AFF' : reply(c, sent);
+      return `${r || 'NO DATA'}\r\r>`;
+    }, '6');
+    return { s, sent };
+  };
+
+  it("answers the module's channel test with its parameters", async () => {
+    const { s, sent } = session((c) => {
+      // Group 0x25: the module ACKs, answers and adds a channel test.
+      if (c === '1000022125') return '300B1\r3001000036125AA\r300A3';
+      return '';
+    });
+    expect(await s.open(0x20)).toBe(true);
+    expect(await s.request([0x21, 0x25], 1000)).toEqual([0x61, 0x25, 0xaa]);
+    // The answer was ACKed, and the test answered when the next request began.
+    await s.idle(0);
+    await s.request([0x21, 0x25], 300).catch(() => undefined);
+    expect(sent).toContain('B1');
+    expect(sent).toContain('A10F8AFF32FF');
+    expect(sent.indexOf('A10F8AFF32FF')).toBeGreaterThan(sent.indexOf('B1'));
+  });
+
+  it('reads every message of an identification that says more follow, and returns the first', async () => {
+    let b = 0;
+    const { s, sent } = session((c) => {
+      // 1A 9B: first message is flagged 80 (more follow), 4 bytes 5A 9B 31 32.
+      if (c === '10000021A9B' || c === '1000021A9B') return '300B1\r3001080045A9B3132';
+      if (/^B[0-9A-F]$/.test(c)) {
+        b++;
+        // Filler "5A" (flagged), then the last message without the flag.
+        if (b === 1) return '300118001' + '5A';
+        if (b === 2) return '3001200045A9B4142';
+        return '';
+      }
+      // The next request must only go out after the last message.
+      if (c === '1100021089') return '300B2\r30013000250' + '89';
+      return '';
+    });
+    expect(await s.open(0x20)).toBe(true);
+    expect(await s.request([0x1a, 0x9b], 2000)).toEqual([0x5a, 0x9b, 0x31, 0x32]);
+    expect(s.extras).toEqual([[0x5a], [0x5a, 0x9b, 0x41, 0x42]]);
+    expect(await s.request([0x10, 0x89], 1000)).toEqual([0x50, 0x89]);
+    // All three module messages were ACKed before the next request.
+    const next = sent.indexOf('1100021089');
+    expect(sent.slice(0, next).filter((c) => /^B[0-9A-F]$/.test(c))).toEqual(['B1', 'B2', 'B3']);
+  });
+
+  it('sends a request again with the number the module expects when it was not ready', async () => {
+    let asked = 0;
+    const { s, sent } = session((c) => {
+      // First try: "not ready", still expecting frame 0.
+      if (c === '1000021089') return ++asked === 1 ? '30090' : '300B1\r30010000250' + '89';
+      return '';
+    });
+    expect(await s.open(0x20)).toBe(true);
+    expect(await s.request([0x10, 0x89], 1500)).toEqual([0x50, 0x89]);
+    expect(sent.filter((c) => c === '1000021089').length).toBe(2);
+  }, 10_000);
+});
+
+// Bug review of 20 Nov 2026 (replica/review-2026-11-20/bugs-r1.md).
+describe('requests of several frames', () => {
+  const open = (reply: (c: string) => string) => {
+    const sent: string[] = [];
+    const s = new Tp20Session(async (c) => {
+      sent.push(c);
+      const r = c === '20C000100003011' ? '22000D00003390301' : c === 'A00F8AFF32FF1' ? '300A10F8AFF4AFF' : reply(c);
+      return `${r || 'NO DATA'}\r\r>`;
+    }, '6');
+    return { s, sent };
+  };
+  // 2E 06 00 and 10 coding bytes: frame 0 "20 000D2E0600C0C1", frame 1 "21 C2..C8", frame 2 "12 C9".
+  const write = [0x2e, 0x06, 0x00, 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9];
+
+  it('carries on from the frame the module names, with the original numbers (H1)', async () => {
+    let lastFrames = 0;
+    const { s, sent } = open((c) => {
+      // The module lost frame 1: after the last frame it still expects frame 1.
+      if (c === '12C9') return ++lastFrames === 1 ? '300B1' : '300B3\r3001000036E0600';
+      return '';
+    });
+    expect(await s.open(0x20)).toBe(true);
+    expect(await s.request(write, 1500)).toEqual([0x6e, 0x06, 0x00]);
+    const frames = sent.filter((c) => /^[12][0-9A-F]/.test(c) && c.length > 2 && c !== '20C000100003011');
+    // Frame 0 once; frames 1 and 2 twice; never a second "20 000D..." joined on.
+    expect(frames).toEqual(['20000D2E0600C0C1', '21C2C3C4C5C6C7C8', '12C9', '21C2C3C4C5C6C7C8', '12C9']);
+  });
+
+  it('sends the whole request again when the module took none of it', async () => {
+    let lastFrames = 0;
+    const { s, sent } = open((c) => {
+      if (c === '12C9') return ++lastFrames === 1 ? '30090' : '300B3\r3001000036E0600';
+      return '';
+    });
+    expect(await s.open(0x20)).toBe(true);
+    expect(await s.request(write, 1500)).toEqual([0x6e, 0x06, 0x00]);
+    expect(sent.filter((c) => c === '20000D2E0600C0C1').length).toBe(2);
+  }, 10_000);
+
+  it('does not take a late answer to another identifier for this one (L8)', async () => {
+    const { s } = open((c) => {
+      // A late 62 F1 87 arrives first, then the real 62 F1 97.
+      if (c === '10000322F197') return '300B1\r3001000046' + '2F187AA';
+      if (c === 'B1') return '3001100046' + '2F197BB';
+      return '';
+    });
+    expect(await s.open(0x20)).toBe(true);
+    expect(await s.request([0x22, 0xf1, 0x97], 2500)).toEqual([0x62, 0xf1, 0x97, 0xbb]);
+  }, 10_000);
+});
+
+describe('old-style long coding record (M9)', () => {
+  const { parseLongCodingRecord } = require('../src/obd/tp20');
+  const head = [0x00, 0x06, 0x46, 0x22, 0x19, 0x29, 0xb2, 0x30, 0x30, 0x32];
+  it('reads a record of the expected shape', () => {
+    expect(parseLongCodingRecord([...head, 0x10, 0x04, 0xa1, 0xa2, 0xa3, 0xff])).toEqual({ wsc: head.slice(0, 6), sw: head.slice(6), coding: [0xa1, 0xa2, 0xa3] });
+  });
+  it('refuses a record with no FF at the end, a wrong length or another type', () => {
+    expect(parseLongCodingRecord([...head, 0x10, 0x04, 0xa1, 0xa2, 0xa3, 0x00])).toBeNull();
+    expect(parseLongCodingRecord([...head, 0x10, 0x05, 0xa1, 0xa2, 0xa3, 0xff])).toBeNull();
+    expect(parseLongCodingRecord([...head, 0x03, 0x04, 0xa1, 0xa2, 0xa3, 0xff])).toBeNull();
+  });
+});
+
+describe('adapter fixes from the bug review of 20 Nov 2026', () => {
+  const { parseMessages } = require('../src/obd/elm');
+
+  it('keeps an answer of more than 16 frames in one piece (M4)', () => {
+    // 59 02 FF and 30 faults of 4 bytes: 123 bytes, 18 frames. The frame
+    // index wraps from F: to 0: and 1:.
+    const bytes = [0x59, 0x02, 0xff];
+    for (let i = 0; i < 30; i++) bytes.push(0x01, i, 0x00, 0x08);
+    const hex = bytes.map((b: number) => b.toString(16).toUpperCase().padStart(2, '0')).join('');
+    const lines = ['07B', `0:${hex.slice(0, 12)}`];
+    for (let at = 12, n = 1; at < hex.length; at += 14, n++) lines.push(`${(n % 16).toString(16).toUpperCase()}:${hex.slice(at, at + 14).padEnd(14, 'A')}`);
+    const msgs = parseMessages(`${lines.join('\r')}\r\r>`, '1902FF');
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toEqual(bytes);
+  });
+
+  it('still starts a new message at 0: once the first is complete', () => {
+    const msgs = parseMessages('008\r0:490201313233\r1:34353600000000\r008\r0:490201414243\r1:44454600000000\r\r>', '0902');
+    expect(msgs).toHaveLength(2);
+  });
+
+  it('reads an older module again after its faults are cleared, even after a search (M5)', async () => {
+    const c = new ElmClient(new SimTransport(a6, 0));
+    await c.initialise();
+    const before = await c.deepScan([0x22]);
+    expect(before[0].faults.length).toBeGreaterThan(0);
+    await c.clearTp20(0x22);
+    // The address is now tied to a named module: a plain search skips it.
+    expect(await c.deepScan([0x22])).toEqual([]);
+    const [after] = await c.deepScan([0x22], undefined, undefined, undefined, { known: true });
+    expect(after.address).toBe(0x22);
+    expect(after.faults).toEqual([]);
+  });
+});

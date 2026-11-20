@@ -13,6 +13,7 @@
 import { chargeVerdict, restVerdict } from '../obd/battery';
 import { faultText } from '../obd/faultText';
 import { faultLabel } from '../diag/faults';
+import { dateTimeText } from '../timeText';
 
 // The code people look up and the MOT list shows: P0011, not P0011B5.
 export const baseCode = (c: string) => (/^[PCBU][0-9A-F]{4}[0-9A-F]{2}$/i.test(c) ? c.slice(0, 5).toUpperCase() : c);
@@ -212,7 +213,7 @@ export function classifyFault(f: CarFault, car: MotCar, ctx: { milOn?: boolean |
       return done({
         outcome: 'advisory',
         why: ctx.milOn
-          ? 'A likely cause of the engine warning light.'
+          ? 'A likely cause of the engine light.'
           : f.state === 'pending'
             ? 'Pending engine code: not a fail while the engine light is off, but it can light it.'
             : 'Stored engine code: not a fail while the engine light is off, but it can light it.',
@@ -329,14 +330,14 @@ export function engineLight(milOn: boolean | null, car: MotCar, list: string[] =
     : 'Read the engine codes, fix the cause and clear them with the engine off.';
   if (applies === 'no') {
     // Outside the dates in 8.2.1.2 and 8.2.2.2.
-    return { key: 'mil', from: 'car', outcome: 'info', title: 'Engine warning light on', why: 'The engine light rule applies to petrol cars first used from 1 July 2003 and diesels from 1 July 2008.', fix, section, category: 'Major' };
+    return { key: 'mil', from: 'car', outcome: 'info', title: 'Engine light on', why: 'The engine light rule applies to petrol cars first used from 1 July 2003 and diesels from 1 July 2008.', fix, section, category: 'Major' };
   }
   // Manual 8.2.1.2(h) / 8.2.2.2(g): "Engine MIL inoperative or indicating a malfunction", Major.
   return {
     key: 'mil',
     from: 'car',
     outcome: 'fail',
-    title: 'Engine warning light on',
+    title: 'Engine light on',
     why: `The engine light showing a malfunction is a Major defect.${applies === 'maybe' ? ' Applies to petrol cars first used from 1 July 2003 and diesels from 1 July 2008.' : ''}`,
     fix,
     section,
@@ -1049,11 +1050,9 @@ export function historyDetail(s: Summary): string {
   return [plural(s.advisories.length, 'advisory', 'advisories'), `${s.checked} of ${s.applicable} checked`, s.carRead ? null : 'car not read'].filter(Boolean).join(', ');
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// "9 Nov 2026, 17:02" from the one shared formatter.
 export function stamp(ms: number): string {
-  const d = new Date(ms);
-  const two = (n: number) => String(n).padStart(2, '0');
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${two(d.getHours())}:${two(d.getMinutes())}`;
+  return dateTimeText(ms);
 }
 
 function line(f: Finding): string {

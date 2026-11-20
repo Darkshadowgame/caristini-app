@@ -3,12 +3,12 @@
 // lowest/highest) and the shift light.
 import { alertBuzz } from '../sound';
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line, Path, Polyline, Rect } from 'react-native-svg';
 import type { LivePid } from '../obd/pids';
 import { Settings, toUserUnits } from '../settings';
-import { radius, space, type, useTheme } from '../theme';
-import { Button, Group, ListRow, Notice, useReduceMotion } from '../ui';
+import { space, type, useTheme } from '../theme';
+import { Button, Field, Group, ListRow, Notice, useReduceMotion } from '../ui';
 import { AlertRule, MinMax, Peak, ruleFromInput } from './alerts';
 
 // ---------------------------------------------------------------------------
@@ -187,9 +187,9 @@ export function TileSheet({
         <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           {extra}
           <Group header="Since you opened the page" footer="The peak holds the highest reading for 3 seconds, then follows the value down.">
-            <ListRow first title="Lowest" value={minMax ? fmt(minMax.min) : 'None yet'} />
-            <ListRow title="Highest" value={minMax ? fmt(minMax.max) : 'None yet'} />
-            <ListRow title="Peak (held)" value={peak ? fmt(peak.value) : 'None yet'} />
+            <ListRow first title="Lowest" value={minMax ? fmt(minMax.min) : 'No reading'} />
+            <ListRow title="Highest" value={minMax ? fmt(minMax.max) : 'No reading'} />
+            <ListRow title="Peak (held)" value={peak ? fmt(peak.value) : 'No reading'} />
           </Group>
           <Button label="Reset lowest and highest" icon="restart" variant="secondary" onPress={onResetMinMax} style={{ marginBottom: space.xl }} />
 
@@ -197,7 +197,7 @@ export function TileSheet({
             header="Alert"
             footer="The tile turns red and the phone buzzes once when the value goes past a limit. Leave both limits empty for no alert."
           >
-            <View style={{ padding: space.lg, paddingTop: space.sm }}>
+            <View style={{ padding: space.lg, paddingTop: space.xs }}>
               <NumberField label={`Warn above${unit ? ` (${unit})` : ''}`} value={above} onChange={setAbove} />
               <NumberField label={`Warn below${unit ? ` (${unit})` : ''}`} value={below} onChange={setBelow} />
               <NumberField label="Only when engine speed is above (rpm, optional)" value={minRpm} onChange={setMinRpm} integer />
@@ -212,45 +212,8 @@ export function TileSheet({
 }
 
 export function NumberField({ label, value, onChange, integer }: { label: string; value: string; onChange: (v: string) => void; integer?: boolean }) {
-  const t = useTheme();
-  return (
-    <View style={{ marginTop: space.sm }}>
-      <Text style={[type.small, { color: t.muted, marginBottom: 4 }]}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        keyboardType={integer ? 'number-pad' : 'numbers-and-punctuation'}
-        accessibilityLabel={label}
-        placeholder="None"
-        placeholderTextColor={t.faint}
-        selectionColor={t.accent}
-        style={[type.body, type.number, styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.bg }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
-      />
-    </View>
-  );
-}
-
-// Choice chips in a row (tile style, page).
-export function Chips<T extends string>({ options, value, onPick }: { options: { id: T; label: string }[]; value: T; onPick: (id: T) => void }) {
-  const t = useTheme();
-  return (
-    <View style={styles.chips}>
-      {options.map((o) => {
-        const on = o.id === value;
-        return (
-          <Pressable
-            key={o.id}
-            accessibilityRole="button"
-            accessibilityState={{ selected: on }}
-            onPress={() => onPick(o.id)}
-            style={[styles.chip, { backgroundColor: on ? t.accentSoft : t.sunken }]}
-          >
-            <Text style={[type.small, { color: on ? t.accentText : t.text, fontWeight: on ? '600' : '400' }]}>{o.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+  // The shared field (src/ui.tsx), set up for a number.
+  return <Field label={label} value={value} onChange={onChange} keyboard={integer ? 'number-pad' : 'numbers-and-punctuation'} placeholder="None" number style={{ marginTop: space.md }} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +246,7 @@ export function ShiftLight({ on }: { on: boolean }) {
       accessibilityLabel="Shift up"
       style={[StyleSheet.absoluteFill, styles.shift, { backgroundColor: lit || reduce ? t.danger : 'transparent' }]}
     >
-      {lit || reduce ? <Text style={styles.shiftText}>Shift</Text> : null}
+      {lit || reduce ? <Text style={[styles.shiftText, { color: t.onDanger }]}>Shift</Text> : null}
     </View>
   );
 }
@@ -294,9 +257,7 @@ const styles = StyleSheet.create({
   sheetWeb: { marginTop: 60, borderTopLeftRadius: 14, borderTopRightRadius: 14, overflow: 'hidden' },
   sheetBar: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: space.lg, borderBottomWidth: StyleSheet.hairlineWidth },
   barButton: { width: 80, minHeight: 44, justifyContent: 'center' },
-  input: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: 10 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
-  chip: { borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: 6, minHeight: 32, justifyContent: 'center' },
+
   shift: { alignItems: 'center', justifyContent: 'center', zIndex: 10 },
-  shiftText: { color: '#FFFFFF', fontSize: 72, fontWeight: '800', letterSpacing: -1 },
+  shiftText: { fontSize: 72, fontWeight: '800', letterSpacing: -1 },
 });

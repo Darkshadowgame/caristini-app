@@ -50,6 +50,13 @@ export function sensorCountText(c: SensorCount): string {
   return parts.length ? parts.join(' and ') : 'No sensors found yet';
 }
 
+// The same count for a tile's one status line, where the full sentence does
+// not fit: "88 sensors", "4 values, 1 group", "88 sensors, 4 values".
+export function sensorCountShort(c: SensorCount): string {
+  if (c.maker) return c.groupValues ? `${plural(c.maker, 'sensor')}, ${plural(c.groupValues, 'value')}` : plural(c.maker, 'sensor');
+  return c.groupValues ? `${plural(c.groupValues, 'value')}, ${plural(c.groups, 'group')}` : 'No sensors found yet';
+}
+
 // Modules Caristini has identified on this car (part number or name read).
 export function moduleCount(v: CarLike | null | undefined): number {
   if (!v) return 0;

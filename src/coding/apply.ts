@@ -24,7 +24,7 @@ export async function applySetting(
   const before = await client.readCoding(def);
   if (!before) return { ok: false, text: `${def.name} did not give its coding.` };
   if (client.codingStyle(def) === 'short') return { ok: false, text: `${def.name} uses the old 3-digit short coding, which this setting does not fit. Nothing was changed.` };
-  if (item.length ? before.length !== item.length : before.length <= item.byte) return { ok: false, text: `${def.name} coding has a different layout on this car, so it was not changed.` };
+  if (before.length <= item.byte) return { ok: false, text: `${def.name} coding is too short on this car to hold this setting, so it was not changed.` };
   if (isOn(item, before) === on) return { ok: true, text: `${item.title} is already ${on ? 'on' : 'off'}.` };
   const saved = latest()?.codingOriginal ?? {};
   if (!saved[def.id]) await update({ codingOriginal: { ...saved, [def.id]: toHex(before) } });
@@ -33,10 +33,10 @@ export async function applySetting(
   // The saved coding follows the write, so Put back decides from what the module holds now.
   if (res.coding) await update({ codingCache: cacheAfterWrite(latest()?.codingCache, [{ key: def.id, hex: toHex(res.coding) }]) });
   if (!res.ok) {
-    return { ok: false, text: res.restored ? `${def.name} did not keep the change, so the original coding was put back. Nothing changed.` : `${def.name} did not keep the change and the original could not be confirmed; restore it in Customise.` };
+    return { ok: false, text: res.restored ? `${def.name} did not keep the change, so the original coding was put back. Nothing changed.` : `${def.name} did not keep the change and the original could not be confirmed. Tap Put back under Backups in Customise.` };
   }
   const what = `${item.title} ${on ? 'on' : 'off'}`;
-  await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: `Changed: ${what}. Undo it in Customise > Backups.` });
+  await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: `Changed: ${what}. Put it back in Customise, then Backups.` });
   const backup = saved[def.id] ?? toHex(before);
   await addHistory({
     vin: v.vin,

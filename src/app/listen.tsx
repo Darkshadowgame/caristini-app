@@ -1,14 +1,15 @@
 import { router } from 'expo-router';
 import { sendBack } from '../share/sendBack';
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Share, StyleSheet, Text, View } from 'react-native';
 import { Mascot } from '../brand/Mascot';
 import { resetFromRecording, resetTargets } from '../service/obdReset';
 import { useConnection } from '../state';
 import { useGarage } from '../vehicle/garage';
 import { MONO, radius, space, type, useTheme } from '../theme';
 import { SECTIONS } from '../help';
-import { Button, GlowCard, Group, ListRow, NeedsConnection, Notice, Screen, success } from '../ui';
+import { Button, Field, GlowCard, Group, ListRow, NeedsConnection, Notice, Screen, success } from '../ui';
+import { useStayAwake } from '../keepAwake';
 
 // Listen mode: with a Y-splitter on the OBD port, the adapter silently records
 // what another tool (VCDS on a laptop, for example) sends to the car. The
@@ -30,6 +31,8 @@ export default function Listen() {
   const started = useRef(0);
   const stopRef = useRef<(() => void) | null>(null);
   useEffect(() => () => stopRef.current?.(), []);
+  // The phone stays awake while a recording runs, as in the data logger.
+  useStayAwake('listen', running);
 
   if (!client || !v) {
     return (
@@ -112,7 +115,7 @@ export default function Listen() {
 
   return (
     <Screen>
-      <GlowCard tone="brand" style={styles.hero}>
+      <GlowCard tone={running ? 'brand' : 'plain'} style={styles.hero}>
         <Mascot mood={running ? 'scanning' : 'happy'} size={88} />
         <View style={{ flex: 1 }}>
           <Text style={[type.title3, { color: t.text }]}>Record another tool</Text>
@@ -124,7 +127,7 @@ export default function Listen() {
 
       <Group header="Set up" help={SECTIONS.listenSetup} footer="The adapter only listens: it sends nothing to the car while recording.">
         <ListRow first title="Plug an OBD Y-splitter into the car" noChevron />
-        <ListRow title="This adapter in one plug, the other tool's cable in the other" noChevron />
+        <ListRow title="This adapter in one plug, the other tool’s cable in the other" noChevron />
         <ListRow title="Ignition on, start recording here, then use the other tool" subtitle="Recording carries on while Caristini is in the background" noChevron />
       </Group>
 
@@ -138,7 +141,7 @@ export default function Listen() {
       <Button label={running ? 'Stop recording' : 'Start recording'} icon={running ? 'stop' : 'record-circle-outline'} variant={running ? 'danger' : 'primary'} onPress={running ? () => stopRef.current?.() : start} />
 
       {running || count ? (
-        <Group header={`${count} frames${running ? ', recording' : ''}`} style={{ marginTop: space.lg }}>
+        <Group header={`${count.toLocaleString('en-GB')} frame${count === 1 ? '' : 's'}${running ? ', recording' : ''}`} style={{ marginTop: space.lg }}>
           <View style={styles.pad}>
             {lines.map((l, i) => (
               <Text key={i} style={[type.small, { color: t.text, fontFamily: MONO }]} numberOfLines={1}>
@@ -152,14 +155,7 @@ export default function Listen() {
       {running ? (
         <Group header="Mark what you just did" help={SECTIONS.listenMark} footer="Markers go into the recording with the time, so each step can be matched to its commands.">
           <View style={[styles.pad, styles.markRow]}>
-            <TextInput
-              value={note}
-              onChangeText={setNote}
-              placeholder="For example: 17 coding, needle sweep on"
-              placeholderTextColor={t.muted}
-              selectionColor={t.accent}
-              style={[type.body, styles.input, { backgroundColor: t.sunken, color: t.text }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
-            />
+            <Field value={note} onChange={setNote} placeholder="For example: 17 coding, needle sweep on" accessibilityLabel="Marker note" style={{ flex: 1 }} />
             <Button label="Mark" variant="secondary" onPress={mark} />
           </View>
         </Group>
@@ -168,7 +164,7 @@ export default function Listen() {
       {!running && count ? (
         <View style={{ gap: space.sm, marginTop: space.lg }}>
           <Button label="Share recording" icon="share-variant" onPress={() => Share.share({ message: log.current.join('\n'), title: 'Caristini recording' })} />
-          <Text style={[type.small, { color: t.muted, textAlign: 'center' }]}>The recording is sent to your findings store by itself. You can also save it to Files.</Text>
+          <Text style={[type.small, { color: t.muted, textAlign: 'center' }]}>The recording is sent to your private findings store by itself. You can also save it to Files.</Text>
           {resetTargets(v.group).length ? <Button label="Use as service reset" icon="wrench-clock" variant="secondary" onPress={useForService} /> : null}
           {used ? <Notice tone="danger" icon="alert-circle-outline" text={used} /> : null}
         </View>
@@ -181,5 +177,5 @@ const styles = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg },
   pad: { padding: space.md },
   markRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  input: { flex: 1, borderRadius: radius.sm + 2, paddingHorizontal: space.md, paddingVertical: 10 },
+
 });

@@ -72,6 +72,15 @@ export class Tp20Session {
   // request on this session fails at once (2007 Leon log of 15 Nov 2026,
   // 20:47:08: keep-alives and reads went on for seconds on a dead link).
   closed = false;
+  // Extra messages the module sent after the answer to the last request (the
+  // 2007 Leon's central electronics and comfort modules follow their own
+  // identification with their sub-modules': horn, rain sensor, alarm sensor).
+  extras: number[][] = [];
+  // The last open() was answered "busy" (D7 or D8): a module is there.
+  openBusy = false;
+  // A send in the last open() stalled or timed out (not a clean "no answer"):
+  // the address is not known to be silent.
+  stalled = false;
 
   constructor(
     private send: Transport['send'],
@@ -109,9 +118,22 @@ export class Tp20Session {
       // The adapter has gone: stop here. Swallowing it would make the wait
       // loop in exchange() spin on failing sends and freeze the app.
       if (e instanceof LinkLost) throw e;
+      this.stalled = true;
       return [];
     }
     return parseRawFrames(raw).filter((f) => f.id === this.rx || (f.id & 0xf00) === 0x200);
+  }
+
+  // The module's own channel test (A3): answered with our parameters (A1).
+  // The 2007 Leon's modules send one about every second and close the channel
+  // (A8) after about 7 seconds without an answer, whatever else is being sent
+  // (logs of 20 Nov 2026: every read longer than 7 s died that way).
+  private isTest(f: Frame): boolean {
+    return f.id === this.rx && f.data.length === 1 && f.data[0] === 0xa3;
+  }
+
+  private answerTest(): Promise<Frame[]> {
+    return this.frames('A10F8AFF32FF', 400);
   }
 
   // Channel setup on 0x200; true when a module answers at this address.
@@ -120,6 +142,8 @@ export class Tp20Session {
     this.lastRx = -1;
     this.carry = [];
     this.closed = false;
+    this.openBusy = false;
+    this.stalled = false;
     await this.cmd('ATSH200');
     await this.cmd(`ATCRA${hex3(0x200 + address)}`);
     let busy = 0;
@@ -130,6 +154,7 @@ export class Tp20Session {
       const d = reply.data;
       // D7 "temporarily not available", D8 "no resources now": wait, ask again
       // (up to 4 times, about 3 s in all). D6 "not supported" is final.
+      if (d[1] === 0xd7 || d[1] === 0xd8) this.openBusy = true;
       if ((d[1] === 0xd7 || d[1] === 0xd8) && busy < 4) {
         busy++;
         await new Promise((r) => setTimeout(r, 300 * busy));
@@ -151,9 +176,22 @@ export class Tp20Session {
   async idle(ms: number): Promise<void> {
     const end = Date.now() + ms;
     while (Date.now() < end) {
-      this.checkOpen(await this.frames('A3', 400));
+      let heard = await this.frames('A3', 400);
+      this.checkOpen(heard);
+      this.keep(heard);
+      for (let guard = 0; guard < 3 && heard.some((f) => this.isTest(f)); guard++) {
+        heard = await this.answerTest();
+        this.checkOpen(heard);
+        this.keep(heard);
+      }
       await new Promise((r) => setTimeout(r, Math.min(500, Math.max(0, end - Date.now()))));
     }
+  }
+
+  // Message frames heard while nothing was being read are kept, so the next
+  // request ACKs them: an unACKed frame makes the module repeat and hang up.
+  private keep(frames: Frame[]): void {
+    for (const f of frames) if (f.id === this.rx && f.data.length && f.data[0] >> 4 <= 3) this.carry.push(f);
   }
 
   async close(): Promise<void> {
@@ -172,12 +210,15 @@ export class Tp20Session {
   // One KWP2000 request and its complete answer, ACKing as the module asks.
   // Asks once more when part of the answer was lost or the module dropped the
   // request while it waited for an ACK.
-  async request(payload: number[], waitMs = 5000): Promise<number[]> {
+  // once: never sent a second time (a login key: a repeat of an accepted key
+  // can be refused and use up an attempt).
+  async request(payload: number[], waitMs = 5000, once = false): Promise<number[]> {
     this.checkOpen();
-    const first = await this.exchange(payload, waitMs);
-    if (first !== 'again') return first;
-    const second = await this.exchange(payload, waitMs);
-    if (second !== 'again') return second;
+    for (let attempt = 0; attempt < (once ? 1 : 3); attempt++) {
+      const got = await this.exchange(payload, waitMs);
+      if (got !== 'again') return got;
+      this.checkOpen();
+    }
     throw new ObdError("Part of the module's answer was lost.");
   }
 
@@ -189,6 +230,10 @@ export class Tp20Session {
       const f = queue.shift()!;
       if (f.id !== this.rx || !f.data.length) continue;
       this.checkOpen([f]);
+      if (this.isTest(f)) {
+        queue = [...queue, ...(await this.answerTest())];
+        continue;
+      }
       const op = f.data[0] >> 4;
       const seq = f.data[0] & 0x0f;
       if (op > 3) continue;
@@ -205,17 +250,25 @@ export class Tp20Session {
     const msg = [(payload.length >> 8) & 0xff, payload.length & 0xff, ...payload];
     const chunks: number[][] = [msg.slice(0, 7)];
     for (let i = 7; i < msg.length; i += 7) chunks.push(msg.slice(i, i + 7));
-    let queue: Frame[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const last = i === chunks.length - 1;
-      const frame = [(last ? 0x10 : 0x20) | this.txSeq, ...chunks[i]];
-      this.txSeq = (this.txSeq + 1) & 0x0f;
-      if (last) queue = await this.frames(frame.map(hex2).join(''));
-      else {
-        await this.frames(frame.map(hex2).join(''), 400);
-        await new Promise((r) => setTimeout(r, 30));
+    // The number of the request's first frame: frame i always goes out as
+    // firstSeq + i, also when part of the request is sent again.
+    const firstSeq = this.txSeq;
+    const sendFrom = async (from: number): Promise<Frame[]> => {
+      const heard: Frame[] = [];
+      for (let i = from; i < chunks.length; i++) {
+        const last = i === chunks.length - 1;
+        const frame = [(last ? 0x10 : 0x20) | ((firstSeq + i) & 0x0f), ...chunks[i]];
+        heard.push(...(await this.frames(frame.map(hex2).join(''), last ? 1500 : 400)));
+        if (!last) await new Promise((r) => setTimeout(r, 30));
       }
-    }
+      this.txSeq = (firstSeq + chunks.length) & 0x0f;
+      return heard;
+    };
+    let queue: Frame[] = await sendFrom(0);
+    // Times part of this request was sent again inside this exchange.
+    let resent = 0;
+    // No wait for an answer lasts longer than this, whatever the module sends.
+    const hardStop = Date.now() + Math.max(waitMs, 30000);
     const body: number[] = [];
     let length = -1;
     // A gap in the module's sequence numbers: frames went by while the adapter
@@ -223,16 +276,54 @@ export class Tp20Session {
     let lost = false;
     // A message that was not the answer to this request was heard.
     let stray = false;
+    // The module did not take our request (its ACK names another frame, or
+    // says "not ready"): it is sent again with the number the module expects.
+    let refused = false;
+    // The message being read says more messages follow (top bit of its length).
+    let more = false;
+    // The answer, kept while the messages that follow it are read and ACKed.
+    let held: number[] | null = null;
+    this.extras = [];
     let deadline = Date.now() + waitMs;
-    while (Date.now() < deadline) {
-      while (queue.length) {
+    while (Date.now() < Math.min(deadline, hardStop)) {
+      while (queue.length && Date.now() < hardStop) {
         const f = queue.shift()!;
         if (f.id !== this.rx || !f.data.length) continue;
         // A8: the module closed the channel; no answer will come.
         this.checkOpen([f]);
         const op = f.data[0] >> 4;
         const seq = f.data[0] & 0x0f;
-        // ACKs, channel tests and parameter frames carry no message data.
+        if (this.isTest(f)) {
+          queue.push(...(await this.answerTest()));
+          continue;
+        }
+        // The module's ACK of our request carries the number of the frame it
+        // expects next. Another number means the request was not taken (the
+        // Leon's modules answer 9x "not ready" with the old number while they
+        // are still sending).
+        if ((op === 0xb || op === 0x9) && f.data.length === 1 && !held && length < 0) {
+          if (seq !== this.txSeq) {
+            const missing = (seq - firstSeq) & 0x0f;
+            if (missing === 0) {
+              // Nothing was taken: the whole request goes again.
+              this.txSeq = seq;
+              refused = true;
+              deadline = Math.min(deadline, Date.now() + 700);
+            } else if (missing < chunks.length && resent < 2) {
+              // The module holds the frames before this one: carry on from
+              // it. Starting again from the first frame would be joined onto
+              // what the module already holds and scramble the message.
+              resent++;
+              queue.push(...(await sendFrom(missing)));
+            } else {
+              // Out of step in a way that cannot be mended on this channel.
+              await this.close().catch(() => undefined);
+              throw new ObdError('The module lost step with the request. The connection to it was closed.');
+            }
+          }
+          continue;
+        }
+        // Other ACKs and parameter frames carry no message data.
         if (op > 3) continue;
         const ack = () => this.frames(`B${((seq + 1) & 0x0f).toString(16).toUpperCase()}`, 600);
         if (seq === this.lastRx) {
@@ -244,6 +335,7 @@ export class Tp20Session {
         if (!lost) {
           if (length < 0) {
             length = ((f.data[1] << 8) | f.data[2]) & 0x0fff;
+            more = (f.data[1] & 0x80) !== 0;
             body.push(...f.data.slice(3));
           } else {
             body.push(...f.data.slice(1));
@@ -253,6 +345,15 @@ export class Tp20Session {
         if (op === 0 || op === 1) queue.push(...(await ack()));
         const end = op === 1 || op === 3;
         if (end && lost) {
+          if (held) {
+            // A follow-on message was cut short: the answer is already in
+            // hand, so listen until the module is quiet.
+            lost = false;
+            body.length = 0;
+            length = -1;
+            deadline = Date.now() + 1500;
+            continue;
+          }
           this.carry = queue;
           return 'again';
         }
@@ -267,16 +368,41 @@ export class Tp20Session {
           }
           // Not the answer to this request: an extra message, ACKed above.
           if (!answers(payload, message)) {
-            stray = true;
-            deadline = Math.min(deadline, Date.now() + 1500);
+            if (held) {
+              this.extras.push(message);
+              deadline = Date.now() + 1500;
+            } else {
+              stray = true;
+              deadline = Math.min(deadline, Date.now() + 1500);
+            }
+            continue;
+          }
+          refused = false;
+          // The first full answer is the one asked for. One-byte answers are
+          // the module's "still working" fillers between messages.
+          if (!held && (message.length > 1 || !more)) held = message;
+          else this.extras.push(message);
+          if (more) {
+            // More messages follow: read and ACK them before anything else is
+            // sent, or the module refuses the next request.
+            deadline = Date.now() + 3000;
             continue;
           }
           this.carry = queue;
-          return message;
+          return held ?? message;
         }
       }
       // Keep the channel alive and give the adapter a chance to hear the module.
       queue.push(...(await this.frames('A3', 600)));
+    }
+    if (held) {
+      this.carry = queue;
+      return held;
+    }
+    if (refused) {
+      // Give the module a moment, then the caller sends the request again.
+      await new Promise((r) => setTimeout(r, 300));
+      return 'again';
     }
     if (stray || lost) return 'again';
     throw new ObdError('The module did not finish its answer.');
@@ -286,7 +412,15 @@ export class Tp20Session {
 // A KWP answer belongs to a request when it is the positive answer to its
 // service or a refusal of it.
 function answers(payload: number[], message: number[]): boolean {
-  return message[0] === payload[0] + 0x40 || (message[0] === 0x7f && message[1] === payload[0]);
+  if (message[0] === 0x7f) return message[1] === payload[0];
+  if (message[0] !== payload[0] + 0x40) return false;
+  // One-byte fillers ("still working") carry no identifier.
+  if (message.length === 1) return true;
+  // Reads and writes by identifier: the answer names the identifier, so a
+  // late answer to an earlier request is not taken for this one.
+  const idBytes = payload[0] === 0x22 || payload[0] === 0x2e ? 2 : payload[0] === 0x1a || payload[0] === 0x21 || payload[0] === 0x3b ? 1 : 0;
+  for (let i = 1; i <= idBytes && i < payload.length; i++) if (message[i] !== payload[i]) return false;
+  return true;
 }
 
 // Fault memory over KWP2000. Most modules take 18 02 FF 00; the 2007 Leon's
@@ -432,6 +566,18 @@ export interface Tp20Coding {
 
 export type Tp20CodingRead = Omit<Tp20Coding, 'address'>;
 
+// The old-style long coding record after "5A 9A": workshop code 6, software 4,
+// type 10, length N+1, coding N, FF (replica/kwp-write-sources.md F8). Null
+// unless every part of that shape is there. The workshop code and software
+// are the record's own, so a write sends back exactly what was read with
+// only the coding changed.
+export function parseLongCodingRecord(body: number[]): { wsc: number[]; sw: number[]; coding: number[] } | null {
+  if (body.length < 14 || body[10] !== 0x10) return null;
+  const len = body[11];
+  if (len < 2 || body.length !== 12 + len || body[body.length - 1] !== 0xff) return null;
+  return { wsc: body.slice(0, 6), sw: body.slice(6, 10), coding: body.slice(12, 12 + len - 1) };
+}
+
 export async function tp20ReadCoding(s: Tp20Session): Promise<Tp20CodingRead | null> {
   let r = await s.request([0x22, 0x06, 0x00]).catch(() => null);
   // A late answer to an earlier write (6E / 7B) can arrive first: read again.
@@ -449,10 +595,11 @@ export async function tp20ReadCoding(s: Tp20Session): Promise<Tp20CodingRead | n
     const lc = await s.request([0x1a, 0x9a]).catch(() => null);
     if (!lc || lc[0] !== 0x5a || lc[1] !== 0x9a) return null;
     const body = lc.slice(2);
-    if (body[10] !== 0x10) return null;
-    const len = body[11];
-    const coding = body.slice(12, 12 + len - 1);
-    return coding.length ? { style: 'long', coding, sw, wsc } : null;
+    const long = parseLongCodingRecord(body);
+    // A record of another shape is not offered for writing: a write built on
+    // a wrong parse would shift or shorten the coding.
+    if (!long) return null;
+    return { style: 'long', coding: long.coding, sw: long.sw, wsc: long.wsc };
   }
   return null;
 }
@@ -508,7 +655,7 @@ async function unlock(s: Tp20Session, code?: number): Promise<void> {
     out.unshift(Number(key % BigInt(256)));
     key = key / BigInt(256);
   }
-  const r = await s.request([0x27, 0x04, ...out]);
+  const r = await s.request([0x27, 0x04, ...out], 5000, true);
   if (r[0] !== 0x67) throw new ObdError('The login code was not accepted.');
 }
 

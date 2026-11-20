@@ -8,6 +8,7 @@ import { LivePid, pidInfo } from '../obd/pids';
 import { useConnection } from '../state';
 import { radius, space, type, useTheme, Theme } from '../theme';
 import { Body, Button, Group, Label, NeedsConnection, ListRow, Notice, Screen } from '../ui';
+import { useStayAwake } from '../keepAwake';
 
 const SCALE = 25;
 
@@ -19,6 +20,8 @@ export default function FuelTrims() {
   const [values, setValues] = useState<Record<number, number | null>>({});
   const [paused, setPaused] = useState(false);
   const diesel = conn.vehicle?.fuel === 'Diesel';
+  // The phone stays awake while the trims are on screen, as on Turbo boost.
+  useStayAwake('fuel-trims', !!conn.client && focused && !paused);
 
   // Which trims and sensors this car reports.
   useEffect(() => {
@@ -61,7 +64,7 @@ export default function FuelTrims() {
   if (!conn.client) {
     return (
       <Screen>
-        <NeedsConnection what="fuel trims" />
+        <NeedsConnection title="Connect your car to see fuel trims" />
       </Screen>
     );
   }
@@ -90,7 +93,7 @@ export default function FuelTrims() {
             ))}
           </View>
           <Body muted small style={{ marginTop: space.sm, marginBottom: space.lg }}>
-            {`Plus: the engine adds fuel. Minus: it takes fuel away. Green within ${TRIM_OK} %, amber to ${TRIM_WATCH} %, red beyond.`}
+            {`Plus: the engine adds fuel. Minus: it takes fuel away. Green within ${TRIM_OK}%, amber to ${TRIM_WATCH}%, red beyond.`}
           </Body>
 
           {sensorRows.length ? (
@@ -113,7 +116,7 @@ function fmt(v: number | null | undefined, decimals: number, unit: string): stri
 }
 
 function bandColour(t: Theme, b: TrimBand | null): string {
-  return b === 'ok' ? t.ok : b === 'watch' ? t.accentText : b === 'high' ? t.danger : t.faint;
+  return b === 'ok' ? t.ok : b === 'watch' ? t.accentText : b === 'high' ? t.danger : t.muted;
 }
 
 function BankCard({ bank, values }: { bank: BankPids; values: Record<number, number | null> }) {
@@ -130,7 +133,7 @@ function BankCard({ bank, values }: { bank: BankPids; values: Record<number, num
       <TrimLine label="Long term" value={long} />
       <View style={[styles.total, { borderColor: t.border }]}>
         <Text style={[type.small, { color: t.muted }]}>Total</Text>
-        <Text style={[type.title3, type.number, { color: bandColour(t, band) }]}>{total == null ? '–' : `${total > 0 ? '+' : ''}${total.toFixed(1)} %`}</Text>
+        <Text style={[type.title3, type.number, { color: bandColour(t, band) }]}>{total == null ? '–' : `${total > 0 ? '+' : ''}${total.toFixed(1)}%`}</Text>
         <Text style={[type.small, { color: bandColour(t, band) }]}>{bandWords(band)}</Text>
         {dir && dir !== 'none' ? <Text style={[type.caption, { color: t.muted, marginTop: 2 }]}>{dir === 'adding' ? 'Adding fuel (lean)' : 'Taking fuel away (rich)'}</Text> : null}
       </View>
@@ -149,7 +152,7 @@ function TrimLine({ label, value }: { label: string; value: number | null | unde
     <View style={{ marginTop: space.md }} accessible accessibilityLabel={`${label} ${value == null ? 'no reading' : `${value.toFixed(1)} percent, ${bandWords(band)}`}`}>
       <View style={styles.lineHead}>
         <Text style={[type.small, { color: t.muted }]}>{label}</Text>
-        <Text style={[type.sub, type.number, { color: bandColour(t, band), fontWeight: '600' }]}>{value == null ? '–' : `${value > 0 ? '+' : ''}${value.toFixed(1)} %`}</Text>
+        <Text style={[type.sub, type.number, { color: bandColour(t, band), fontWeight: '600' }]}>{value == null ? '–' : `${value > 0 ? '+' : ''}${value.toFixed(1)}%`}</Text>
       </View>
       <View style={[styles.track, { backgroundColor: t.dangerSoft }]}>
         {zone(0.5 - watch, 0.5 + watch, t.accentSoft)}

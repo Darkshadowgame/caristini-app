@@ -2,11 +2,14 @@ import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { DiaryEntry, loadDiary, removeDiary } from '../../../diary';
+import { diaryCars, entryCarKey, entryCarName } from '../../../diaryCars';
+import { useGarage, vehicleTitle } from '../../../vehicle/garage';
 import { space, ToolColour, type, useTheme } from '../../../theme';
 import { Mascot } from '../../../brand/Mascot';
 import { GUIDES } from '../../../help';
 import { useSettings } from '../../../settings';
-import { ConfirmSheet, Group, HeaderButton, Icon, IconName, Screen } from '../../../ui';
+import { Chips, ConfirmSheet, Group, HeaderButton, Icon, IconName, Screen, tap } from '../../../ui';
+import { dateText } from '../../../timeText';
 
 const KIND: Record<string, { icon: IconName; colour: ToolColour }> = {
   'Oil service': { icon: 'oil', colour: 'orange' },
@@ -17,7 +20,7 @@ const KIND: Record<string, { icon: IconName; colour: ToolColour }> = {
   'Codes cleared': { icon: 'broom', colour: 'red' },
   Brakes: { icon: 'car-brake-alert', colour: 'red' },
   Tyres: { icon: 'tire', colour: 'grey' },
-  Battery: { icon: 'car-battery', colour: 'teal' },
+  Battery: { icon: 'car-battery', colour: 'green' },
   Repair: { icon: 'wrench-outline', colour: 'indigo' },
   'Setting changed': { icon: 'tune-variant', colour: 'purple' },
   Other: { icon: 'note-outline', colour: 'grey' },
@@ -26,13 +29,19 @@ const KIND: Record<string, { icon: IconName; colour: ToolColour }> = {
 export default function Diary() {
   const t = useTheme();
   const { settings } = useSettings();
-  const distanceUnit = settings.speed === 'mph' ? 'miles' : 'km';
+  const distanceUnit = settings.speed === 'mph' ? 'mi' : 'km';
   const [entries, setEntries] = useState<DiaryEntry[] | null>(null);
   const [remove, setRemove] = useState<DiaryEntry | null>(null);
-  // With more than one car, a chip per car filters the list.
+  // With more than one car, a chip per car filters the list. Cars go by VIN,
+  // so a renamed car keeps its entries and 2 cars with one name stay apart.
+  const garage = useGarage();
+  const nameOf = (vin: string) => {
+    const v = garage.get(vin);
+    return v ? vehicleTitle(v) : null;
+  };
   const [car, setCar] = useState<string | null>(null);
-  const cars = [...new Set((entries ?? []).map((e) => e.vehicleName).filter(Boolean))] as string[];
-  const shown = (entries ?? []).filter((e) => !car || e.vehicleName === car);
+  const cars = diaryCars(entries ?? [], nameOf);
+  const shown = (entries ?? []).filter((e) => !car || entryCarKey(e) === car);
 
   useFocusEffect(
     useCallback(() => {
@@ -49,7 +58,7 @@ export default function Diary() {
       {entries && entries.length === 0 ? (
         <View style={{ alignItems: 'center', paddingVertical: space.xxl * 2, paddingHorizontal: space.xl }}>
           <Mascot mood="happy" size={130} />
-          <Text style={[type.title3, { color: t.text, marginTop: space.lg }]}>Nothing logged yet</Text>
+          <Text style={[type.title3, { color: t.text, marginTop: space.lg }]}>No entries yet</Text>
           <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: space.sm }]}>
             Services, repairs and notes you add show here. Cleared faults, service resets and setting changes are added for you.
           </Text>
@@ -57,19 +66,12 @@ export default function Diary() {
       ) : null}
 
       {cars.length > 1 ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.lg }}>
-          {[null, ...cars].map((c) => (
-            <Pressable
-              key={c ?? 'all'}
-              accessibilityRole="button"
-              accessibilityState={{ selected: car === c }}
-              onPress={() => setCar(c)}
-              style={{ minHeight: 36, paddingHorizontal: space.md, borderRadius: 18, justifyContent: 'center', backgroundColor: car === c ? t.accent : t.surface }}
-            >
-              <Text style={[type.sub, { color: car === c ? t.onAccent : t.text, fontWeight: '600' }]}>{c ?? 'All cars'}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <Chips
+          options={[{ id: '', label: 'All cars' }, ...cars.map((c) => ({ id: c.key, label: c.label }))]}
+          value={car ?? ''}
+          onPick={(id) => setCar(id || null)}
+          style={{ marginBottom: space.lg }}
+        />
       ) : null}
 
       {entries && entries.length ? (
@@ -87,14 +89,23 @@ export default function Diary() {
                     <Text style={[type.sub, type.number, { color: t.muted }]}>{formatDate(e.date)}</Text>
                   </View>
                   <Text style={[type.sub, { color: t.muted }]}>
-                    {e.vehicleName}
-                    {e.mileage != null ? ` · ${e.mileage.toLocaleString('en-GB')} ${e.unit ? (e.unit === 'mi' ? 'miles' : 'km') : distanceUnit}` : ''}
+                    {entryCarName(e, nameOf)}
+                    {e.mileage != null ? ` · ${e.mileage.toLocaleString('en-GB')} ${e.unit ? (e.unit === 'mi' ? 'mi' : 'km') : distanceUnit}` : ''}
                   </Text>
                   {e.notes ? <Text style={[type.callout, { color: t.text, marginTop: space.xs }]}>{e.notes}</Text> : null}
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${e.kind} entry`} hitSlop={8} onPress={() => setRemove(e)} style={styles.delete}>
-                    <Text style={[type.small, { color: t.danger }]}>Delete</Text>
-                  </Pressable>
                 </View>
+                {/* A bin at the row's end, as on a saved speed range; it asks first. */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete ${e.kind} entry`}
+                  onPress={() => {
+                    tap();
+                    setRemove(e);
+                  }}
+                  style={({ pressed }) => [styles.delete, { opacity: pressed ? 0.5 : 1 }]}
+                >
+                  <Icon name="trash-can-outline" size={18} color={t.danger} />
+                </Pressable>
               </View>
             );
           })}
@@ -119,16 +130,13 @@ export default function Diary() {
   );
 }
 
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  if (!y || !m || !d) return iso;
-  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
+// "9 Nov 2026" from the diary's own date (2026-11-09): src/timeText.ts.
+const formatDate = (iso: string): string => dateText(iso);
 
 const styles = StyleSheet.create({
   add: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   entry: { flexDirection: 'row', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg, alignItems: 'flex-start' },
   icon: { width: 30, height: 30, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
   titleRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
-  delete: { alignSelf: 'flex-start', marginTop: space.xs, minHeight: 44, justifyContent: 'center' },
+  delete: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginRight: -space.md },
 });

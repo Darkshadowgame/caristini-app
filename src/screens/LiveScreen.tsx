@@ -2,8 +2,11 @@ import { alertBuzz } from '../sound';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { router, useIsFocused } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
-import { CATEGORY_COLOUR, CATEGORY_ICON, CATEGORY_ORDER, categoryOf, displaySensor, isPlausible, readKey, sensorId, sensorsForCar, SensorValue, unitOf } from '../obd/sensors';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { allowSleep, stayAwake } from '../keepAwake';
+import { shareCsv } from '../logger/store';
+import { shareFileName } from '../timeText';
+import { CATEGORY_ICON, CATEGORY_ORDER, categoryOf, displaySensor, isPlausible, readKey, sensorId, sensorsForCar, SensorValue, unitOf } from '../obd/sensors';
 import { groupValuesText, sensorCount, sensorCountText } from '../vehicle/counts';
 import { extrasFor, formatExtra } from '../obd/extras';
 import { DEFAULT_WATCH, LivePid, PID_GROUPS } from '../obd/pids';
@@ -17,7 +20,7 @@ import { groupLabels, groupName, GROUP_NAMES } from '../data/groupLabels';
 import { SECTIONS } from '../help';
 import { radius, space, type, useTheme } from '../theme';
 void Title;
-import { Body, Button, Group, Icon, IconName, Label, ListRow, NeedsConnection, Notice, ProgressBar, SearchField, Title } from '../ui';
+import { Body, Button, Chip, ConfirmSheet, Field, Group, Icon, IconName, Label, ListRow, NeedsConnection, Notice, ProgressBar, SearchField, Title, tool, TOOLS } from '../ui';
 import { AlertLevel, alertLevel, AlertRule, AlertTracker, holdPeak, needsRpm, Peak, setRule } from '../live/alerts';
 import { RateMeter, rateText } from '../live/rate';
 import { filterPids, loadSet, removeSet, saveSet, ValueSet } from '../live/sets';
@@ -34,6 +37,11 @@ interface Series {
   points: number[];
   peak?: Peak;
 }
+
+// A recording not yet shared is kept while Caristini is open, so leaving Live
+// data does not lose it. One at a time; a new recording replaces it.
+type Reading = { t: number; pid: number; v: number };
+let keptRecording: { vin: string | null; rows: Reading[] } | null = null;
 
 export function LiveScreen({ active = true }: { active?: boolean }) {
   // Off screen (Fuel trims or Boost opened on top): stop reading, so the page
@@ -56,7 +64,17 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
   const recRef = useRef<{ t: number; pid: number; v: number }[] | null>(null);
   const recStart = useRef(0);
   const [recCount, setRecCount] = useState(0);
-  const [recorded, setRecorded] = useState<{ t: number; pid: number; v: number }[] | null>(null);
+  const carVin = conn.vehicle?.vin ?? null;
+  const [recorded, setRecorded] = useState<Reading[] | null>(() => (keptRecording && keptRecording.vin === carVin && keptRecording.rows.length ? keptRecording.rows : null));
+  // Leaving the page while recording keeps the readings so far.
+  const carVinRef = useRef(carVin);
+  carVinRef.current = carVin;
+  useEffect(
+    () => () => {
+      if (recRef.current?.length) keptRecording = { vin: carVinRef.current, rows: recRef.current };
+    },
+    [],
+  );
   // Alerts while watching: coolant over 110 °C, and the owner's own limits.
   const [alert, setAlert] = useState<string | null>(null);
   const [rules, setRules] = useState<AlertRule[]>([]);
@@ -131,7 +149,7 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
           if (v != null && recRef.current) recRef.current.push({ t: now - recStart.current, pid: p.pid, v });
           if (p.pid === 0x05 && v != null) {
             const shown = toUserUnits(v, '°C', settings);
-            setAlert(v > 110 ? `Coolant at ${Math.round(shown.value)} ${shown.unit}. Stop when safe and let the engine cool.` : null);
+            setAlert(v > 110 ? `Coolant at ${Math.round(shown.value)} ${shown.unit}. Slow down, stop when it is safe and let the engine cool.` : null);
           }
           const rule = rulesRef.current.find((r) => r.pid === p.pid);
           if (rule && got.has(p.pid)) levels.set(p.pid, alertLevel(rule, v, lastRpm));
@@ -161,6 +179,16 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
     };
   }, [conn.client, active, onScreen, paused, available]);
 
+  // The phone stays awake while live values are on screen, as on Dashboard
+  // and the other live pages (src/keepAwake.ts).
+  const connected = !!conn.client;
+  useEffect(() => {
+    if (!connected || !active || !onScreen) return undefined;
+    stayAwake('live');
+    return () => allowSleep('live');
+  }, [connected, active, onScreen]);
+  const [shareError, setShareError] = useState<string | null>(null);
+
   const shown = useMemo(() => (available ?? []).filter((p) => watch.includes(p.pid)), [available, watch]);
   const rpmNow = series[RPM]?.last ?? null;
   const saveRules = (next: AlertRule[]) => {
@@ -174,7 +202,7 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
 
   if (!conn.client) {
     return (
-      <NeedsConnection what="live data" />
+      <NeedsConnection title="Connect your car to see live data" />
     );
   }
 
@@ -182,7 +210,7 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
     <View>
       <SensorHub active={active} />
       <Label help={SECTIONS.liveStandard}>Standard readings (every car)</Label>
-      <Body muted style={{ marginBottom: space.md }}>
+      <Body muted small style={styles.intro}>
         {available
           ? `Watching ${shown.length} of ${available.length} values${
               rate && settings.developer ? `: ${rateText(rate.readings)} readings a second, ${rateText(rate.updates)} updates a second` : ''
@@ -201,18 +229,21 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
 
       <View style={{ flexDirection: 'row', gap: space.sm, marginBottom: space.lg }}>
         <Button
-          label={recording ? `Stop (${recCount})` : 'Record'}
+          label={recording ? 'Stop recording' : 'Record'}
           icon={recording ? 'stop' : 'record-circle-outline'}
-          variant={recording ? 'danger' : 'secondary'}
+          // The page's one filled button: recording is its main action.
+          variant={recording ? 'danger' : 'primary'}
           compact
           style={{ flex: 1 }}
           disabled={!available?.length}
           onPress={() => {
             if (recording) {
               setRecorded(recRef.current);
+              keptRecording = recRef.current?.length ? { vin: carVin, rows: recRef.current } : null;
               recRef.current = null;
               setRecording(false);
             } else {
+              keptRecording = null;
               recRef.current = [];
               recStart.current = Date.now();
               setRecCount(0);
@@ -228,10 +259,20 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
             variant="secondary"
             compact
             style={{ flex: 1 }}
-            onPress={() => Share.share({ title: 'Caristini live data', message: toCsv(recorded, available ?? [], settings) })}
+            onPress={() => {
+              // A real .csv file, shared the way the data logger shares its logs.
+              setShareError(null);
+              shareCsv(shareFileName('live data', conn.vehicle?.vin), toCsv(recorded, available ?? [], settings)).catch((e) => setShareError(`Could not share: ${e instanceof Error ? e.message : String(e)}`));
+            }}
           />
         ) : null}
       </View>
+      {recording ? (
+        <Body muted small style={{ marginTop: -space.sm, marginBottom: space.lg, marginHorizontal: space.lg }}>
+          Recording: {recCount.toLocaleString('en-GB')} reading{recCount === 1 ? '' : 's'} so far.
+        </Body>
+      ) : null}
+      {shareError ? <Notice tone="danger" icon="alert-circle-outline" text={shareError} /> : null}
       {recorded?.length ? <RecordingSummary rows={recorded} pids={available ?? []} /> : null}
 
       <View style={styles.grid}>
@@ -240,7 +281,6 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
           const rule = rules.find((r) => r.pid === p.pid);
           const level = alertLevel(rule, s?.last, rpmNow);
           const f = (v: number) => toUserUnits(v, p.unit, settings).value.toFixed(p.decimals);
-          const held = s?.peak && s.last != null && s.peak.value > s.last ? s.peak.value : null;
           const valueText = s?.last == null ? 'No reading' : `${f(s.last)} ${toUserUnits(0, p.unit, settings).unit}`;
           return (
             <Pressable
@@ -262,7 +302,7 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
               </View>
               {s && s.last == null ? (
                 // Read, but the car sent no value (an O2 sensor's 1.275 V means none).
-                <Text style={[styles.tileValue, styles.noReading, { color: t.faint }]}>No reading</Text>
+                <Text style={[styles.tileValue, styles.noReading, { color: t.muted }]}>No reading</Text>
               ) : (
                 <Text style={[styles.tileValue, { color: level ? t.danger : t.text }]} accessibilityLabel={s?.last == null ? 'No reading' : undefined}>
                   {s?.last == null ? '–' : f(s.last)}
@@ -271,14 +311,15 @@ export function LiveScreen({ active = true }: { active?: boolean }) {
               )}
               <Spark points={s?.points ?? []} />
               <Text style={[styles.minmax, { color: t.muted }]}>
-                {s && s.points.length ? `min ${f(s.min)} · max ${f(s.max)}${held != null ? ` · peak ${f(held)}` : ''}` : ' '}
+                {/* Lowest and highest only, on one line; the held peak is in the tile's sheet. */}
+                {s && s.points.length ? `min ${f(s.min)} · max ${f(s.max)}` : ' '}
               </Text>
             </Pressable>
           );
         })}
       </View>
       {shown.length ? (
-        <Body muted small style={{ marginTop: space.sm }}>
+        <Body muted small style={{ marginTop: space.sm, marginHorizontal: space.lg }}>
           Tap a tile for alert limits and its lowest and highest.
         </Body>
       ) : null}
@@ -390,9 +431,9 @@ function SensorHub({ active: shown }: { active: boolean }) {
   if (!v.sensorScan) {
     return (
       <Pressable accessibilityRole="button" onPress={() => router.push('/sensors')} style={({ pressed }) => [styles.hub, { backgroundColor: t.surface, opacity: pressed ? 0.85 : 1 }]}>
-        <LinearGradient colors={[t.teal + '33', t.teal + '00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-        <View style={[styles.hubIcon, { backgroundColor: t.teal }]}>
-          <Icon name={'radar' as IconName} size={22} color="#FFFFFF" />
+        <LinearGradient colors={[t[TOOLS.sensors.colour] + '33', t[TOOLS.sensors.colour] + '00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <View style={[styles.hubIcon, { backgroundColor: t[TOOLS.sensors.colour] }]}>
+          <Icon name={TOOLS.sensors.icon} size={22} color="#FFFFFF" />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[type.heading, { color: t.text }]}>Find my car’s sensors</Text>
@@ -416,7 +457,7 @@ function SensorHub({ active: shown }: { active: boolean }) {
                 <Text numberOfLines={2} style={[styles.tileLabel, { color: t.muted }]}>
                   {r.n}
                 </Text>
-                <Text style={[styles.tileValue, { color: d && !d.check ? t.text : t.faint }]} accessibilityLabel={d ? undefined : 'No reading'}>
+                <Text style={[styles.tileValue, { color: d && !d.check ? t.text : t.muted }]} accessibilityLabel={d ? undefined : 'No reading'}>
                   {d ? d.text : '–'}
                   <Text style={[styles.unit, { color: t.muted }]}> {d?.unit ?? ''}</Text>
                 </Text>
@@ -427,9 +468,10 @@ function SensorHub({ active: shown }: { active: boolean }) {
       ) : null}
       <Group header={`${sensorCountText({ ...sensorCount(v), groupValues: 0, groups: 0 })} on this car`} help={SECTIONS.liveHub} footer={chosen.length ? undefined : 'Open a system and tap the star on a value to pin your own here.'}>
         {counts.map(({ c, n }, i) => (
-          <ListRow key={c} first={i === 0} icon={CATEGORY_ICON[c] as IconName} iconColour={CATEGORY_COLOUR[c]} title={c} value={String(n)} onPress={() => router.push({ pathname: '/sensors', params: { cat: c } })} />
+          // Grey squares: a system of the car is a fact about it, not a tool or a state.
+          <ListRow key={c} first={i === 0} icon={CATEGORY_ICON[c] as IconName} iconColour="grey" title={c} value={n.toLocaleString('en-GB')} onPress={() => router.push({ pathname: '/sensors', params: { cat: c } })} />
         ))}
-        <ListRow icon={'radar' as IconName} iconColour="grey" title="Find my car’s sensors" subtitle="Search by name, or search the car again" onPress={() => router.push('/sensors')} />
+        <ListRow {...tool('sensors')} title="Find my car’s sensors" subtitle="Search by name, or search the car again" onPress={() => router.push('/sensors')} />
       </Group>
     </View>
   );
@@ -499,9 +541,9 @@ function MakerData() {
           {watching && regenOn ? (
             <Notice tone="danger" icon="alert-circle-outline" text="The DPF is regenerating. Keep driving at a steady speed and do not switch off until it finishes." />
           ) : watching && regenOn === false ? (
-            <Notice tone="ok" icon="check" text="No DPF regeneration running. Caristini checks every 20 seconds while this screen is open." />
+            <Notice tone="ok" icon="check" text="No DPF regeneration running. Caristini checks every 20 seconds while this page is open." />
           ) : null}
-          <Button label={watching ? 'Stop watching for regeneration' : 'Watch for DPF regeneration'} icon="bell-alert-outline" variant="secondary" onPress={() => setWatching((w) => !w)} />
+          <Button label={watching ? 'Stop' : 'Watch for DPF regeneration'} icon={watching ? 'stop' : 'bell-alert-outline'} variant="secondary" onPress={() => setWatching((w) => !w)} />
         </View>
       ) : null}
       <View style={[styles.maker, { backgroundColor: t.surface, borderColor: t.border }]}>
@@ -528,7 +570,7 @@ function MakerData() {
                 <View key={e.id} style={[styles.makerRow, { borderColor: t.border }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.makerLabel, { color: t.text }]}>{e.label}</Text>
-                    <Text style={[styles.makerSource, { color: t.faint }]}>{e.source}</Text>
+                    <Text style={[styles.makerSource, { color: t.muted }]}>{e.source}</Text>
                   </View>
                   <Text style={[styles.makerValue, { color: t.text }]}>{formatExtra(e, values![e.id], settings)}</Text>
                 </View>
@@ -633,8 +675,7 @@ function MeasuringBlocks() {
 
   return (
     <View style={{ marginTop: space.xl }}>
-      <Label>For experts</Label>
-      <Label help={SECTIONS.liveOlder}>Older VW modules</Label>
+      <Label help={SECTIONS.liveOlder}>Older VW modules, for experts</Label>
       <View style={[styles.maker, { backgroundColor: t.surface, borderColor: t.border }]}>
         <Body muted small style={{ marginBottom: space.md }}>
           Older VW modules give live values in numbered value groups. Units come from each value itself; values with an unknown
@@ -642,8 +683,8 @@ function MeasuringBlocks() {
         </Body>
         {!modules ? (
           <>
-            <Button label={busy === 'find' ? 'Looking…' : 'Find older modules'} icon="database-search-outline" variant="secondary" busy={busy === 'find'} onPress={find} />
-            <Body muted small style={{ marginTop: space.sm }}>Lists the older modules on this car, without running Learn my car.</Body>
+            <Button label={busy === 'find' ? 'Looking…' : 'Look for older VW modules'} icon="database-search-outline" variant="secondary" busy={busy === 'find'} onPress={find} />
+            <Body muted small style={{ marginTop: space.sm }}>Lists the older VW modules on this car, without running Learn my car.</Body>
           </>
         ) : !modules.length ? (
           <Body muted small>No module on this car answered on the older protocol.</Body>
@@ -651,22 +692,13 @@ function MeasuringBlocks() {
           <>
             <View style={styles.chips}>
               {modules.map((m) => (
-                <Pressable
-                  key={m.id}
-                  accessibilityRole="button"
-                  onPress={() => setModule(m)}
-                  style={[styles.chip, { backgroundColor: module?.id === m.id ? t.accentSoft : t.sunken }]}
-                >
-                  <Text style={[type.small, { color: module?.id === m.id ? t.accentText : t.text }]}>{m.name}</Text>
-                </Pressable>
+                <Chip key={m.id} onCard label={m.name} selected={module?.id === m.id} onPress={() => setModule(m)} />
               ))}
             </View>
             {module?.id === 'engine' ? (
               <View style={styles.chips}>
                 {PRESETS.map((p) => (
-                  <Pressable key={p.group} accessibilityRole="button" onPress={() => read(p.group)} style={[styles.chip, { backgroundColor: t.sunken }]}>
-                    <Text style={[type.small, { color: t.text }]}>{p.label}</Text>
-                  </Pressable>
+                  <Chip key={p.group} onCard label={p.label} onPress={() => read(p.group)} />
                 ))}
               </View>
             ) : null}
@@ -676,7 +708,7 @@ function MeasuringBlocks() {
               <Button label="+" variant="secondary" onPress={() => read(Math.min(255, group + 1))} disabled={!!busy || live} />
             </View>
             <View style={{ gap: space.sm }}>
-              <Button label={live ? 'Stop live' : 'Live'} icon="chart-timeline-variant" onPress={toggleLive} disabled={!!busy} />
+              <Button label={live ? 'Stop' : 'Live'} icon={live ? 'stop' : 'chart-timeline-variant'} variant={live ? 'secondary' : 'primary'} onPress={toggleLive} disabled={!!busy} />
               <Button label="Read every group of this module" icon="magnify" variant="ghost" busy={busy === 'scan'} disabled={!!busy || live} onPress={scanAll} />
               <Body muted small>Reads groups 1 to 255 now and shows what each holds. Learn my car reads them too and keeps the list below.</Body>
             </View>
@@ -745,7 +777,7 @@ function RecordingSummary({ rows, pids }: { rows: { t: number; pid: number; v: n
   const used = [...new Set(rows.map((r) => r.pid))];
   const secs = (rows[rows.length - 1]?.t ?? 0) / 1000;
   return (
-    <Group header={`Recording, ${secs.toFixed(0)} s, ${rows.length} readings`} help={SECTIONS.liveRecording} footer="Share CSV opens in Numbers or Excel.">
+    <Group header={`Recording, ${secs.toFixed(0)} s, ${rows.length.toLocaleString('en-GB')} reading${rows.length === 1 ? '' : 's'}`} help={SECTIONS.liveRecording} footer="Share CSV opens in Numbers or Excel. The recording is kept until you record again or close Caristini. For recordings saved on the phone with charts, use the Data logger.">
       {used.map((pid, i) => {
         const p = pids.find((x) => x.pid === pid);
         const vals = rows.filter((r) => r.pid === pid).map((r) => r.v);
@@ -753,7 +785,7 @@ function RecordingSummary({ rows, pids }: { rows: { t: number; pid: number; v: n
         const f = (v: number) => toUserUnits(v, p.unit, settings).value.toFixed(p.decimals);
         const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
         return (
-          <ListRow key={pid} first={i === 0} title={p.label} value={`${f(Math.min(...vals))} to ${f(Math.max(...vals))}, avg ${f(avg)} ${toUserUnits(0, p.unit, settings).unit}`} noChevron />
+          <ListRow key={pid} first={i === 0} title={p.label} value={`${f(Math.min(...vals))} to ${f(Math.max(...vals))}, average ${f(avg)} ${toUserUnits(0, p.unit, settings).unit}`} noChevron />
         );
       })}
     </Group>
@@ -779,10 +811,10 @@ function Spark({ points }: { points: number[] }) {
         <View
           key={i}
           style={{
-            flex: 1,
-            marginLeft: 1,
+            width: 3,
+            marginRight: 1,
             height: `${10 + ((v - lo) / span) * 90}%`,
-            backgroundColor: i === points.length - 1 ? t.accent : t.border,
+            backgroundColor: i === points.length - 1 ? t.muted : t.border,
             borderRadius: 1,
           }}
         />
@@ -813,6 +845,8 @@ function Picker({
   const [query, setQuery] = useState('');
   const [name, setName] = useState('');
   const [mySets, setMySets] = useState<ValueSet[]>(sets);
+  // The saved set the owner asked to delete; deleted only after the confirm.
+  const [removing, setRemoving] = useState<ValueSet | null>(null);
   useEffect(() => {
     if (!visible) return;
     setDraft(selected);
@@ -875,25 +909,16 @@ function Picker({
                       accessibilityRole="button"
                       accessibilityLabel={`Delete the set ${s.name}`}
                       hitSlop={10}
-                      onPress={() => changeSets(removeSet(mySets, s.name))}
+                      onPress={() => setRemoving(s)}
                       style={styles.trash}
                     >
-                      <Icon name="trash-can-outline" size={18} color={t.muted} />
+                      <Icon name="trash-can-outline" size={18} color={t.danger} />
                     </Pressable>
                   }
                 />
               ))}
               <View style={[styles.saveRow, { borderColor: t.border, borderTopWidth: mySets.length ? StyleSheet.hairlineWidth : 0 }]}>
-                <TextInput
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Name for these values"
-                  placeholderTextColor={t.faint}
-                  accessibilityLabel="Name for these values"
-                  returnKeyType="done"
-                  selectionColor={t.accent}
-                  style={[type.body, { flex: 1, color: t.text, paddingVertical: 10 }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
-                />
+                <Field value={name} onChange={setName} placeholder="Name for these values" returnKey="done" style={{ flex: 1 }} />
                 <Button
                   label="Save set"
                   compact
@@ -933,6 +958,18 @@ function Picker({
           })}
           <Button label="Clear selection" variant="ghost" onPress={() => setDraft([])} />
         </ScrollView>
+        <ConfirmSheet
+          visible={!!removing}
+          title="Delete this set?"
+          lines={removing ? [`${removing.name}, ${removing.pids.length} value${removing.pids.length === 1 ? '' : 's'}. This cannot be undone.`] : []}
+          confirmLabel="Delete"
+          onConfirm={() => {
+            const s = removing;
+            setRemoving(null);
+            if (s) changeSets(removeSet(mySets, s.name));
+          }}
+          onCancel={() => setRemoving(null)}
+        />
       </View>
     </Modal>
   );
@@ -941,20 +978,20 @@ function Picker({
 const styles = StyleSheet.create({
   hub: { flexDirection: 'row', alignItems: 'center', gap: space.md, borderRadius: radius.lg, padding: space.lg, marginBottom: space.xl, overflow: 'hidden' },
   hubIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  intro: { marginHorizontal: space.lg, marginBottom: space.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
-  chip: { borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: 6 },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginBottom: space.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
   tile: { flexGrow: 1, flexBasis: '45%', borderRadius: radius.lg, padding: space.md },
   tileLabel: { fontSize: 13, fontWeight: '600', marginBottom: space.xs },
   tileHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   tileAlert: { borderWidth: 2, padding: space.md - 2 },
-  saveRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.xs },
+  saveRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
   trash: { paddingHorizontal: space.md, minHeight: 44, justifyContent: 'center' },
   tileValue: { fontSize: 26, fontWeight: '700', letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
   unit: { fontSize: 14, fontWeight: '500' },
   noReading: { fontSize: 17, lineHeight: 31 },
-  spark: { height: 28, flexDirection: 'row', alignItems: 'flex-end', marginTop: space.sm },
+  spark: { height: 28, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'flex-start', marginTop: space.sm },
   minmax: { fontSize: 12, marginTop: space.xs, fontVariant: ['tabular-nums'] },
   scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   sheetPage: { flex: 1 },
@@ -963,7 +1000,7 @@ const styles = StyleSheet.create({
   barButton: { width: 80, minHeight: 44, justifyContent: 'center' },
   barText: { fontSize: 17, letterSpacing: -0.41 },
   barTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '600', letterSpacing: -0.41 },
-  sheetNote: { fontSize: 13, marginBottom: space.lg, marginLeft: space.lg },
+  sheetNote: { fontSize: 13, lineHeight: 18, marginBottom: space.lg, marginLeft: space.lg },
   sheet: {
     maxHeight: '85%',
     borderTopLeftRadius: radius.lg,

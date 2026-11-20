@@ -56,7 +56,7 @@ describe('scan diff', () => {
     expect(abs.added.map((f) => f.code)).toEqual(['C9999']);
     expect(abs.cleared.map((f) => f.code)).toEqual(['C1234']);
     expect(d.modules[0].module).toBe('ABS'); // something new first
-    expect(diffSummary(d)).toBe('1 new, 1 also in the last check, 1 cleared.');
+    expect(diffSummary(d)).toBe('1 new, 1 seen before, 1 cleared.');
   });
 
   it('treats every module as read for checks saved without the list', () => {
@@ -275,6 +275,15 @@ describe('change timeline', () => {
     expect(text).toContain('  Value: Off to On');
     expect(text).toContain('  Backup: Not recorded');
     expect(text.startsWith('Change timeline: Test car\n3 changes, newest first.')).toBe(true);
+  });
+
+  it('exports the odometer in the owner’s unit', () => {
+    const rows = timelineRows(history);
+    const csv = timelineCsv(rows, { miles: true }).split('\r\n');
+    expect(csv[0]).toBe('Date,Time,Module,Setting,Old value,New value,Old bytes,New bytes,Backup,Made in,Odometer mi');
+    expect(csv[1].endsWith(',Customise,74875')).toBe(true);
+    expect(timelineText(rows, 'Test car', { miles: true })).toContain('74,875 mi');
+    expect(timelineText(rows, 'Test car')).toContain('120,500 km');
   });
 
   it('keeps the module key, so Put back can find the backup', () => {

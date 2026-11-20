@@ -110,7 +110,12 @@ export function parseMessages(raw: string, command: string): number[][] {
     if (frame) {
       // Frame 0 starts a message, unless a length line just started it.
       if (frame[1] === '0') {
-        if (!current || current.length > 0) {
+        // The index is one hex digit, so an answer of more than 16 frames
+        // wraps from F: back to 0:. While the declared length is not yet in,
+        // that 0: carries on the same message.
+        const want = current ? declared.get(current) : undefined;
+        const filling = !!current && want != null && current.length > 0 && current.length < want;
+        if (!filling && (!current || current.length > 0)) {
           current = [];
           messages.push(current);
         }
@@ -118,7 +123,7 @@ export function parseMessages(raw: string, command: string): number[][] {
         current = [];
         messages.push(current);
       }
-      current.push(...hexBytes(frame[2]));
+      current!.push(...hexBytes(frame[2]));
       continue;
     }
     if (/^[0-9A-F]+$/i.test(compact)) {
@@ -266,6 +271,8 @@ export class ElmClient {
   // Any other command takes the adapter out of it first (see command()).
   private rawCan = false;
   private inTp20 = false;
+  // Older-module raw channels open now (module talk, the older-module search, a clear).
+  private rawSessions = 0;
   private holdRaw = 0;
   rememberModules(ids: string[] | undefined): void {
     for (const id of ids ?? []) this.seenBefore.add(id);
@@ -421,6 +428,7 @@ export class ElmClient {
     const s = new Tp20Session((c, t) => this.send(c, t), this.dp);
     this.addressed = true;
     this.inTp20 = true;
+    this.rawSessions++;
     // Raw CAN is kept for the next module only after a clean conversation:
     // after an error or a failed channel, the next module sets it up again.
     let clean = false;
@@ -429,14 +437,21 @@ export class ElmClient {
         try {
           await s.enter();
           this.rawCan = true;
-        } catch {
-          // The adapter cannot do raw CAN: stop trying TP2.0 on this connection.
-          this.tp20Usable = false;
+        } catch (e) {
+          if (e instanceof LinkLost) throw e;
+          // Only an adapter that answers "?" cannot do raw CAN: then TP2.0 is
+          // not tried again on this connection. A stall on one command is
+          // not that, and the next module tries again.
+          if (e instanceof ObdError && /does not support/.test(e.message)) this.tp20Usable = false;
           return null;
         }
       }
       await this.obdQuiet(address);
-      if (!(await s.open(address).catch(() => false))) return null;
+      const opened = await s.open(address).catch((e) => {
+        if (e instanceof LinkLost) throw e;
+        return false;
+      });
+      if (!opened) return null;
       try {
         if (session) {
           // Some body modules refuse 10 89 (a 2014 A7's 09 answered NRC 22) yet
@@ -452,6 +467,7 @@ export class ElmClient {
       }
     } finally {
       this.inTp20 = false;
+      this.rawSessions--;
       if (!this.holdRaw || !this.rawCan || !clean) {
         await s.leave();
         this.rawCan = false;
@@ -657,15 +673,22 @@ export class ElmClient {
     // complete: every group in the order was read (or the run of empty groups
     // that ends a body module came). nextIndex: where a later run carries on.
     let next = start;
-    const done = await this.tp20(a, async (s) => {
-      let empty = 0;
+    let cancelled = false;
+    // Runs of empty groups carry across channels.
+    let empty = 0;
+    const session = (from: number) => this.tp20(a, async (s) => {
+      // A new channel may read a few groups again: they are counted afresh.
+      empty = 0;
       // Requests that got no answer at all in a row: the module or channel has
       // gone, so the rest of the range would only wait out timeouts.
       let silent = 0;
-      for (let i = start; i < order.length; i++) {
+      for (let i = from; i < order.length; i++) {
         const g = order[i];
         next = i;
-        if (opts.cancelled?.()) return false;
+        if (opts.cancelled?.()) {
+          cancelled = true;
+          return false;
+        }
         onProgress?.((i - start + 1) / (order.length - start));
         let answer: number[] = [];
         try {
@@ -681,9 +704,11 @@ export class ElmClient {
           }
           // The module went quiet: start again a little before this group.
           if (++silent >= 4) {
-            next = Math.max(start, i - 3);
+            next = Math.max(from, i - 3);
             return false;
           }
+          // No answer is not an empty group.
+          continue;
         }
         const cells = parseMeasuringBlock(answer, g);
         if (cells?.length) {
@@ -693,6 +718,14 @@ export class ElmClient {
       }
       return true;
     });
+    // A module that hangs up part-way is opened again and the scan carries on
+    // from where it stopped, as long as each channel gets further than the last.
+    let done = await session(start);
+    for (let again = 0; again < 12 && done !== true && !cancelled && next < order.length; again++) {
+      const from = next;
+      done = await session(from);
+      if (next <= from) break;
+    }
     return done === true || next >= order.length ? { complete: true } : { complete: false, nextIndex: next };
   }
 
@@ -756,6 +789,19 @@ export class ElmClient {
   }
 
   async request(cmd: string, timeoutMs = 4000): Promise<number[][]> {
+    // While an older-module channel is open the adapter sends text as raw
+    // CAN frames on that channel: a standard request from another screen
+    // (services 01 to 0A) would become part of the message being built
+    // there, a coding write included. It waits for the channel to close.
+    // The channel's own traffic does not come through here. The wait has a
+    // limit, so nothing can hang on it.
+    if (/^0[1-9A]/.test(cmd) && this.rawSessions > 0) {
+      const until = Date.now() + 20000;
+      while (this.rawSessions > 0 && Date.now() < until) await new Promise((r) => setTimeout(r, 100));
+      // Past the limit the request fails: sent into the open channel it would
+      // become part of the message being built there.
+      if (this.rawSessions > 0) throw new ObdError(ElmClient.BUSY_TEXT);
+    }
     if (!this.addressed && /^0[1-9A]/.test(cmd)) this.lastObdAt = Date.now();
     const t0 = Date.now();
     const msgs = parseMessages(await this.command(cmd, timeoutMs), cmd);
@@ -765,6 +811,18 @@ export class ElmClient {
     // every unit. Neither is timed.
     if (msgs.length === 1 && msgs[0].length <= 7 && this.addressed && this.adaptiveOn && !this.rawCan) this.pace.noteAnswer(Date.now() - t0);
     return msgs;
+  }
+
+  private static readonly BUSY_TEXT = 'The adapter is busy with another job. Try again in a moment.';
+
+  // Waits (up to 20 s) until no module conversation or raw channel holds the
+  // adapter, then lets a standard request through; fails if it never frees.
+  // For the standard requests that read or clear faults, which would reach the
+  // module a Customise write is talking to, not the engine.
+  private async freeAdapter(): Promise<void> {
+    const until = Date.now() + 20000;
+    while ((this.addressed || this.rawSessions > 0) && Date.now() < until) await new Promise((r) => setTimeout(r, 100));
+    if (this.addressed || this.rawSessions > 0) throw new ObdError(ElmClient.BUSY_TEXT);
   }
 
   // When a standard OBD request last went to the car. A 2007 Leon's engine
@@ -816,6 +874,7 @@ export class ElmClient {
   // Mode 01 PID 01: check engine light (MIL) state and number of stored codes.
   // Bytes B to D hold the emissions readiness monitors (engine ECU reply used).
   async readStatus(): Promise<{ milOn: boolean; storedCount: number; diesel: boolean; monitors: Monitor[] }> {
+    await this.freeAdapter();
     const msgs = await this.request('0101');
     let milOn = false;
     let storedCount = 0;
@@ -863,6 +922,7 @@ export class ElmClient {
   }
 
   async readVin(): Promise<string | null> {
+    await this.freeAdapter();
     const msgs = await this.request('0902', 6000);
     const chars: number[] = [];
     for (const m of msgs) {
@@ -903,6 +963,7 @@ export class ElmClient {
 
   private async readCodes(mode: '03' | '07' | '0A'): Promise<string[]> {
     const reply = 0x40 + parseInt(mode, 16);
+    await this.freeAdapter();
     let msgs: number[][];
     try {
       msgs = await this.request(mode, 6000);
@@ -940,9 +1001,10 @@ export class ElmClient {
   // Mode 04: clears stored and pending codes, freeze frame and readiness
   // monitors, and turns the check engine light off. Permanent codes stay.
   async clearFaultCodes(): Promise<void> {
+    await this.freeAdapter();
     const raw = await this.command('04', 8000);
     if (!/44/.test(raw.replace(/\s/g, ''))) {
-      throw new ObdError('The car did not confirm the clear. Make sure the ignition is on and the engine is off, then try again.');
+      throw new ObdError('The car did not confirm the clear. Check the ignition is on, then try again.');
     }
   }
 
@@ -1059,6 +1121,16 @@ export class ElmClient {
   // request, or a write, to the wrong module. Single commands stay queued
   // as before; this guards whole sequences.
   private lockTail: Promise<unknown> = Promise.resolve();
+  // Counts an older-module raw channel, so standard requests wait for it (see request()).
+  private async rawSession<T>(fn: () => Promise<T>): Promise<T> {
+    this.rawSessions++;
+    try {
+      return await fn();
+    } finally {
+      this.rawSessions--;
+    }
+  }
+
   private exclusive<T>(fn: () => Promise<T>): Promise<T> {
     const run = this.lockTail.then(fn, fn);
     this.lockTail = run.catch(() => undefined);
@@ -1216,7 +1288,7 @@ export class ElmClient {
     }
     if (restore) await this.restoreLocked();
     if (!first && this.olderProtocol.has(def.id)) {
-      return { def, state: 'no-answer', faults: [], error: 'Uses the older VW protocol: see Older modules' };
+      return { def, state: 'no-answer', faults: [], error: 'Uses the older VW protocol: see Older VW modules' };
     }
     const bus = first ? null : await this.secondBusMissing(def);
     return first ?? { def, state: 'no-answer', faults: [], ...(bus ? { error: bus } : {}) };
@@ -2177,7 +2249,25 @@ export class ElmClient {
         const now = await tp20ReadCoding(s);
         if (!now || toHex(now.coding) !== toHex(before)) throw new ObdError('The coding changed since it was read, or could not be read. Read it again, then retry. Nothing was changed.');
         const put = (value: number[]) => tp20WriteCoding(s, now, value, loginCode);
-        const settle = () => (now.style !== 'did' ? s.idle(3000) : Promise.resolve());
+        const settle = async () => {
+          // The did style has no wait for a restart, but a channel the module
+          // closed after the write still needs reopening for the read-back.
+          if (now.style === 'did' && !s.closed) return;
+          if (now.style !== 'did') {
+            await s.idle(3000).catch((e) => {
+              if (e instanceof LinkLost) throw e;
+            });
+          }
+          if (s.closed) {
+            // The module hung up or restarted after the write: the read-back
+            // needs a new channel.
+            await new Promise((r) => setTimeout(r, 1000));
+            await s.open(info.address).catch((e) => {
+              if (e instanceof LinkLost) throw e;
+              return false;
+            });
+          }
+        };
         try {
           await put(after);
         } catch (e) {
@@ -2232,7 +2322,7 @@ export class ElmClient {
     const lv = level.toString(16).toUpperCase().padStart(2, '0');
     const r = await this.uds(`27${lv}`, 3000);
     const seed = r.slice(2);
-    if (!seed.length) return; // An all-zero or empty seed means already unlocked.
+    if (!seed.length || seed.every((b) => b === 0)) return; // An all-zero or empty seed means already unlocked.
     let key = 0n;
     for (const b of seed) key = (key << 8n) | BigInt(b);
     key = (key + BigInt(code)) % (1n << BigInt(8 * seed.length));
@@ -2268,20 +2358,24 @@ export class ElmClient {
         await this.uds(`2EF199${toHex([bcd(now.getFullYear() % 100), bcd(now.getMonth() + 1), bcd(now.getDate())])}`, 3000).catch(() => undefined);
         const wsc = (await this.readDid('F1A5', 2000)) ?? (await this.readDid('F19A', 2000));
         if (wsc && wsc.length) await this.uds(`2EF198${toHex(wsc)}`, 3000).catch(() => undefined);
+        // The write goes out once (sendOnce). It throws only when the module
+        // refuses, which means nothing was stored. No answer, or "busy" with
+        // no final answer, is left to the read-back below to settle.
         const write = async (value: number[]) => {
           try {
-            await this.uds(`2E${did}${toHex(value)}`, 6000);
+            await this.sendOnce(`2E${did}${toHex(value)}`);
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             if (!/security login/.test(msg)) throw e;
             if (loginCode == null) throw new ObdError('This module needs a security login code for this change. Nothing was changed.');
             await this.login(loginCode);
-            await this.uds(`2E${did}${toHex(value)}`, 6000);
+            await this.sendOnce(`2E${did}${toHex(value)}`);
           }
         };
         try {
           await write(after);
         } catch (e) {
+          if (e instanceof LinkLost) throw e;
           const msg = e instanceof Error ? e.message : String(e);
           if (/Nothing was changed|login code/.test(msg)) throw e;
           throw new ObdError(`The module did not accept the change: ${msg} Nothing was changed.`);
@@ -2461,7 +2555,7 @@ export class ElmClient {
   // for their faults. Nothing is changed in the car.
   // Holds the adapter for the whole raw session, so other screens wait.
   deepScan(...args: Parameters<ElmClient['deepScanInner']>): ReturnType<ElmClient['deepScanInner']> {
-    return this.exclusive(() => this.deepScanInner(...args)) as ReturnType<ElmClient['deepScanInner']>;
+    return this.exclusive(() => this.rawSession(() => this.deepScanInner(...args))) as ReturnType<ElmClient['deepScanInner']>;
   }
 
   async deepScanInner(
@@ -2470,11 +2564,14 @@ export class ElmClient {
     onModule?: (m: Tp20Module) => void,
     // Each address where no module opened a channel.
     onSilent?: (address: number) => void,
+    // known: also read addresses already tied to a named module (the re-read
+    // after clearing one module's faults).
+    opts: { known?: boolean } = {},
   ): Promise<Tp20Module[]> {
     if (!this.supportsModules) return [];
     // Addresses already reached as a named module are not probed again.
     const used = new Set([...this.winner.values()].flatMap((r) => (r.via === 'tp20' ? [r.address] : [])));
-    addresses = addresses.filter((a) => !used.has(a));
+    if (!opts.known) addresses = addresses.filter((a) => !used.has(a));
     const s = new Tp20Session((c, t) => this.command(c, t), this.dp);
     const out: Tp20Module[] = [];
     this.addressed = true;
@@ -2484,14 +2581,19 @@ export class ElmClient {
         onProgress?.(i, addresses.length);
         const address = addresses[i];
         let opened = false;
+        // A stall or a busy module is not silence: only a clean "no answer"
+        // is remembered, so a bad moment cannot hide a module for 30 days.
+        let clean = true;
         try {
           await this.obdQuiet(address);
           opened = await s.open(address);
-        } catch {
+        } catch (e) {
+          if (e instanceof LinkLost) throw e;
           opened = false;
+          clean = false;
         }
         if (!opened) {
-          onSilent?.(address);
+          if (clean && !s.openBusy && !s.stalled) onSilent?.(address);
           continue;
         }
         const m: Tp20Module = { address, faults: [] };
@@ -2549,7 +2651,7 @@ export class ElmClient {
   // Clears the fault memory of one TP2.0 module (KWP 14 FF 00).
   // Holds the adapter for the whole raw session, so other screens wait.
   clearTp20(...args: Parameters<ElmClient['clearTp20Inner']>): ReturnType<ElmClient['clearTp20Inner']> {
-    return this.exclusive(() => this.clearTp20Inner(...args)) as ReturnType<ElmClient['clearTp20Inner']>;
+    return this.exclusive(() => this.rawSession(() => this.clearTp20Inner(...args))) as ReturnType<ElmClient['clearTp20Inner']>;
   }
 
   async clearTp20Inner(address: number): Promise<void> {

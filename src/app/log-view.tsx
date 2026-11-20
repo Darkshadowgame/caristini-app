@@ -2,15 +2,16 @@
 // every value at a moment, lowest, highest and average, markers, and CSV share.
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SECTIONS } from '../help';
 import { toUserUnits, useSettings } from '../settings';
-import { radius, space, type, useTheme } from '../theme';
-import { Body, Button, Card, ConfirmSheet, GuideButton, Group, ListRow, Notice, Screen } from '../ui';
+import { space, type, useTheme } from '../theme';
+import { Body, Button, Card, ConfirmSheet, GuideButton, Group, ListRow, Notice, Screen, Segmented } from '../ui';
 import { chartColours, ChartLine, LogChart, RouteView } from '../logger/Charts';
 import { routeIndexAt, routeKm, routeOf, toGpx } from '../logger/gps';
 import { DataLog, formatDuration, formatWhen, LogChannel, logRate, seriesOf, statsOf, toCsv, valueAt } from '../logger/format';
 import { deleteLog, loadLog, shareCsv, shareGpx } from '../logger/store';
+import { shareFileName } from '../timeText';
 
 type View_ = 'each' | 'all';
 
@@ -86,7 +87,7 @@ export default function LogView() {
       <Card>
         <Text style={[type.heading, { color: t.text }]}>{log.car}</Text>
         <Text style={[type.sub, type.number, { color: t.muted, marginTop: 2 }]}>
-          {[formatDuration(log.durationMs), `${log.rows.length.toLocaleString('en-GB')} reads`, `${rate.toFixed(1)} a second`, log.start === 'auto' ? 'auto-start' : null].filter(Boolean).join(', ')}
+          {[formatDuration(log.durationMs), `${log.rows.length.toLocaleString('en-GB')} readings`, `${rate.toFixed(1)} readings a second`, log.start === 'auto' ? 'auto-start' : null].filter(Boolean).join(', ')}
         </Text>
         {log.markers.length ? (
           <Text style={[type.small, { color: t.muted, marginTop: 2 }]}>
@@ -102,7 +103,7 @@ export default function LogView() {
             style={{ flex: 1 }}
             onPress={() => {
               setError(null);
-              shareCsv(`Caristini log ${log.id}`, toCsv(log, (v, u) => toUserUnits(v, u, settings))).catch((e) => setError(`Could not share: ${e instanceof Error ? e.message : String(e)}`));
+              shareCsv(shareFileName('log', log.vin, log.startedAt, log.id), toCsv(log, (v, u) => toUserUnits(v, u, settings))).catch((e) => setError(`Could not share: ${e instanceof Error ? e.message : String(e)}`));
             }}
           />
           {route.length > 1 ? (
@@ -114,7 +115,7 @@ export default function LogView() {
               style={{ flex: 1 }}
               onPress={() => {
                 setError(null);
-                shareGpx(`Caristini route ${log.id}`, toGpx(`${log.car}, ${formatWhen(log.startedAt)}`, log.startedAt, route, log.markers)).catch((e) =>
+                shareGpx(shareFileName('route', log.vin, log.startedAt, log.id), toGpx(`${log.car}, ${formatWhen(log.startedAt)}`, log.startedAt, route, log.markers)).catch((e) =>
                   setError(`Could not share: ${e instanceof Error ? e.message : String(e)}`),
                 );
               }}
@@ -125,19 +126,15 @@ export default function LogView() {
       </Card>
       {error ? <Notice tone="danger" icon="alert-circle-outline" text={error} /> : null}
 
-      <View style={[styles.segment, { backgroundColor: t.sunken }]}>
-        {(['each', 'all'] as View_[]).map((v) => (
-          <Pressable
-            key={v}
-            accessibilityRole="button"
-            accessibilityState={{ selected: view === v }}
-            onPress={() => setView(v)}
-            style={[styles.segmentItem, view === v && { backgroundColor: t.surface }]}
-          >
-            <Text style={[type.sub, { color: t.text, fontWeight: view === v ? '600' : '400' }]}>{v === 'each' ? 'Each value' : 'All together'}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <Segmented<View_>
+        options={[
+          { id: 'each', label: 'Each value' },
+          { id: 'all', label: 'All together' },
+        ]}
+        value={view}
+        onPick={setView}
+        style={{ marginBottom: space.lg }}
+      />
 
       <Group header={cursor == null ? 'Drag across a chart to read values' : `At ${(cursor / 1000).toFixed(2)} s${near ? `, marker ${near.n}` : ''}`} help={SECTIONS.logViewer}>
         {data.map((d, i) => (
@@ -221,7 +218,7 @@ export default function LogView() {
             first={i === 0}
             title={d.c.label}
             subtitle={d.stats ? `${fmt(d.c, d.stats.min)} to ${fmt(d.c, d.stats.max)}, average ${fmt(d.c, d.stats.avg)}` : 'No reading'}
-            value={d.stats ? `${d.stats.rate.toFixed(1)}/s` : undefined}
+            value={d.stats ? `${d.stats.rate.toFixed(1)} readings a second` : undefined}
           />
         ))}
       </Group>
@@ -261,8 +258,7 @@ function TimeAxis({ ms }: { ms: number }) {
 }
 
 const styles = StyleSheet.create({
-  segment: { flexDirection: 'row', borderRadius: radius.sm + 1, padding: 2, marginBottom: space.lg },
-  segmentItem: { flex: 1, minHeight: 32, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm - 1 },
+
   dot: { width: 10, height: 10, borderRadius: 5, marginRight: space.sm },
   chartHead: { flexDirection: 'row', alignItems: 'center', marginBottom: space.xs, gap: 2 },
   axis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.xs },

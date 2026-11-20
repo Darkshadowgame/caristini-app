@@ -3,11 +3,11 @@
 // The owner picks one of their saved cars or types the VIN, and Caristini
 // remembers that car for the next connect without a VIN.
 import React, { useState } from 'react';
-import { Platform, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { MakeBadge, makeLogoFor } from '../brand/MakeBadge';
 import { useConnection } from '../state';
-import { radius, space, type, useTheme } from '../theme';
-import { Button, Group, ListRow } from '../ui';
+import { space, useTheme } from '../theme';
+import { Button, Field, Group, ListRow } from '../ui';
 import { NO_VIN, useGarage, vehicleTitle } from '../vehicle/garage';
 import { isValidVin } from '../vehicle/vin';
 
@@ -60,23 +60,7 @@ export function WhichCar() {
         />
       ))}
       <View style={[styles.typeRow, others.length ? { borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.border } : null]}>
-        <TextInput
-          value={typed}
-          onChangeText={setTyped}
-          placeholder="Type the VIN (17 characters)"
-          placeholderTextColor={t.faint}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          maxLength={20}
-          accessibilityLabel="VIN"
-          selectionColor={t.accent}
-          style={[
-            type.body,
-            styles.input,
-            { color: t.text, borderColor: t.border, backgroundColor: t.bg },
-            Platform.OS === 'web' && ({ outlineStyle: 'none' } as object),
-          ]}
-        />
+        <Field value={typed} onChange={setTyped} placeholder="Type the VIN (17 characters)" caps="characters" mono maxLength={20} accessibilityLabel="VIN" style={{ flex: 1 }} />
         <Button label="Use this VIN" compact disabled={!valid} busy={busy} onPress={() => pick(clean)} />
       </View>
     </Group>
@@ -85,5 +69,5 @@ export function WhichCar() {
 
 const styles = StyleSheet.create({
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md },
-  input: { flex: 1, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, fontVariant: ['tabular-nums'] },
+
 });

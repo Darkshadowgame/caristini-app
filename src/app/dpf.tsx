@@ -1,11 +1,13 @@
 // DPF monitor for diesels. Logic and sources: src/monitors/dpf.ts.
 import { alertBuzz } from '../sound';
-import { useKeepAwake } from 'expo-keep-awake';
+import { useStayAwake } from '../keepAwake';
 import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { SECTIONS } from '../help';
 import { DpfPlan, dpfPlan, RegenEvent, regenMinutes, trackRegen } from '../monitors/dpf';
+import { loadRegens, mergeRegens, ownerSource, saveRegens } from '../monitors/dpfStore';
+import { clockText, dateText, dateTimeText } from '../timeText';
 import { formatExtra } from '../obd/extras';
 import { displaySensor, readKey, sensorId, sensorsForCar, SensorValue } from '../obd/sensors';
 import { toUserUnits, useSettings } from '../settings';
@@ -35,6 +37,21 @@ export default function Dpf() {
   const group = conn.vehicle?.group ?? 'other';
   const v = conn.vehicle;
   const foundKey = (v?.sensorsFound ?? []).join();
+  // Regenerations seen on earlier visits, kept on the phone for this car.
+  const [past, setPast] = useState<RegenEvent[]>([]);
+  const carVin = v?.vin ?? null;
+  useEffect(() => {
+    let on = true;
+    setPast([]);
+    if (carVin) loadRegens(carVin).then((l) => on && setPast(l), () => undefined);
+    return () => {
+      on = false;
+    };
+  }, [carVin]);
+  // Saved as each one starts and ends, so leaving the page keeps them.
+  useEffect(() => {
+    if (carVin && events.length) void saveRegens(carVin, events);
+  }, [carVin, events]);
 
   useEffect(() => {
     setPlan(null);
@@ -125,12 +142,12 @@ export default function Dpf() {
           {regenOn
             ? `Keep driving at a steady speed and do not switch off until it ends.${open ? ` Running for ${Math.max(1, Math.round(regenMinutes(open, now)))} min.` : ''}`
             : watching
-              ? `Reads every ${EVERY_MS / 1000} seconds while this page is open.${readAt ? ` Last read ${new Date(readAt).toTimeString().slice(0, 5)}.` : ''}`
+              ? `Reads every ${EVERY_MS / 1000} seconds while this page is open.${readAt ? ` Last read ${clockText(readAt)}.` : ''}`
               : unknown
                 ? 'Caristini does not know where this car keeps it. Find my car’s sensors can look for its own DPF values, such as soot mass and distance since the last regeneration.'
                 : plan?.found.length
                   ? `Reads the ${plan.found.length} DPF value${plan.found.length === 1 ? '' : 's'} found on your car (Live data, Diesel filter and exhaust). Tap Start watching.`
-                  : 'Tap Start watching to read the filter now and every few seconds.'}
+                  : `Tap Start watching to read the filter now and every ${EVERY_MS / 1000} seconds.`}
         </Text>
       </GlowCard>
 
@@ -138,7 +155,7 @@ export default function Dpf() {
         {unknown ? <Button label="Find my car’s sensors" icon={'radar' as IconName} onPress={() => router.push('/sensors')} /> : null}
         {!unknown || canRead ? (
           <Button
-            label={watching ? 'Stop watching' : unknown ? 'Read the values Caristini knows' : 'Start watching'}
+            label={watching ? 'Stop' : unknown ? 'Read the values Caristini knows' : 'Start watching'}
             icon={watching ? 'stop' : 'bell-alert-outline'}
             variant={watching || unknown ? 'secondary' : 'primary'}
             disabled={!plan}
@@ -167,7 +184,7 @@ export default function Dpf() {
             />
           ))}
           {shown.map((e, i) => (
-            <ListRow key={e.id} first={!plan.standard.length && i === 0} title={e.label} subtitle={e.source} value={value(e.id)} />
+            <ListRow key={e.id} first={!plan.standard.length && i === 0} title={e.label} subtitle={ownerSource(e.source)} value={value(e.id)} />
           ))}
           {plan.found.map((r, i) => {
             const val = own[sensorId(r)];
@@ -187,14 +204,14 @@ export default function Dpf() {
         <Notice icon="information-outline" text={`Your car did not answer any of the ${plan.maker.length} known DPF values.`} />
       ) : null}
 
-      {events.length ? (
-        <Group header="Regenerations seen while watching">
-          {events.map((e, i) => (
+      {events.length || past.length ? (
+        <Group header="Regenerations seen while watching" footer="Kept on this phone for this car. Only regenerations that ran while this page was watching are listed.">
+          {[...mergeRegens(past, events)].reverse().map((e, i) => (
             <ListRow
               key={e.start}
               first={i === 0}
-              title={`Started ${new Date(e.start).toTimeString().slice(0, 5)}`}
-              value={e.end ? `${Math.max(1, Math.round(regenMinutes(e, now)))} min` : 'Running'}
+              title={`Started ${dateTimeText(e.start)}`}
+              value={e.end ? `${Math.max(1, Math.round(regenMinutes(e, now)))} min` : events.some((x) => x.start === e.start) ? 'Running' : 'End not seen'}
             />
           ))}
         </Group>
@@ -208,6 +225,6 @@ function WakeWhile({ on }: { on: boolean }) {
   return on ? <Awake /> : null;
 }
 function Awake() {
-  useKeepAwake();
+  useStayAwake('dpf');
   return null;
 }

@@ -149,7 +149,7 @@ export function kbSettings(list: KbEntry[]): CodingItem[] {
       byte: e.data!.byte as number,
       bits: (e.data!.bits as number[]).filter((b) => b >= 0 && b <= 7),
       confidence: 'low' as const,
-      note: 'From the shared knowledge base. Not confirmed on a car, so not offered as a switch.',
+      note: 'From Research notes. Not confirmed on a car, so not offered as a switch.',
       sources: e.sources,
     }));
 }

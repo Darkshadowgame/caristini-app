@@ -1,31 +1,24 @@
-// Checks before every write to the car.
-// Only a flat battery stops a write. A low reading or a running engine asks first:
-// adapters measure at the OBD pin, often 0.3 to 0.7 V under the battery itself,
-// and Carista writes at the same readings.
+// The battery and engine reading taken before a write to the car.
+// Nothing here stops or delays a write (the owner's choice, 20 Nov 2026): the
+// reading only adds a line to the result, so a change that did not save on a
+// weak battery says why. Adapters measure at the OBD pin, often 0.3 to 0.7 V
+// under the battery itself.
 import { ElmClient } from '../obd/elm';
-import { pidInfo } from '../obd/pids';
 
-const RPM = pidInfo(0x0c)!;
-// Below this the battery is too flat for a module to save a change safely.
-export const BLOCK_VOLTS = 10.5;
-// Below this Caristini asks first.
-export const WARN_VOLTS = 11.8;
+// Below this a module may not save a change.
+export const LOW_VOLTS = 10.5;
 
-export type Preflight = { block: string | null; warn: string | null; volts: number | null };
+// block and warn are kept for the callers that read them; both are always null.
+export type Preflight = { block: string | null; warn: string | null; volts: number | null; note: string | null };
 
 export async function preflightCheck(client: ElmClient | null): Promise<Preflight> {
-  if (!client) return { block: 'Not connected.', warn: null, volts: null };
-  const volts = await client.batteryVoltage();
-  if (volts != null && volts < BLOCK_VOLTS)
-    return { block: `The battery reads ${volts.toFixed(1)} V, too low to save a change safely. Start the engine for a few minutes or connect a charger, then try again.`, warn: null, volts };
-  const warns: string[] = [];
-  const rpm = await client.readLive(RPM).catch(() => null);
-  if (rpm != null && rpm > 300) warns.push('The engine is running. Most settings save fine like this, but switching the engine off with the ignition on is safest.');
-  if (volts != null && volts < WARN_VOLTS) warns.push(`The battery reads ${volts.toFixed(1)} V at the OBD port. One or two changes are fine; for many changes in a row, run the engine or connect a charger.`);
-  return { block: null, warn: warns.length ? warns.join(' ') : null, volts };
+  if (!client) return { block: 'Not connected.', warn: null, volts: null, note: null };
+  const volts = await client.batteryVoltage().catch(() => null);
+  const note = volts != null && volts < LOW_VOLTS ? `The battery reads ${volts.toFixed(1)} V. If a change does not save, run the engine or connect a charger and try again.` : null;
+  return { block: null, warn: null, volts, note };
 }
 
-// Older callers: a message only when the write must not go ahead.
+// Older callers: a message only when the write cannot go ahead (not connected).
 export async function checkBeforeWrite(client: ElmClient | null): Promise<string | null> {
   return (await preflightCheck(client)).block;
 }

@@ -1,7 +1,6 @@
 import { router, Stack, useIsFocused, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { faultText } from '../../obd/faultText';
+import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { bitsLabel, CodingItem, codingItemsFor, isOn, withItem } from '../../coding/items';
 import { preflightCheck } from '../../coding/preflight';
 import { groupLabels } from '../../data/groupLabels';
@@ -17,13 +16,17 @@ import { pidInfo } from '../../obd/pids';
 import { useSettings } from '../../settings';
 import { useConnection } from '../../state';
 import { MONO, radius, space, type, useTheme } from '../../theme';
-import { Button, ConfirmSheet, Group, ListRow, NeedsConnection, Notice, Pill, Screen, success, tap } from '../../ui';
+import { TOOLS, Button, ConfirmSheet, Field, Group, ListRow, NeedsConnection, Notice, Pill, Screen, Segmented, success, tap } from '../../ui';
 import { useGarage, vehicleTitle } from '../../vehicle/garage';
 import { SECTIONS } from '../../help';
+import { FaultRow } from '../../components/CodeRow';
+import { allowSleep, stayAwake } from '../../keepAwake';
 import { mergeModuleIds } from '../../vehicle/ids';
 import { cacheAfterWrite } from '../../diag/timeline';
 
 const hex2 = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
+// Shown beside the spinner while a coding is written to the car.
+const WRITING = 'Writing. Keep this page open.';
 
 type Tab = 'faults' | 'values' | 'coding';
 
@@ -45,7 +48,8 @@ export default function ControlModule() {
   const [faults, setFaults] = useState<ModuleFaults | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'danger' | 'info'; text: string } | null>(null);
-  const [confirm, setConfirm] = useState<{ kind: 'clear' | 'write' | 'restore'; warn?: string } | null>(null);
+  // note: the low-battery line for the result, when a write does not save.
+  const [confirm, setConfirm] = useState<{ kind: 'clear' | 'write' | 'restore'; note?: string } | null>(null);
   // Values
   const [values, setValues] = useState<Record<string, SensorValue>>({});
   const [watching, setWatching] = useState(false);
@@ -128,10 +132,17 @@ export default function ControlModule() {
     };
   }, [client, watching, named, tab, focused]);
 
+  // The phone stays awake while values are watched live (src/keepAwake.ts).
+  useEffect(() => {
+    if (!watching) return undefined;
+    stayAwake('workshop-live');
+    return () => allowSleep('workshop-live');
+  }, [watching]);
+
   if (!client || !v || !def) {
     return (
       <Screen>
-        <NeedsConnection what="this module" />
+        <NeedsConnection title="Connect your car to open this module" />
       </Screen>
     );
   }
@@ -153,16 +164,21 @@ export default function ControlModule() {
   const clearFaults = () =>
     run('clear', async () => {
       const before = faults?.faults.map((f) => f.code) ?? [];
-      // Faults are cleared with the engine off, the same rule as the health check.
-      const rpm = await client.readLive(pidInfo(0x0c)!).catch(() => null);
-      if (rpm != null && rpm > 300) throw new Error('The engine is running. Switch it off, leave the ignition on, then clear.');
+      // Clearing is allowed with the engine running, the same as the health check.
       await client.clearModuleFaults(def);
-      const after = await client.readModuleFaults(def);
-      if (!alive.current) return;
-      setFaults(after);
+      // The clear has been sent, so History and the diary get their entry
+      // whether or not this page is still open. Only the page's own state is
+      // skipped once it has closed.
+      const after = await client.readModuleFaults(def).catch(() => null);
+      if (alive.current && after) setFaults(after);
       await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: 'Faults cleared', mileage: null, notes: `${def.name}: cleared ${before.join(', ') || 'fault memory'}` });
       await addHistory({ vin: v.vin, kind: 'clear', title: `${def.name} faults cleared`, detail: before.join(', ') || 'Fault memory' });
-      setMessage({ tone: after.faults.length ? 'info' : 'ok', text: after.faults.length ? 'Some faults came straight back, so the cause is still there.' : 'Fault memory cleared. Saved to History and your Diary.' });
+      if (!alive.current) return;
+      if (!after) {
+        setMessage({ tone: 'info', text: 'Faults cleared and saved to History and your diary, but the module did not answer the read after it. Tap Read again.' });
+        return;
+      }
+      setMessage({ tone: after.faults.length ? 'info' : 'ok', text: after.faults.length ? 'Some faults came straight back, so the cause is still there.' : 'Faults cleared. Saved to History and your diary.' });
     });
 
   const readAll = () => run('values', async () => setValues(await client.readSensors(named)));
@@ -185,29 +201,41 @@ export default function ControlModule() {
       setMessage({ tone: 'danger', text: check.block });
       return;
     }
-    setConfirm({ kind, warn: check.warn ?? undefined });
+    setConfirm({ kind, note: check.note ?? undefined });
   };
 
-  const writeCoding = (target: number[], what: string) =>
+  const writeCoding = (target: number[], what: string, note?: string) =>
     run('write', async () => {
       if (!coding) return;
       const saved = garage.latest(v.vin)?.codingOriginal ?? {};
       if (!saved[def.id]) await garage.update(v.vin, { codingOriginal: { ...saved, [def.id]: toHex(coding) } });
       const res = await client.writeCoding(def, coding, target);
-      if (!alive.current) return;
+      // The write has returned, so the car may hold a new coding. Everything
+      // kept about it (the values for this connection, the saved coding,
+      // History and the diary) is written whether or not this page is still
+      // open. Only the page's own state is skipped once it has closed.
       if (res.coding) {
-        setCoding(res.coding);
-        setDraft(res.coding);
+        // Customise reuses these while connected, so it shows the new coding.
+        client.sessionValues.set(def.id, res.coding);
+        if (alive.current) {
+          setCoding(res.coding);
+          setDraft(res.coding);
+        }
         // The saved coding follows the write, so Put back decides from what the module holds now.
         if (client.routeOf(def) !== 'tp20') await garage.update(v.vin, { codingCache: cacheAfterWrite(garage.latest(v.vin)?.codingCache, [{ key: def.id, hex: toHex(res.coding) }]) });
       }
       if (res.ok) {
-        success();
+        if (alive.current) success();
         await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: `Workshop: ${def.name} ${what}. Coding ${toHex(coding)} to ${toHex(target)}.` });
         await addHistory({ vin: v.vin, kind: 'change', title: `${def.name} ${what}`, detail: 'Workshop', before: toHex(coding), after: toHex(target), odometerKm: v.odometerKm, changes: [{ module: def.name, key: def.id, setting: what.charAt(0).toUpperCase() + what.slice(1), before: toHex(coding), after: toHex(target), backup: saved[def.id] ?? toHex(coding), source: 'Workshop' }] });
-        setMessage({ tone: 'ok', text: `${what.charAt(0).toUpperCase() + what.slice(1)}. Switch the ignition off and on to see it. Saved to History.` });
+        if (alive.current) setMessage({ tone: 'ok', text: `${what.charAt(0).toUpperCase() + what.slice(1)}. Switch the ignition off and on to see it. Saved to History and your diary.` });
       } else {
-        setMessage({ tone: 'danger', text: res.restored ? 'The module did not keep the change, so Caristini put the original coding back.' : 'The module did not keep the change and the original could not be confirmed. Use Restore original.' });
+        // Not kept, and the module now holds something other than before: that is a change too, so it is recorded.
+        if (res.coding && toHex(res.coding) !== toHex(coding)) {
+          await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: `Workshop: ${def.name} did not keep a change. Coding ${toHex(coding)} to ${toHex(res.coding)}. Check it in Workshop.` });
+          await addHistory({ vin: v.vin, kind: 'change', title: `${def.name} ${what} (not kept)`, detail: 'Workshop', before: toHex(coding), after: toHex(res.coding), odometerKm: v.odometerKm, changes: [{ module: def.name, key: def.id, setting: 'Change not kept', before: toHex(coding), after: toHex(res.coding), backup: saved[def.id] ?? toHex(coding), source: 'Workshop' }] });
+        }
+        if (alive.current) setMessage({ tone: 'danger', text: `${res.restored ? 'The module did not keep the change, so Caristini put the original coding back.' : 'The module did not keep the change and the original could not be confirmed. Tap Put back original coding.'}${note ? ` ${note}` : ''}` });
       }
     });
 
@@ -220,10 +248,10 @@ export default function ControlModule() {
   };
 
   const faultCount = faults?.faults.length ?? 0;
-  const tabs: { key: Tab; label: string; badge?: number }[] = [
-    { key: 'faults', label: 'Faults', badge: faultCount },
-    { key: 'values', label: 'Values' },
-    { key: 'coding', label: 'Coding' },
+  const tabs: { id: Tab; label: string; badge?: number }[] = [
+    { id: 'faults', label: 'Faults', badge: faultCount },
+    { id: 'values', label: 'Values' },
+    { id: 'coding', label: 'Coding' },
   ];
 
   return (
@@ -231,8 +259,9 @@ export default function ControlModule() {
       <Stack.Screen options={{ title: knowledge?.plainName ?? def.name }} />
 
       <View style={[styles.hero, { backgroundColor: t.surface }]}>
-        <View style={[styles.addr, { backgroundColor: t.accentSoft }]}>
-          <Text style={[styles.addrText, { color: t.accentText }]} numberOfLines={1} adjustsFontSizeToFit>
+        {/* The address is a fact, not a control: a sunken well, as a code chip is. */}
+        <View style={[styles.addr, { backgroundColor: t.sunken }]}>
+          <Text style={[styles.addrText, { color: t.text }]} numberOfLines={1} adjustsFontSizeToFit>
             {v.group === 'vag' && def.code ? def.code : def.tx || '?'}
           </Text>
         </View>
@@ -249,47 +278,19 @@ export default function ControlModule() {
           </Text>
           {knowledge?.what ? <Text style={[type.small, { color: t.text, marginTop: 4 }]}>{knowledge.what}</Text> : null}
         </View>
-        {busy === 'open' ? <ActivityIndicator color={t.muted} /> : info?.responded ? <Pill text={kwp ? 'Older system' : 'Responding'} /> : null}
+        {busy === 'open' ? <ActivityIndicator color={t.muted} /> : info?.responded ? <Pill text={kwp ? 'Older VW module' : 'Responding'} /> : null}
       </View>
 
       {message ? <Notice tone={message.tone} icon={message.tone === 'ok' ? 'check' : message.tone === 'info' ? 'information-outline' : 'alert-circle-outline'} text={message.text} /> : null}
 
       {info?.responded ? (
         <>
-          <View style={[styles.segment, { backgroundColor: t.sunken }]} accessibilityRole="tablist">
-            {tabs.map((x) => (
-              <Pressable
-                key={x.key}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: tab === x.key }}
-                onPress={() => {
-                  tap();
-                  setTab(x.key);
-                }}
-                style={[styles.segBtn, tab === x.key && { backgroundColor: t.surface }]}
-              >
-                <Text style={[type.sub, { color: t.text, fontWeight: tab === x.key ? '700' : '500' }]}>{x.label}</Text>
-                {x.badge ? (
-                  <View style={[styles.badge, { backgroundColor: t.danger }]}>
-                    <Text style={[type.caption, { color: t.onDanger, fontWeight: '700' }]}>{x.badge}</Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            ))}
-          </View>
+          <Segmented options={tabs} value={tab} onPick={setTab} style={{ marginBottom: space.lg }} />
 
           {tab === 'faults' ? (
             <Group header="Fault memory" help={SECTIONS.moduleFaults} footer="Tap a fault for what it means and, where Caristini knows them, the likely causes.">
               {faults?.faults.map((f, i) => (
-                <ListRow
-                  key={`${f.code}-${i}`}
-                  first={i === 0}
-                  icon="alert-circle"
-                  iconColour="red"
-                  title={faultText(f.code) ?? (f.kwp ? `VW fault ${f.code}` : f.code)}
-                  subtitle={`${f.code} · ${f.kwp ? 'stored' : f.state}`}
-                  onPress={() => router.push({ pathname: '/code/[code]', params: { code: f.code, module: def.name, moduleId: def.id } })}
-                />
+                <FaultRow key={`${f.code}-${i}`} fault={f} module={def.name} moduleId={def.id} first={i === 0} />
               ))}
               {faults && !faults.faults.length ? (
                 faults.state === 'ok' ? (
@@ -298,8 +299,8 @@ export default function ControlModule() {
                   <ListRow first icon="help-circle-outline" iconColour="orange" title="Could not read faults" subtitle={faults.error ?? 'The module did not answer. Try Read again with the ignition on.'} noChevron />
                 )
               ) : null}
-              <ListRow first={!faults} icon="refresh" iconColour="blue" title={busy === 'faults' ? 'Reading…' : 'Read again'} disabled={!!busy} onPress={readFaults} />
-              {faultCount ? <ListRow icon="broom" iconColour="red" title="Clear these faults" disabled={!!busy} onPress={() => setConfirm({ kind: 'clear' })} /> : null}
+              <ListRow first={!faults} icon="refresh" iconColour={TOOLS.workshop.colour} title={busy === 'faults' ? 'Reading…' : 'Read again'} disabled={!!busy} onPress={readFaults} />
+              {faultCount ? <ListRow icon="broom" iconColour="red" title={busy === 'clear' ? 'Clearing. Keep this page open.' : `Clear ${def.name} faults`} disabled={!!busy} onPress={() => setConfirm({ kind: 'clear' })} /> : null}
             </Group>
           ) : null}
 
@@ -337,7 +338,7 @@ export default function ControlModule() {
                         <Button label="Read all" icon="refresh" variant="secondary" busy={busy === 'values'} disabled={!!busy || watching} onPress={readAll} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Button label={watching ? 'Stop' : 'Live'} icon={watching ? 'stop' : 'play'} onPress={() => setWatching((w) => !w)} />
+                        <Button label={watching ? 'Stop' : 'Live'} icon={watching ? 'stop' : 'play'} variant={watching ? 'secondary' : 'primary'} onPress={() => setWatching((w) => !w)} />
                       </View>
                     </View>
                   ) : null}
@@ -348,9 +349,9 @@ export default function ControlModule() {
                       <View key={sensorId(r)} style={[styles.value, { borderColor: t.border, borderTopWidth: i ? StyleSheet.hairlineWidth : 0 }]}>
                         <View style={{ flex: 1 }}>
                           <Text style={[type.body, { color: t.text }]}>{r.n}</Text>
-                          <Text style={[type.caption, { color: t.faint, fontFamily: MONO }]}>{r.d}</Text>
+                          <Text style={[type.caption, { color: t.muted, fontFamily: MONO }]}>{r.d}</Text>
                         </View>
-                        <Text style={[type.heading, type.number, { color: d ? t.text : t.faint }]} accessibilityLabel={d ? undefined : 'No reading'}>{d ? `${d.text}${d.unit ? ` ${d.unit}` : ''}` : '–'}</Text>
+                        <Text style={[type.heading, type.number, { color: d ? t.text : t.muted }]} accessibilityLabel={d ? undefined : 'No reading'}>{d ? `${d.text}${d.unit ? ` ${d.unit}` : ''}` : '–'}</Text>
                       </View>
                     );
                   })}
@@ -365,17 +366,7 @@ export default function ControlModule() {
                   ) : (
                     <View style={styles.pad}>
                       <View style={styles.didRow}>
-                        <TextInput
-                          value={did}
-                          onChangeText={setDid}
-                          placeholder="F187"
-                          placeholderTextColor={t.muted}
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          maxLength={4}
-                          selectionColor={t.accent}
-                          style={[type.body, styles.input, { backgroundColor: t.sunken, color: t.text, fontFamily: MONO }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
-                        />
+                        <Field value={did} onChange={setDid} placeholder="F187" caps="characters" mono maxLength={4} accessibilityLabel="Value number, 4 characters" style={{ flex: 1 }} />
                         <Button label="Read" variant="secondary" busy={busy === 'did'} disabled={!!busy} onPress={readDid} />
                       </View>
                       {raw ? (
@@ -439,7 +430,7 @@ export default function ControlModule() {
                 {changed ? (
                   <View style={[styles.ready, { backgroundColor: t.accentSoft }]}>
                     <Text style={[type.heading, { color: t.accentText, flex: 1 }]}>
-                      {draft.reduce((n, b, k) => n + (b !== coding[k] ? 1 : 0), 0)} byte{draft.reduce((n, b, k) => n + (b !== coding[k] ? 1 : 0), 0) === 1 ? '' : 's'} changed, not saved yet
+                      {busy === 'write' ? WRITING : `${draft.reduce((n, b, k) => n + (b !== coding[k] ? 1 : 0), 0)} byte${draft.reduce((n, b, k) => n + (b !== coding[k] ? 1 : 0), 0) === 1 ? '' : 's'} changed, not saved yet`}
                     </Text>
                     <Button label="Save to the car" compact disabled={!!busy} busy={busy === 'write'} onPress={() => askWrite('write')} />
                   </View>
@@ -477,7 +468,7 @@ export default function ControlModule() {
                           <View key={bit} style={[styles.row, { borderColor: t.border }]}>
                             <View style={{ flex: 1 }}>
                               <Text style={[type.body, { color: t.text }]}>{bitName(openByte, bit) ?? `Bit ${bit}`}</Text>
-                              <Text style={[type.caption, { color: t.faint }]}>
+                              <Text style={[type.caption, { color: t.muted }]}>
                                 Byte {openByte}, bit {bit}
                                 {bitName(openByte, bit) ? '' : ' · no public name'}
                               </Text>
@@ -492,8 +483,9 @@ export default function ControlModule() {
 
                 <View style={{ gap: space.sm, marginBottom: space.xl }}>
                   <Button label="Save to the car" icon="content-save-outline" disabled={!changed || !!busy} busy={busy === 'write'} onPress={() => askWrite('write')} />
+                  {busy === 'write' ? <Text style={[type.sub, { color: t.muted, textAlign: 'center' }]}>{WRITING}</Text> : null}
                   {changed ? <Button label="Undo my changes" variant="ghost" onPress={() => setDraft(coding)} /> : null}
-                  {original && original !== toHex(coding) ? <Button label="Restore original coding" variant="secondary" disabled={!!busy} onPress={() => askWrite('restore')} /> : null}
+                  {original && original !== toHex(coding) ? <Button label="Put back original coding" variant="secondary" disabled={!!busy} onPress={() => askWrite('restore')} /> : null}
                 </View>
               </>
             ) : (
@@ -505,29 +497,28 @@ export default function ControlModule() {
         </>
       ) : info ? (
         <Group>
-          <ListRow first icon="refresh" iconColour="blue" title="Try again" onPress={open} />
+          <ListRow first icon="refresh" iconColour={TOOLS.workshop.colour} title="Try again" onPress={open} />
         </Group>
       ) : null}
 
       <ConfirmSheet
         visible={!!confirm}
-        title={confirm?.kind === 'clear' ? `Clear ${def.name} faults?` : confirm?.kind === 'restore' ? 'Restore the original coding?' : `Save new ${def.name} coding?`}
+        title={confirm?.kind === 'clear' ? `Clear ${def.name} faults?` : confirm?.kind === 'restore' ? 'Put back the original coding?' : `Save new ${def.name} coding?`}
         lines={[
-          ...(confirm?.warn ? [confirm.warn] : []),
           ...(confirm?.kind === 'clear'
-            ? ['Clears this module’s fault memory. Faults still present come back.']
+            ? ['Works with the engine running. A few modules only clear with the engine off and the ignition on.', 'Clears this module’s faults. Faults that are still present come back.']
             : confirm?.kind === 'restore'
               ? ['Puts back the coding this module had before Caristini first changed it.']
               : ['Caristini saves the current coding first, reads the new one back and puts the original back if the module does not keep it.', ...(items.length ? [] : ['These bits have no public names: only change bits you know from a trusted source.'])]),
         ]}
-        confirmLabel={confirm?.kind === 'clear' ? 'Clear faults' : confirm?.kind === 'restore' ? 'Restore' : confirm?.warn ? 'Save anyway' : 'Save to the car'}
+        confirmLabel={confirm?.kind === 'clear' ? 'Clear faults' : confirm?.kind === 'restore' ? 'Put back' : 'Save to the car'}
         onCancel={() => setConfirm(null)}
         onConfirm={() => {
           const c = confirm;
           setConfirm(null);
           if (c?.kind === 'clear') clearFaults();
-          else if (c?.kind === 'restore' && original) writeCoding(original.match(/../g)!.map((h) => parseInt(h, 16)), 'coding restored to the original');
-          else if (c?.kind === 'write' && draft) writeCoding(draft, 'coding saved');
+          else if (c?.kind === 'restore' && original) writeCoding(original.match(/../g)!.map((h) => parseInt(h, 16)), 'original coding put back', c.note);
+          else if (c?.kind === 'write' && draft) writeCoding(draft, 'coding saved', c.note);
         }}
       />
     </Screen>
@@ -538,16 +529,14 @@ const styles = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, borderRadius: radius.lg, marginBottom: space.lg },
   addr: { width: 52, height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   addrText: { fontSize: 20, fontWeight: '800', fontFamily: MONO },
-  segment: { flexDirection: 'row', borderRadius: 10, padding: 2, marginBottom: space.lg },
-  segBtn: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 8 },
-  badge: { minWidth: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+
   pad: { padding: space.lg },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.sm, borderTopWidth: StyleSheet.hairlineWidth, gap: space.sm },
   value: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg, paddingVertical: 11, gap: space.sm },
   setting: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingVertical: 11 },
   didRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  input: { flex: 1, borderRadius: radius.sm + 2, paddingHorizontal: space.md, paddingVertical: 10 },
+
   bytes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: space.md },
   byte: { width: 44, alignItems: 'center', paddingVertical: 4, borderRadius: radius.sm, borderWidth: 1.5 },
   ready: { flexDirection: 'row', alignItems: 'center', gap: space.md, borderRadius: radius.lg, padding: space.md, paddingLeft: space.lg, marginBottom: space.lg },

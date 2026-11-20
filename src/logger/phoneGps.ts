@@ -91,6 +91,9 @@ export function phoneGps(): GpsSource {
         started = false;
         users = Math.max(0, users - 1);
       }
+      // Stopped while the permission question or the start was still running:
+      // nobody is left to stop the updates, so stop them now.
+      if (r === 'on' && !started && users === 0) stopUpdates();
       return r;
     },
     latest() {

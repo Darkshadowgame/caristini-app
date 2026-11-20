@@ -15,7 +15,7 @@ describe('Parts and IDs', () => {
     expect(again.map((m) => m.id)).toEqual(['engine', 'vag-17']);
     expect(again[0]).toMatchObject({ software: '9971', hardware: '03L907309', systemName: 'R4 2.0L EDC', coding: '0102', at: 2 });
     const text = idsText({ title: 'Audi A6', vin: 'WAUZZZ4G1CN000001' }, { modules: again, codes: { engineCode: { value: 'CGLC', from: 'ai' }, paintCode: { value: 'LY9B', from: 'owner' } } });
-    expect(text).toContain('Engine code: CGLC (found by AI, check the data label)');
+    expect(text).toContain('Engine code: CGLC (from a web search, check the data label)');
     expect(text).toContain('Paint code: LY9B');
     expect(text).toContain('  Part number: 4G8920950K');
     expect(catalogueLinks('WAUZZZ4G1CN000001')[0].url).toBe('https://partsouq.com/catalogs/vin/WAUZZZ4G1CN000001/');

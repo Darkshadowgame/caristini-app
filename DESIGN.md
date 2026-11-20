@@ -7,14 +7,14 @@ description: A personal iPhone car scanner built to the craft of Apple's own app
   raised: "#2C2C2E"
   sunken: "#2C2C2E"
   text: "#FFFFFF"
-  muted: "rgba(235,235,245,0.64)"
-  faint: "rgba(235,235,245,0.32)"
+  muted: "rgba(235,235,245,0.72)"
+  faint: "rgba(235,235,245,0.4)"
   border: "rgba(84,84,88,0.6)"
   accent: "#FFB340"
   accentSoft: "rgba(255,179,64,0.18)"
   accentText: "#FFB340"
   onAccent: "#1A1205"
-  danger: "#FF6961"
+  danger: "#FF857D"
   dangerSoft: "rgba(255,69,58,0.2)"
   ok: "#30D158"
   okSoft: "rgba(48,209,88,0.18)"
@@ -33,17 +33,17 @@ description: A personal iPhone car scanner built to the craft of Apple's own app
   raised-light: "#FFFFFF"
   sunken-light: "#E5E5EA"
   text-light: "#000000"
-  muted-light: "rgba(60,60,67,0.72)"
+  muted-light: "rgba(60,60,67,0.78)"
   faint-light: "rgba(60,60,67,0.36)"
   border-light: "rgba(60,60,67,0.22)"
   accent-light: "#FF9F0A"
   accentSoft-light: "rgba(255,159,10,0.16)"
-  accentText-light: "#A65F00"
-  danger-light: "#D70015"
+  accentText-light: "#8A4E00"
+  danger-light: "#B80012"
   dangerSoft-light: "rgba(255,59,48,0.12)"
-  ok-light: "#1F7A35"
+  ok-light: "#196B2D"
   okSoft-light: "rgba(52,199,89,0.14)"
-  info-light: "#0062CC"
+  info-light: "#0058BA"
   infoSoft-light: "rgba(0,122,255,0.12)"
   red-light: "#FF3B30"
   blue-light: "#007AFF"
@@ -248,7 +248,7 @@ components:
     typography: "{typography.body}"
     rounded: "{rounded.field}"
     padding: "0 8px"
-    height: "36px"
+    height: "44px"
   code-chip:
     backgroundColor: "{colors.sunken}"
     textColor: "{colors.text}"
@@ -291,7 +291,7 @@ A neutral iOS system palette with one warm amber tint and the system state and t
 - **Info Blue** (`info`, `infoSoft`): maker-specific notes and context notices.
 
 ### Tertiary
-- **Tool Squares** (`red`, `blue`, `green`, `indigo`, `purple`, `teal`, `orange`, `grey`): the iOS system colours behind white glyphs in 30px rounded squares. Diagnose `red`, Live data `blue`, Service `green`, ECU info `indigo`, Customise `purple`, Code lookup `teal`. `grey` is the square for car facts and anything without its own tool. `red` doubles as the tab badge colour.
+- **Tool Squares** (`red`, `blue`, `green`, `indigo`, `purple`, `teal`, `orange`, `grey`): the iOS system colours behind white glyphs in 30px rounded squares. One square per tool family, from the `TOOLS` table in src/ui.tsx (29 tools on 8 colours): `red` Health check, History, Clear, Performance; `blue` Live data, Sensors, Dashboard, User guide; `green` Service, Battery, MOT check; `purple` Customise, Timeline, Learn from Carista, Research notes; `teal` Lookup, Fuses, Monitors, Emissions self-tests; `indigo` Learn my car, Modules, Discover, Car IDs, Health report, Data logger; `orange` Workshop, Diary; `grey` Listen, Vehicle details. Rows that are actions inside a tool (Check again, Read again, Share, Save, Start again) take the colour of the tool they sit in. `grey` is the square for car facts and anything without its own tool. `red` doubles as the tab badge colour.
 
 ### Neutral
 - **True Black** (`bg`): the page ground in dark appearance; iOS grouped grey in light.
@@ -325,9 +325,11 @@ A neutral iOS system palette with one warm amber tint and the system state and t
 - **Callout** (400, 16px, 21px): fault titles in code rows.
 - **Sub** (400, 15px, 20px): subtitles, summaries, notices.
 - **Small** (400, 13px, 18px): group footers, captions under buttons, code row details.
+- **Caption** (400, 12px, 16px): badge counts and the smallest notes.
 - **Label** (400, 13px, uppercase): grouped section headers, in `muted`.
 - **Figure** (700, 56px, 62px, tabular): the fault count in the Health and Diagnose cards, in `danger` or `ok`.
 - **Figure Progress** (700, 34px, tabular): the live scan percentage.
+- **Figure Mid** (700, 48px, 56px, tabular, `type.figureMid`): the big value on Knock, Logger, Sensors and Trip.
 - **Figure Tile** (700, 26px, tabular): live data tile values, with the unit at 14px in `muted`.
 - **Mono** (Menlo 700, 13px, tabular): fault code chips.
 
@@ -365,6 +367,8 @@ Capsules with a firm press: opacity 0.75 and scale 0.97 while held, 0.4 opacity 
 - **Compact:** 44px tall, 12px padding, 15px label, for a row of several (Values, Pause, Reset on Live data).
 
 ### Chips
+- **Segmented:** a `sunken` track with 2px padding and 48px minimum height; each segment is at least 44px tall, the chosen one lifted to `surface`. Used for the MOT walk-round (Pass, Advisory, Fail, To do) and for pickers with 2 to 4 options (`Segmented` in src/ui.tsx).
+- **Chip:** a 36px capsule with a 44px tap target, amber when selected (`Chip` and `Chips` in src/ui.tsx).
 - **Pill:** full-round, 3px by 9px padding, 13px semibold, optional 11px leading glyph. Tones: `ok`, `danger`, neutral (`sunken` with `muted`), `info`, `accent`.
 - **Code chip:** Menlo 13px bold on `sunken` (or `dangerSoft` with `danger` for a serious code), 6px radius.
 
@@ -378,11 +382,11 @@ Capsules with a firm press: opacity 0.75 and scale 0.97 while held, 0.4 opacity 
 - **Group:** an inset grouped section. Uppercase `label` header in `muted` outside and above the container (16px inset, 6px gap), optional `small` footer below. Rows inside are separated by hairlines.
 
 ### Inputs / Fields
-- **Search field:** `sunken` well, 10px radius, 36px tall, 16px magnifier glyph in `muted`, `body` text, amber cursor, no outline.
+- **Search field:** `sunken` well, 10px radius, 44px tall, 16px magnifier glyph in `muted`, `body` text, amber cursor, no outline.
 - **Focus:** native cursor only; no ring.
 
 ### Navigation
-- **Tab bar:** the native tab bar (Liquid Glass on iOS 26) with SF Symbols, filled when selected, tinted `accent`. Tabs: Car, Lookup, Diary, Garage. The Car tab shows a red badge when the engine light is on.
+- **Tab bar:** the native tab bar (Liquid Glass on iOS 26) with SF Symbols, filled when selected, tinted `accent`. Tabs: Car, Lookup, Diary, Settings. The Car tab shows a red badge when the engine light is on.
 - **Stacks:** large titles, transparent header over the system chrome material, `accentText` back chevron with no back label, 600 weight inline title.
 - **Modals:** Connect and Add to diary present as sheets with Cancel in `accentText` at leading. The value picker is a page sheet with Cancel and a semibold Done.
 - **Header button:** a plain 22px tint glyph in the native bar; on the web preview a 36px circle beside the in-page title.
@@ -423,9 +427,6 @@ One dot per control module around the mascot on the health check. Dots fill in a
 ### Tool tile (Home)
 Four main tools as 2-by-2 tiles: a solid tool-colour icon square, title, one-line status, a diagonal glow of the tool colour from the top left (`LinearGradient`, colour at 20% to 0%). Press scales to 0.97.
 
-### Caristini AI card
-Purple-to-amber glow with a purple hairline border, a pill-shaped "ask" field with an amber send button, and up to three suggestion chips. Without a key it becomes a set-up row that says what is needed.
-
 ### Category chips
 Horizontal scrolling pills above long lists (Customise, History): amber fill when selected, surface fill otherwise, count in tabular figures.
 
@@ -437,7 +438,7 @@ Amber-soft bar under a coding settings list while switches differ from the car: 
 ### Do:
 - **Do** use `accent` and `accentText` for every tappable element and nothing else, except ScanPulse and ProgressBar progress.
 - **Do** colour a result by meaning: `danger` for faults, `ok` for healthy, neutral `sunken` with `muted` for non-urgent states.
-- **Do** keep each tool on its own square: Diagnose `red`, Live data `blue`, Service `green`, ECU info `indigo`, Customise `purple`, Code lookup `teal`.
+- **Do** keep each tool on its own square, read from the `TOOLS` table (`tool('history')` or `TOOLS.history.colour`): never type a tool's colour by hand.
 - **Do** build screens from inset grouped sections with the uppercase header outside the container.
 - **Do** set every number with tabular figures and every code or VIN in Menlo.
 - **Do** honour Reduce Motion in any new motion, as ScanPulse and Arrive do.

@@ -4,19 +4,20 @@ import { keepRunning, letStop } from '../background';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { addHistory } from '../history';
-import { CATEGORY_COLOUR, CATEGORY_ICON, CATEGORY_ORDER, categoryOf, displaySensor, isPlausible, moduleNamer, readKey, SensorCategory, sensorId, SensorRow, sensorsForCar, SensorValue } from '../obd/sensors';
+import { CATEGORY_ICON, CATEGORY_ORDER, categoryOf, displaySensor, isPlausible, moduleNamer, readKey, SensorCategory, sensorId, SensorRow, sensorsForCar, SensorValue } from '../obd/sensors';
 import { byUsefulness, searchSensors } from '../obd/sensorSearch';
 import { useSettings } from '../settings';
 import { sendBack } from '../share/sendBack';
 import { sendLogNow } from '../share/sendLog';
 import { useConnection } from '../state';
 import { MONO, radius, space, type, useTheme } from '../theme';
-import { Button, GlowCard, Group, Icon, IconName, ListRow, NeedsConnection, Notice, Pill, ProgressBar, ScanPulse, Screen, SearchField, success, tap } from '../ui';
+import { Button, GlowCard, Group, Icon, IconName, ListRow, NeedsConnection, Notice, Pill, ProgressBar, ScanPulse, Screen, SearchField, success, tap, TOOLS } from '../ui';
 import { useGarage } from '../vehicle/garage';
 import { quickRows, remainingRows, sharedSensorKeys } from '../obd/sharedSensors';
 import { Switch } from 'react-native';
 import { SECTIONS } from '../help';
-import { aboutRange } from '../timeText';
+import { LeaveRunGuard } from '../leaveRun';
+import { aboutRange, dateText } from '../timeText';
 import { groupValuesText, sensorCount } from '../vehicle/counts';
 
 
@@ -63,6 +64,9 @@ export default function Sensors() {
     return () => clearTimeout(id);
   }, [typed]);
   const [message, setMessage] = useState<{ tone: 'ok' | 'danger' | 'info'; text: string } | null>(null);
+  // Whether the findings were sent, said in its own grey notice: a search
+  // that found sensors is green even when nothing could be sent.
+  const [sendNote, setSendNote] = useState<string | null>(null);
   const stop = useRef(false);
   const scanStarted = useRef(0);
   const alive = useRef(true);
@@ -109,7 +113,7 @@ export default function Sensors() {
   if (!client || !v) {
     return (
       <Screen>
-        <NeedsConnection what="your car's sensors" />
+        <NeedsConnection title="Connect your car to find its sensors" />
       </Screen>
     );
   }
@@ -128,6 +132,7 @@ export default function Sensors() {
     stop.current = false;
     setSearching(true);
     setMessage(null);
+    setSendNote(null);
     setLiveFound(0);
     stayAwake('sensors');
     void keepRunning('sensors');
@@ -167,7 +172,7 @@ export default function Sensors() {
       const what = mode === 'quick' ? 'Quick search' : 'Full search';
       await addHistory({ vin: v.vin, kind: 'sensors', title: `${count} sensor${count === 1 ? '' : 's'} found`, detail: stopped ? `${what} stopped early` : what, complete });
       success();
-      const note = `${count} sensor${count === 1 ? '' : 's'} found on this car.${gone ? ` ${gone} that answered before did not answer this time and were taken off.` : ''}${!complete && !stopped && left ? ` ${left} not asked yet (modules switched off).` : ''}`;
+      const note = `${count.toLocaleString('en-GB')} sensor${count === 1 ? '' : 's'} found on this car.${gone ? ` ${gone.toLocaleString('en-GB')} that answered before did not answer this time and were taken off.` : ''}${!complete && !stopped && left ? ` ${left.toLocaleString('en-GB')} not asked yet (modules switched off).` : ''}`;
       if (alive.current) setMessage({ tone: 'ok', text: note });
       // Send what was found back, so other cars and the next version know it.
       // Always tried: a failed send is kept on the phone and sent again later.
@@ -175,7 +180,7 @@ export default function Sensors() {
         (e) => ({ via: 'none' as const, detail: e instanceof Error ? e.message : String(e) }),
       );
       finished = true;
-      if (alive.current) setMessage({ tone: 'ok', text: `${note} ${r.via === 'github' ? 'Sent back so other cars learn from it.' : r.detail}` });
+      if (alive.current) setSendNote(r.via === 'github' ? 'Sent back so other cars learn from it.' : r.detail);
     } catch (e) {
       if (alive.current) setMessage({ tone: 'danger', text: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -277,18 +282,19 @@ export default function Sensors() {
           <Text style={[type.body, { color: t.text }]}>{r.n}</Text>
           <Text style={[type.small, { color: t.muted }]}>
             {nameOf(r.h)} · <Text style={{ fontFamily: MONO }}>{r.d}</Text>
-            {r.ai ? <Text style={{ color: t.accentText }}> · named by AI</Text> : !ownList(r.src) ? <Text> · {r.src.replace(/-/g, ' ')} list</Text> : null}
+            {r.ai ? <Text style={{ color: t.accentText }}> · name from a web search</Text> : !ownList(r.src) ? <Text> · {r.src.replace(/-/g, ' ')} list</Text> : null}
           </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={[type.title3, type.number, { color: d && !odd ? t.text : t.faint }]} accessibilityLabel={d ? undefined : 'No reading'}>
+          <Text style={[type.title3, type.number, { color: d && !odd ? t.text : t.muted }]} accessibilityLabel={d ? undefined : 'No reading'}>
             {d ? d.text : '–'}
             {d?.unit ? <Text style={[type.sub, { color: t.muted }]}> {d.unit}</Text> : null}
           </Text>
           {odd ? <Text style={[type.caption, { color: t.accentText }]}>check: may not apply</Text> : null}
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel={on ? `Unpin ${r.n}` : `Pin ${r.n} to the top`} hitSlop={10} onPress={() => togglePin(r)} style={{ marginLeft: space.md }}>
-          <Icon name={on ? ('star' as IconName) : 'star-outline'} size={20} color={on ? t.accent : t.faint} />
+          {/* Amber on or off: the star can be tapped either way. */}
+          <Icon name={on ? ('star' as IconName) : 'star-outline'} size={20} color={on ? t.accent : t.accentText} />
         </Pressable>
       </View>
     );
@@ -297,27 +303,30 @@ export default function Sensors() {
   return (
     <Screen>
       <Stack.Screen options={{ title: cat ?? 'Find my car’s sensors' }} />
+      {/* Back while a search runs asks first; leaving the app or locking the phone does not. */}
+      <LeaveRunGuard active={searching} onStop={() => (stop.current = true)} />
       {message ? <Notice tone={message.tone} icon={message.tone === 'ok' ? 'check' : message.tone === 'info' ? 'information-outline' : 'alert-circle-outline'} text={message.text} /> : null}
+      {sendNote ? <Notice icon="information-outline" text={sendNote} /> : null}
 
       {searching ? (
         <GlowCard tone="brand" style={{ alignItems: 'center' }}>
           <ScanPulse active size={132} />
           <Text style={[type.title3, { color: t.text, marginTop: space.md }]}>Searching your car</Text>
           <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: 4, marginBottom: space.lg }]}>
-            {liveFound} found so far. Keep the ignition on; the engine can run.
+            {liveFound.toLocaleString('en-GB')} found so far. Keep the ignition on; the engine can run.
           </Text>
           <View style={{ alignSelf: 'stretch' }}>
             <ProgressBar value={progress ? progress.done / Math.max(1, progress.total) : 0} label={progress?.module ? `Asking the ${progress.module.toLowerCase()}` : 'Starting'} done={progress?.done} total={progress?.total} startedAt={scanStarted.current} />
           </View>
           <View style={{ alignSelf: 'stretch', marginTop: space.lg }}>
-            <Button label="Stop and keep what was found" variant="secondary" onPress={() => (stop.current = true)} />
+            <Button label="Stop and keep results" variant="secondary" onPress={() => (stop.current = true)} />
           </View>
         </GlowCard>
       ) : !v.sensorScan ? (
-        <GlowCard tone="brand">
+        <GlowCard tone="plain">
           <View style={styles.heroRow}>
-            <View style={[styles.heroIcon, { backgroundColor: t.accentSoft }]}>
-              <Icon name="radar" size={30} color={t.accent} />
+            <View style={[styles.heroIcon, { backgroundColor: t[TOOLS.sensors.colour] }]}>
+              <Icon name={TOOLS.sensors.icon} size={30} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[type.title3, { color: t.text }]}>Find my car’s sensors</Text>
@@ -331,7 +340,7 @@ export default function Sensors() {
       {!all.length ? (
         <Notice
           icon="information-outline"
-          text={`No sensor list fits this car: its older modules give values in numbered value groups instead.${sensorCount(v).groupValues ? ` Learn my car found ${groupValuesText(sensorCount(v))}.` : ' Learn my car reads them.'} Watch them in Live data, under Older VW modules.`}
+          text={`No sensor list fits this car: its older VW modules give values in numbered value groups instead.${sensorCount(v).groupValues ? ` Learn my car found ${groupValuesText(sensorCount(v))}.` : ' Learn my car reads them.'} Watch them in Live data, under Older VW modules.`}
         />
       ) : !searching && !v.sensorScan ? (
         scanControls
@@ -344,7 +353,7 @@ export default function Sensors() {
                 <View style={{ flex: 1 }}>
                   <Text style={[type.heading, { color: t.text }]}>{mine.length === 1 ? 'sensor' : 'sensors'} on this car</Text>
                   <Text style={[type.small, { color: t.muted }]}>
-                    Searched {new Date(v.sensorScan!.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    Searched {dateText(v.sensorScan!.at)}
                     {v.sensorScan!.complete ? '' : ', more left to ask'}
                   </Text>
                 </View>
@@ -366,7 +375,8 @@ export default function Sensors() {
           ) : null}
           <Group header="By system" help={SECTIONS.sensorsBySystem}>
             {counts.map(({ c, n }, i) => (
-              <ListRow key={c} first={i === 0} icon={CATEGORY_ICON[c] as IconName} iconColour={CATEGORY_COLOUR[c]} title={c} value={String(n)} onPress={() => router.push({ pathname: '/sensors', params: { cat: c } })} />
+              // Grey squares: a system of the car is a fact about it, not a tool or a state.
+              <ListRow key={c} first={i === 0} icon={CATEGORY_ICON[c] as IconName} iconColour="grey" title={c} value={n.toLocaleString('en-GB')} onPress={() => router.push({ pathname: '/sensors', params: { cat: c } })} />
             ))}
           </Group>
           {scanControls}
@@ -375,12 +385,12 @@ export default function Sensors() {
 
       {(cat || query.trim()) && !searching ? (
         <Group header={query.trim() ? `${shown.length} match${shown.length === 1 ? '' : 'es'} in every system` : `${shown.length} sensor${shown.length === 1 ? '' : 's'}, most useful first`} help={SECTIONS.sensorsResults} footer="Values refresh while this page is open. Tap the star to pin a value to the top of Live data.">
-          {shown.length ? visible.map(row) : <ListRow first title={query.trim() ? 'No sensor matches' : 'Nothing here yet'} subtitle={query.trim() ? 'Try another word, for example temp, pressure or gearbox.' : 'Run the search again to look for more.'} noChevron />}
+          {shown.length ? visible.map(row) : <ListRow first title={query.trim() ? 'No sensor matches' : 'No sensors yet'} subtitle={query.trim() ? 'Try another word, for example temp, pressure or gearbox.' : 'Run the search again to look for more.'} noChevron />}
           {shown.length > visible.length ? <ListRow icon="chevron-down" iconColour="blue" title={`Show ${Math.min(PAGE, shown.length - visible.length)} more`} subtitle={`${shown.length - visible.length} not shown`} onPress={() => setLimit((n) => n + PAGE)} noChevron /> : null}
         </Group>
       ) : null}
 
-      <Text style={[type.caption, { color: t.faint, textAlign: 'center', marginTop: space.md }]}>Sensor definitions: OBDb project, CC BY-SA 4.0.</Text>
+      <Text style={[type.caption, { color: t.muted, textAlign: 'center', marginTop: space.md }]}>Sensor definitions: OBDb project, CC BY-SA 4.0.</Text>
     </Screen>
   );
 }
@@ -388,7 +398,7 @@ export default function Sensors() {
 const styles = StyleSheet.create({
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.lg },
   heroIcon: { width: 56, height: 56, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
-  big: { fontSize: 44, lineHeight: 50, fontWeight: '800', letterSpacing: -1 },
+  big: { fontSize: 48, lineHeight: 56, fontWeight: '700', letterSpacing: -1 },
   sensor: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: space.lg, gap: space.sm },
   moduleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: space.lg, gap: space.sm },
 });

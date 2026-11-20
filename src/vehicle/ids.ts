@@ -1,7 +1,7 @@
 // Parts and IDs: everything needed to buy parts for a car without connecting
 // to it. Module identities are saved whenever a screen reads them; codes that
 // are not readable over OBD (paint, gearbox, engine code and so on) are typed
-// by the owner from the vehicle's data label, or found by AI research and
+// by the owner from the vehicle's data label, or found by a web search and
 // marked as such.
 import type { ModuleDetails, ModuleInfo } from '../obd/elm';
 
@@ -19,7 +19,8 @@ export interface ModuleId {
   at: number;
 }
 
-// A code with where it came from: typed by the owner, or found by AI (to check).
+// A code with where it came from: typed by the owner, or from a web search
+// by an earlier version (to check). The stored value stays 'ai'.
 export interface IdValue {
   value: string;
   from: 'owner' | 'ai';
@@ -119,7 +120,7 @@ export function idsText(car: { title: string; vin: string }, ids: CarIds | undef
   const lines = [`${car.title}`, `VIN ${car.vin}`];
   for (const f of CODE_FIELDS) {
     const v = ids?.codes?.[f.key];
-    if (v?.value) lines.push(`${f.label}: ${v.value}${v.from === 'ai' ? ' (found by AI, check the data label)' : ''}`);
+    if (v?.value) lines.push(`${f.label}: ${v.value}${v.from === 'ai' ? ' (from a web search, check the data label)' : ''}`);
   }
   if (ids?.modules?.length) {
     lines.push('', 'Control modules');

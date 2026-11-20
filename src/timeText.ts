@@ -1,6 +1,7 @@
-// One way to say how long something takes, for the Car tab, Learn my car,
-// Unknown values, the sensor search and their summaries. Pure, so it is tested
-// without a phone (__tests__/uxRecheck.test.ts).
+// One way to say how long something takes, how long is left, and when
+// something happened, for every screen and summary; and one name for every
+// shared file. Pure, so it is tested without a phone
+// (__tests__/uxRecheck.test.ts, __tests__/timeText.test.ts).
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -45,4 +46,80 @@ export function shortDuration(ms: number): string {
   const s = Math.max(0, ms / 1000);
   if (s < 59.5) return `${Math.max(1, Math.round(s))} s`;
   return `${Math.max(1, Math.round(s / 60))} min`;
+}
+
+// ---------------------------------------------------------------------------
+// Time left on a running job: one wording on every screen.
+// ---------------------------------------------------------------------------
+
+// "under a minute left", "about 6 min left", "about 2 h 10 min left".
+export function leftText(seconds: number): string {
+  if (seconds < 60) return 'under a minute left';
+  const m = Math.round(seconds / 60);
+  if (m < 90) return `about ${m} min left`;
+  const h = Math.floor(m / 60);
+  return `about ${h} h ${m - h * 60} min left`;
+}
+
+// The same words from how fast the work has gone so far; null until there is
+// enough to judge (5 items and 5 seconds).
+export function timeLeft(done: number, total: number, startedAt: number, now = Date.now()): string | null {
+  const elapsed = now - startedAt;
+  if (done < 5 || elapsed < 5000 || total <= done) return null;
+  return leftText(((total - done) * elapsed) / done / 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Dates and times: one format on every screen, in the phone's own time zone.
+// Files (CSV, logs) keep ISO dates.
+// ---------------------------------------------------------------------------
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const two = (n: number) => String(n).padStart(2, '0');
+
+// A time in milliseconds, a Date, or a diary date ("2026-11-09", read as that
+// day on this phone, not as midnight in London).
+function toDate(at: number | string | Date): Date | null {
+  if (at instanceof Date) return Number.isNaN(at.getTime()) ? null : at;
+  if (typeof at === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(at);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// "9 Nov 2026". Text that is not a date comes back as it was.
+export function dateText(at: number | string | Date): string {
+  const d = toDate(at);
+  if (!d) return String(at);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// "17:02", on the 24-hour clock.
+export function clockText(at: number | string | Date): string {
+  const d = toDate(at);
+  if (!d) return '';
+  return `${two(d.getHours())}:${two(d.getMinutes())}`;
+}
+
+// "9 Nov 2026, 17:02".
+export function dateTimeText(at: number | string | Date): string {
+  const d = toDate(at);
+  if (!d) return String(at);
+  return `${dateText(d)}, ${clockText(d)}`;
+}
+
+// The date part of a shared file's name: "20261109".
+export function fileDate(at: number | Date = Date.now()): string {
+  const d = toDate(at) ?? new Date();
+  return `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}`;
+}
+
+// One name for every file the app shares, without the extension:
+// "Caristini-health-report-WVWZZZ1KZBW000001-20261109". what: lower-case
+// words; stamp: a log's own start time in place of the date.
+export function shareFileName(what: string, vin: string | null | undefined, at: number | Date = Date.now(), stamp?: string): string {
+  const clean = (s: string) => s.trim().replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return ['Caristini', clean(what.toLowerCase()), vin ? clean(vin.toUpperCase()) : null, stamp ? stamp.replace(/[^0-9-]/g, '') : fileDate(at)].filter(Boolean).join('-');
 }

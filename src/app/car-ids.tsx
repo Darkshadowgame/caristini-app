@@ -1,17 +1,18 @@
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { packFor } from '../data/cars';
 import { SECTIONS } from '../help';
-import { MONO, radius, space, type, useTheme } from '../theme';
-import { Button, GlowCard, Group, Icon, IconName, ListRow, Notice, Pill, Screen, success, tap } from '../ui';
+import { MONO, space, type, useTheme } from '../theme';
+import { Button, Field, GlowCard, Group, Icon, IconName, ListRow, Notice, Pill, Screen, success, tap, tool } from '../ui';
 import { partsOf, useGarage, vehicleTitle } from '../vehicle/garage';
 import { catalogueLinks, CODE_FIELDS, CodeKey, idsText, labelHint, ModuleId, PartItem, withOlderModules } from '../vehicle/ids';
 import { modulesFor } from '../obd/modules';
 import { tp20Name } from '../obd/tp20';
 import { useConnection } from '../state';
 import { decodeVin, vagModelFromParts } from '../vehicle/vin';
+import { dateText } from '../timeText';
 
 // Parts and IDs: one car's identity numbers and codes, every module's part
 // number, software and coding, and a parts list, all kept on the phone so
@@ -126,14 +127,14 @@ export default function CarIds() {
       {p.notes ? <Text style={[type.small, { color: t.muted }]}>{p.notes}</Text> : null}
       {p.confidence === 'Medium' ? <Pill text="One source" /> : null}
       <Pressable accessibilityRole="link" onPress={() => Linking.openURL(p.source.url)}>
-        <Text style={[type.caption, { color: t.faint, textDecorationLine: 'underline' }]}>{p.source.label}</Text>
+        <Text style={[type.caption, { color: t.accentText }]}>{p.source.label}</Text>
       </Pressable>
     </View>
   );
 
   return (
     <Screen>
-      <GlowCard tone="brand" style={{ padding: space.lg, gap: space.sm }}>
+      <GlowCard tone="plain" style={{ padding: space.lg, gap: space.sm }}>
         <Text style={[type.title3, { color: t.text }]}>{vehicleTitle(v)}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Copy the VIN" onPress={() => copy(v.vin, 'VIN')}>
           <Text selectable style={[type.heading, { color: t.text, fontFamily: MONO, letterSpacing: 1 }]}>
@@ -161,23 +162,22 @@ export default function CarIds() {
             <View key={f.key} style={[styles.field, { borderColor: t.border, borderTopWidth: i ? StyleSheet.hairlineWidth : 0 }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
                 <Text style={[type.small, { color: t.muted, flex: 1 }]}>{f.label}</Text>
-                {val?.from === 'ai' ? <Pill text="Found by AI, check" /> : null}
+                {val?.from === 'ai' ? <Pill text="From a web search, check" /> : null}
               </View>
-              <TextInput
+              <Field
                 value={drafts[f.key] ?? val?.value ?? ''}
-                onChangeText={(x) => setDrafts((d) => ({ ...d, [f.key]: x }))}
-                onEndEditing={(e) => saveCode(f.key, e.nativeEvent.text)}
+                onChange={(x) => setDrafts((d) => ({ ...d, [f.key]: x }))}
+                onEndEditing={(text) => saveCode(f.key, text)}
                 onBlur={() => drafts[f.key] != null && saveCode(f.key, drafts[f.key]!)}
                 placeholder={f.hint}
-                placeholderTextColor={t.faint}
-                autoCapitalize={f.key === 'tyreSize' || f.key === 'batteryType' ? 'none' : 'characters'}
-                autoCorrect={false}
+                caps={f.key === 'tyreSize' || f.key === 'batteryType' ? 'none' : 'characters'}
+                mono
                 accessibilityLabel={f.label}
-                style={[type.body, styles.input, { color: t.text, fontFamily: MONO }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
+                style={{ marginTop: space.xs }}
               />
               {val?.from === 'ai' && val.source ? (
                 <Pressable accessibilityRole="link" onPress={() => Linking.openURL(val.source!.url)}>
-                  <Text style={[type.caption, { color: t.faint, textDecorationLine: 'underline' }]}>{val.source.label}</Text>
+                  <Text style={[type.caption, { color: t.accentText }]}>{val.source.label}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -197,7 +197,7 @@ export default function CarIds() {
         >
           <ListRow
             first
-            icon={'book-open-variant' as IconName}
+            icon={'book-open-page-variant' as IconName}
             iconColour="teal"
             title="Car reference"
             subtitle="Known faults, fluids, service schedule, specs, recalls"
@@ -215,10 +215,10 @@ export default function CarIds() {
       <Group
         header={`Control modules${modules.length ? ` (${modules.length})` : ''}`}
         help={SECTIONS.idsModules}
-        footer={modules.length ? `From your last reads, ${new Date(latest).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}. Tap a module for its part number, software and coding; press and hold a line to copy it.` : `${connected ? 'Open' : 'Connect, then open'} Read part numbers once: every module’s part number, software and coding is kept here.`}
+        footer={modules.length ? `From your last reads, ${dateText(latest)}. Tap a module for its part number, software and coding; press and hold a line to copy it.` : `${connected ? 'Open' : 'Connect, then open'} Read part numbers once: every module’s part number, software and coding is kept here.`}
       >
-        {modules.length ? modules.map(moduleRow) : <ListRow first title="Nothing read yet" noChevron />}
-        <ListRow icon="chip" iconColour="indigo" title="Read part numbers from the car" subtitle={connected ? undefined : 'Needs the adapter connected'} onPress={() => router.push('/modules')} />
+        {modules.length ? modules.map(moduleRow) : <ListRow first title="No modules read yet" noChevron />}
+        <ListRow {...tool('module')} title="Read part numbers from the car" subtitle={connected ? undefined : 'Needs the adapter connected'} onPress={() => router.push('/modules')} />
       </Group>
 
       <Group header="Parts diagrams by VIN" help={SECTIONS.idsCatalogues} footer="Opening a catalogue sends the VIN to that site. The VIN is copied first, ready to paste.">
@@ -238,15 +238,13 @@ export default function CarIds() {
         ))}
       </Group>
 
-      <Group header="Notes" footer="Anything else you want to keep with this car: tyre pressures, key numbers, parts you have fitted.">
-        <TextInput
+      <Group header="Notes" padded footer="Anything else you want to keep with this car: tyre pressures, key numbers, parts you have fitted.">
+        <Field
           value={drafts.notes ?? ids.notes ?? ''}
-          onChangeText={(x) => setDrafts((d) => ({ ...d, notes: x }))}
+          onChange={(x) => setDrafts((d) => ({ ...d, notes: x }))}
           onBlur={() => drafts.notes != null && garage.update(v.vin, { ids: { ...(garage.latest(v.vin)?.ids ?? {}), notes: drafts.notes } })}
           placeholder="Notes"
-          placeholderTextColor={t.faint}
           multiline
-          style={[type.body, styles.notes, { color: t.text }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
         />
       </Group>
     </Screen>
@@ -257,7 +255,5 @@ const styles = StyleSheet.create({
   detail: { paddingHorizontal: space.lg, paddingBottom: space.md, gap: 6 },
   kv: { flexDirection: 'row', gap: space.sm },
   part: { paddingHorizontal: space.lg, paddingVertical: space.sm + 2, gap: 2 },
-  field: { paddingHorizontal: space.lg, paddingVertical: space.sm, gap: 2 },
-  input: { paddingVertical: 6, borderRadius: radius.sm },
-  notes: { minHeight: 90, padding: space.lg, textAlignVertical: 'top' },
+  field: { paddingHorizontal: space.lg, paddingVertical: space.md, gap: 2 },
 });

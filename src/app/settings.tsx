@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Linking, Platform, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import * as Updates from 'expo-updates';
 import { getOwnSecret, isBuiltIn, SecretName, setSecret } from '../share/secrets';
 import { canSendAutomatically, flushOutbox, outbox, sendBack, shareOutbox } from '../share/sendBack';
@@ -15,7 +15,8 @@ import { playSound, setAlertSounds } from '../sound';
 import { useConnection } from '../state';
 import { radius, space, type, useTheme } from '../theme';
 import { Help, SECTIONS, WHAT_IS_SENT } from '../help';
-import { Button, Group, ListRow, Notice, Screen, ConfirmSheet } from '../ui';
+import { TOOLS, Button, Field, Group, ListRow, Notice, Screen, ConfirmSheet, tool } from '../ui';
+import { dateTimeText } from '../timeText';
 
 export default function SettingsScreen({ title, guide }: { title?: string; guide?: Help } = {}) {
   const t = useTheme();
@@ -27,6 +28,8 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logCount, setLogCount] = useState(trafficLog.count());
+  // Clear log asks first, like every other delete.
+  const [confirmClearLog, setConfirmClearLog] = useState(false);
 
   const check = async () => {
     if (!conn.client) return;
@@ -59,13 +62,13 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
 
   return (
     <Screen title={title} guide={guide}>
-      <Group header="Speed and distance" footer={settings.speedAuto ? `Automatic: ${auto.speed === 'mph' ? 'miles' : 'kilometres'}${region ? ` for your phone's region (${region})` : ''}.` : undefined}>
-        <ListRow first title="Automatic" subtitle="From your phone's region" selected={settings.speedAuto} noChevron onPress={() => set({ speedAuto: true, speed: auto.speed })} />
+      <Group header="Speed and distance" footer={settings.speedAuto ? `Automatic: ${auto.speed === 'mph' ? 'miles' : 'kilometres'}${region ? ` for your phone’s region (${region})` : ''}.` : undefined}>
+        <ListRow first title="Automatic" subtitle="From your phone’s region" selected={settings.speedAuto} noChevron onPress={() => set({ speedAuto: true, speed: auto.speed })} />
         <ListRow title="Miles (mph)" selected={!settings.speedAuto && settings.speed === 'mph'} noChevron onPress={() => set({ speedAuto: false, speed: 'mph' })} />
         <ListRow title="Kilometres (km/h)" selected={!settings.speedAuto && settings.speed === 'km/h'} noChevron onPress={() => set({ speedAuto: false, speed: 'km/h' })} />
       </Group>
-      <Group header="Temperature" footer={settings.tempAuto ? `Automatic: ${auto.temp === '°C' ? 'Celsius' : 'Fahrenheit'}${region ? ` for your phone's region (${region})` : ''}.` : undefined}>
-        <ListRow first title="Automatic" subtitle="From your phone's region" selected={settings.tempAuto} noChevron onPress={() => set({ tempAuto: true, temp: auto.temp })} />
+      <Group header="Temperature" footer={settings.tempAuto ? `Automatic: ${auto.temp === '°C' ? 'Celsius' : 'Fahrenheit'}${region ? ` for your phone’s region (${region})` : ''}.` : undefined}>
+        <ListRow first title="Automatic" subtitle="From your phone’s region" selected={settings.tempAuto} noChevron onPress={() => set({ tempAuto: true, temp: auto.temp })} />
         <ListRow title="Celsius (°C)" selected={!settings.tempAuto && settings.temp === '°C'} noChevron onPress={() => set({ tempAuto: false, temp: '°C' })} />
         <ListRow title="Fahrenheit (°F)" selected={!settings.tempAuto && settings.temp === '°F'} noChevron onPress={() => set({ tempAuto: false, temp: '°F' })} />
       </Group>
@@ -109,7 +112,7 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
         ) : null}
         <View style={styles.pad}>
           <Button label={report ? 'Check again' : 'Check adapter'} icon="car-connected" variant="secondary" busy={checking} disabled={!conn.client || checking} onPress={check} />
-          {!conn.client ? <Text style={[type.small, { color: t.muted, marginTop: space.sm }]}>Connect to the adapter first.</Text> : null}
+          {!conn.client ? <Text style={[type.small, { color: t.muted, marginTop: space.sm }]}>Connect your car first.</Text> : null}
         </View>
       </Group>
       {error ? <Notice tone="danger" icon="alert-circle-outline" text={error} /> : null}
@@ -138,7 +141,7 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
           icon="share-variant"
           iconColour="blue"
           title="Share adapter log"
-          value={`${logCount} lines`}
+          value={`${logCount.toLocaleString('en-GB')} line${logCount === 1 ? '' : 's'}`}
           disabled={!logCount}
           onPress={() =>
             Share.share({
@@ -152,10 +155,7 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
           iconColour="grey"
           title="Clear log"
           disabled={!logCount}
-          onPress={() => {
-            trafficLog.clear();
-            setLogCount(0);
-          }}
+          onPress={() => setConfirmClearLog(true)}
         />
       </Group>
 
@@ -172,22 +172,27 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
           <SecretRow name="githubToken" label="GitHub token (optional)" placeholder="github_pat_..." />
           <View style={[styles.row, { borderColor: t.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
             <Text style={[type.body, { color: t.text }]}>Email to</Text>
-            <TextInput
-              value={settings.sendTo}
-              onChangeText={(v) => set({ sendTo: v.trim() })}
-              placeholder="you@example.com"
-              placeholderTextColor={t.muted}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={[type.body, styles.inline, { color: t.text }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
-            />
+            <Field value={settings.sendTo} onChange={(v) => set({ sendTo: v.trim() })} placeholder="you@example.com" caps="none" keyboard="email-address" accessibilityLabel="Email to" style={{ flex: 1 }} />
           </View>
         </Group>
       ) : null}
 
       <Group header="Help">
-        <ListRow first icon="help-circle-outline" iconColour="blue" title="User guide" subtitle="What each screen does and how it works" onPress={() => router.push('/guide')} />
+        <ListRow first icon="help-circle-outline" iconColour={TOOLS.guide.colour} title="User guide" subtitle="What each screen does and how it works" onPress={() => router.push('/guide')} />
       </Group>
+
+      <ConfirmSheet
+        visible={confirmClearLog}
+        title="Clear the adapter log?"
+        lines={[`Deletes ${logCount.toLocaleString('en-GB')} line${logCount === 1 ? '' : 's'} from this phone. Lines already sent to your private findings store stay there.`]}
+        confirmLabel="Clear log"
+        onCancel={() => setConfirmClearLog(false)}
+        onConfirm={() => {
+          setConfirmClearLog(false);
+          trafficLog.clear();
+          setLogCount(0);
+        }}
+      />
     </Screen>
   );
 }
@@ -197,7 +202,7 @@ function UpdatesGroup({ developer }: { developer: boolean }) {
   const [state, setState] = useState<'idle' | 'checking' | 'none' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const enabled = Updates.isEnabled;
-  const when = Updates.createdAt ? Updates.createdAt.toLocaleString('en-GB') : null;
+  const when = Updates.createdAt ? dateTimeText(Updates.createdAt) : null;
   const check = async () => {
     setState('checking');
     setError(null);
@@ -311,7 +316,7 @@ function OutboxRows() {
         <ListRow
           icon="car-search"
           iconColour="indigo"
-          title="Send each car's saved findings"
+          title="Send each car’s saved findings"
           subtitle={`What ${cars.length === 1 ? 'your car has' : `your ${cars.length} cars have`} saved: modules, sensors, settings`}
           disabled={busy}
           onPress={() =>
@@ -393,10 +398,10 @@ function SecretRow({ name, label, placeholder, first }: { name: SecretName; labe
   return (
     <View style={[styles.row, { borderColor: t.border, borderTopWidth: first ? 0 : StyleSheet.hairlineWidth }]}>
       <Text style={[type.body, { color: t.text }]}>{label}</Text>
-      <TextInput
+      <Field
         value={draft}
-        onChangeText={setDraft}
-        onSubmitEditing={async () => {
+        onChange={setDraft}
+        onSubmit={async () => {
           if (!draft.trim()) return;
           await setSecret(name, draft.trim());
           setDraft('');
@@ -409,19 +414,19 @@ function SecretRow({ name, label, placeholder, first }: { name: SecretName; labe
           setSaved(true);
         }}
         placeholder={placeholder}
-        placeholderTextColor={t.muted}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="done"
-        style={[type.body, styles.inline, { color: t.text, backgroundColor: t.sunken }, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
+        secure
+        caps="none"
+        mono
+        returnKey="done"
+        accessibilityLabel={label}
+        style={{ flex: 1 }}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  inline: { flex: 1, textAlign: 'right', borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 6 },
+
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg },
   pad: { padding: space.lg },
 });

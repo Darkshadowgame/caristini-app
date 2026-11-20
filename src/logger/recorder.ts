@@ -337,7 +337,7 @@ export class LoggerSession {
       }
     } catch (e) {
       const lost = e instanceof LinkLost;
-      if (this.status.phase === 'recording') await this.finish(lost ? 'The adapter connection dropped. The log was saved up to that point.' : null);
+      if (this.status.phase === 'recording') await this.finish(lost ? 'The adapter connection dropped. The log was saved up to that point.' : `Recording stopped: ${e instanceof Error ? e.message : String(e)}. Check the ignition is on, then tap Record.`);
       this.set({ phase: 'idle', message: lost ? 'The adapter connection dropped.' : this.status.message }, true);
     } finally {
       this.looping = false;

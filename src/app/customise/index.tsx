@@ -1,10 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Mascot } from '../../brand/Mascot';
 import { bitsLabel, CodingItem, codingItemsFor, isOn, stateText, withItem } from '../../coding/items';
 import { LearnedSetting, learnedIsOn, learnedKeys, learnedModules, learnedReady, splitKey, withLearned } from '../../coding/learn';
-import { sharedFits, sharedLearned } from '../../coding/shared';
+import { settingKey, sharedFits, sharedLearned } from '../../coding/shared';
 import { addDiary, SETTING_CHANGED, today } from '../../diary';
 import { addHistory } from '../../history';
 import { kbForCar, kbSettings, loadKb } from '../../kb';
@@ -15,7 +15,7 @@ import { toHex } from '../../obd/uds';
 import { cacheAfterWrite } from '../../diag/timeline';
 import { useConnection } from '../../state';
 import { space, type, useTheme } from '../../theme';
-import { ConfirmSheet, GlowCard, Group, Icon, ListRow, NeedsConnection, Notice, Pill, Screen, success, tap } from '../../ui';
+import { TOOLS, Chips, ConfirmSheet, GlowCard, Group, Icon, ListRow, NeedsConnection, Notice, Pill, Screen, success, tap, tool } from '../../ui';
 import { TryResult, useGarage, vehicleTitle } from '../../vehicle/garage';
 import { SECTIONS } from '../../help';
 
@@ -31,13 +31,19 @@ const CATEGORY_ICON: Record<string, React.ComponentProps<typeof Icon>['name']> =
 };
 
 
-// warn: set after the battery and engine check asked first; the next confirm writes anyway.
+// A switch writes at once (kinds item and learned go straight to run). Only
+// Forget and Put back ask first, through the confirm sheet.
 type Pending =
-  | { kind: 'item'; item: CodingItem; on: boolean; warn?: string }
-  | { kind: 'learned'; setting: LearnedSetting; on: boolean; warn?: string }
-  | { kind: 'forget'; setting: LearnedSetting; warn?: string }
-  | { kind: 'restore'; module: string; warn?: string }
+  | { kind: 'item'; item: CodingItem; on: boolean }
+  | { kind: 'learned'; setting: LearnedSetting; on: boolean }
+  | { kind: 'forget'; setting: LearnedSetting }
+  | { kind: 'restore'; module: string; top?: boolean }
   | null;
+
+// Shown beside the spinner while a change is written to the car.
+const WRITING = 'Writing. Keep this page open.';
+// Where the result of a put back from Backups shows: beside Backups.
+const RESTORE_MSG = 'restore';
 
 export default function Customise() {
   const t = useTheme();
@@ -96,8 +102,6 @@ export default function Customise() {
   // The setting whose Technical details (source notes, byte, bits) are open.
   const [techId, setTechId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'danger'; text: string; id?: string } | null>(null);
-  // Try mode: after a change to an untested setting, ask whether it worked.
-  const [ask, setAsk] = useState<{ id: string; title: string; done: { key: string; before: number[]; after: number[] }[]; login?: number } | null>(null);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -126,7 +130,8 @@ export default function Customise() {
         out[id] = 'data' in r ? r.data : null;
       } else out[id] = await client.readCoding(def);
       if (!alive.current) return;
-      if (out[id]) client.sessionValues.set(id, out[id]!);
+      // A value written during this read is newer than what was read: keep it.
+      if (out[id] && !written.current.has(id)) client.sessionValues.set(id, out[id]!);
       done.add(id);
       if (!written.current.has(id)) setCodings((old) => ({ ...old, [id]: out[id] }));
       setChecked(new Set(done));
@@ -134,7 +139,10 @@ export default function Customise() {
     setReading(false);
     if (v) {
       const cache = Object.fromEntries(Object.entries(out).filter(([k, c]) => !!c && c.length > 0 && !written.current.has(k)).map(([k, c]) => [k, toHex(c!)]));
-      garage.update(v.vin, { codingCache: { ...(v.codingCache ?? {}), ...cache } });
+      // Built on the newest saved copy, not the one this read started with: a
+      // switch flipped while other modules were still being read has saved its
+      // new coding since, and the old copy would put the old bytes back.
+      garage.update(v.vin, { codingCache: { ...(garage.latest(v.vin)?.codingCache ?? {}), ...cache } });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, moduleIds.join()]);
@@ -154,14 +162,14 @@ export default function Customise() {
     const name = defOf(wantRestore)?.name ?? wantRestore;
     if (!now) setMessage({ tone: 'danger', text: `${name} did not answer, so its coding could not be read. Check the ignition is on, then tap Read settings again.` });
     else if (toHex(now) === v?.codingOriginal?.[wantRestore]) setMessage({ tone: 'ok', text: `${name} already has its original coding. Nothing to put back.` });
-    else setPending({ kind: 'restore', module: wantRestore });
+    else setPending({ kind: 'restore', module: wantRestore, top: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantRestore, reading, checked]);
 
   if (!v) {
     return (
       <Screen>
-        <NeedsConnection title="Connect your car to change settings" />
+        <NeedsConnection title="Connect your car to change its settings" />
       </Screen>
     );
   }
@@ -174,7 +182,9 @@ export default function Customise() {
     // Old 3-digit short coding is not a byte layout: no catalogue bit fits it.
     const def = defOf(i.module);
     if (def && client?.codingStyle(def) === 'short') return false;
-    return i.length ? c.length === i.length : c.length > i.byte;
+    // Offered whenever the coding holds the byte. A coding longer or shorter
+    // than the source car's is noted under Technical, not hidden.
+    return c.length > i.byte;
   };
   const available = items.filter(ready);
   const unreachable = items.filter((i) => !reading && checked.has(i.module) && !ready(i));
@@ -183,68 +193,26 @@ export default function Customise() {
   // Checks every change must pass before Caristini writes anything.
   const preflight = () => preflightCheck(client);
   const tried = v.tried ?? {};
-  const mark = (id: string, r: TryResult) => garage.update(v.vin, { tried: { ...(v.tried ?? {}), [id]: r } });
-
-  // "No, put it back": writes the previous values again, newest first.
-  const undoTry = async () => {
-    const a = ask;
-    setAsk(null);
-    if (!a || !client) return;
-    setBusy(a.id);
-    try {
-      for (const d of [...a.done].reverse()) {
-        const def = defOf(d.key)!;
-        const { did } = splitKey(d.key);
-        const res = did ? await client.writeDid(def, did, d.after, d.before, a.login) : await client.writeCoding(def, d.after, d.before, a.login);
-        if (res.coding) written.current.add(d.key);
-        if (res.coding) client.sessionValues.set(d.key, res.coding);
-        if (res.coding && alive.current) setCodings((old) => ({ ...old, [d.key]: res.coding }));
-        // The saved coding follows each write, so Put back decides from what the module holds now.
-        if (res.coding) await garage.update(v.vin, { codingCache: cacheAfterWrite(garage.latest(v.vin)?.codingCache, [{ key: d.key, hex: toHex(res.coding) }]) });
-      }
-      await mark(a.id, 'no-effect');
-      await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: `Tried ${a.title}: no effect seen, put back.` });
-      const backups = garage.latest(v.vin)?.codingOriginal ?? {};
-      await addHistory({
-        vin: v.vin,
-        kind: 'change',
-        title: `${a.title} put back`,
-        detail: 'No effect seen in Try mode',
-        odometerKm: v.odometerKm,
-        changes: [...a.done].reverse().map((d) => ({ module: defOf(d.key)?.name ?? d.key, key: d.key, setting: a.title, from: 'On', to: 'Off', before: toHex(d.after), after: toHex(d.before), backup: backups[d.key], source: 'Try mode' })),
-      });
-      if (alive.current) setMessage({ tone: 'ok', text: `${a.title} put back. Marked as no effect on this car.` });
-    } catch (e) {
-      if (alive.current) setMessage({ tone: 'danger', text: e instanceof Error ? e.message : String(e) });
-    } finally {
-      if (alive.current) setBusy(null);
-    }
-  };
+  const mark = (id: string, r: TryResult) => garage.update(v.vin, { tried: { ...(garage.latest(v.vin)?.tried ?? {}), [id]: r } });
 
   const run = async (p: Exclude<Pending, null>) => {
     setPending(null);
     if (!client) return;
-    // The result shows under the switch that was used.
-    const runId = p.kind === 'item' ? p.item.id : p.kind === 'restore' ? undefined : p.setting.id;
+    // The result shows under the switch that was used; a put back shows beside
+    // Backups, or at the top when it was opened from the change timeline.
+    let runId = p.kind === 'item' ? p.item.id : p.kind === 'restore' ? (p.top ? undefined : RESTORE_MSG) : p.setting.id;
     if (p.kind === 'forget') {
       await garage.update(v.vin, { learned: learned.filter((s) => s.id !== p.setting.id) });
       return;
     }
     const ids = p.kind === 'item' ? [p.item.module] : p.kind === 'learned' ? learnedKeys(p.setting) : [p.module];
     if (ids.some((id) => !codings[id])) return;
-    setBusy(p.kind === 'item' ? p.item.id : p.kind === 'learned' ? p.setting.id : `restore-${p.module}`);
+    setBusy(p.kind === 'item' ? p.item.id : p.kind === 'learned' ? p.setting.id : p.top ? `restore-top-${p.module}` : `restore-${p.module}`);
     setMessage(null);
     try {
+      // Read for the result line only: nothing stops or delays the write.
       const check = await preflight();
-      if (check.block) {
-        setMessage({ id: runId, tone: 'danger', text: check.block });
-        return;
-      }
-      if (check.warn && !p.warn) {
-        // Ask once more with the reason; the next confirm goes ahead.
-        if (alive.current) setPending({ ...p, warn: check.warn } as Exclude<Pending, null>);
-        return;
-      }
+      const lowBattery = check.note ? ` ${check.note}` : '';
       // The first coding ever seen for each module is kept as the original.
       const saved = garage.latest(v.vin)?.codingOriginal ?? {};
       const fresh = ids.filter((id) => !saved[id]);
@@ -255,10 +223,12 @@ export default function Customise() {
           ? `${p.item.title} ${p.on ? 'on' : 'off'}`
           : p.kind === 'learned'
             ? `${p.setting.title} ${p.on ? 'on' : 'off'}`
-            : `${defOf(p.module)?.name} ${splitKey(p.module).did ? 'setting' : 'coding'} restored to the original`;
+            : `${defOf(p.module)?.name} original ${splitKey(p.module).did ? 'setting' : 'coding'} put back`;
       const notes: string[] = [];
       const done: { key: string; before: number[]; after: number[] }[] = [];
       const settingId = p.kind === 'item' ? p.item.id : p.kind === 'learned' ? p.setting.id : null;
+      // Set when a module did not keep the change: the text to show.
+      let failed: string | null = null;
       for (const moduleId of ids) {
         const def = defOf(moduleId)!;
         const { did } = splitKey(moduleId);
@@ -270,49 +240,82 @@ export default function Customise() {
               ? withLearned(p.setting, moduleId, before, p.on)
               : (originals[moduleId] ?? toHex(before)).match(/../g)!.map((h) => parseInt(h, 16));
         const login = p.kind === 'learned' ? p.setting.login : p.kind === 'item' ? p.item.login : undefined;
-        const res = did ? await client.writeDid(def, did, before, after, login) : await client.writeCoding(def, before, after, login);
-        if (!alive.current) return;
+        let res: Awaited<ReturnType<typeof client.writeCoding>>;
+        try {
+          res = did ? await client.writeDid(def, did, before, after, login) : await client.writeCoding(def, before, after, login);
+        } catch (e) {
+          // A write that broke off (the link dropped, say): what the modules
+          // before it took is still recorded below.
+          failed = `${def.name}: ${e instanceof Error ? e.message : String(e)}${notes.length ? ' Modules changed before it keep the new setting; switch it off again to undo them.' : ''} Tap Read settings again to see what the car holds now.`;
+          break;
+        }
+        // The write has returned, so the car may hold a new value. Everything
+        // kept about it (the values for this connection, the saved coding,
+        // History and the diary) is written whether or not this page is still
+        // open. Only the page's own state is skipped once it has closed.
         if (res.coding) {
           written.current.add(moduleId);
           client.sessionValues.set(moduleId, res.coding);
-          setCodings((old) => ({ ...old, [moduleId]: res.coding }));
+          if (alive.current) setCodings((old) => ({ ...old, [moduleId]: res.coding }));
           // The saved coding follows each write, so Put back decides from what the module holds now.
           await garage.update(v.vin, { codingCache: cacheAfterWrite(garage.latest(v.vin)?.codingCache, [{ key: moduleId, hex: toHex(res.coding) }]) });
         }
         if (!res.ok) {
           if (settingId && p.kind !== 'restore' && p.on) await mark(settingId, 'refused');
-          setMessage({
-            id: runId,
-            tone: 'danger',
-            text: res.restored
-              ? `${def.name} did not keep the change, so Caristini put its original coding back.${notes.length ? ' Modules changed before it keep the new setting; switch it off again to undo them.' : ' Nothing has changed.'}`
-              : `${def.name} did not keep the change, and Caristini could not confirm the original is back. With the ignition on, tap Restore under Backups below.`,
-          });
-          return;
+          // The module holds something other than before: that is a change too.
+          if (res.coding && toHex(res.coding) !== toHex(before)) done.push({ key: moduleId, before, after: res.coding });
+          failed = res.restored
+            ? `${def.name} did not keep the change, so Caristini put its original coding back.${notes.length ? ' Modules changed before it keep the new setting; switch it off again to undo them.' : ' Nothing has changed.'}${lowBattery}`
+            : `${def.name} did not keep the change, and Caristini could not confirm the original is back. With the ignition on, Tap Put back under Backups in Customise.${lowBattery}`;
+          break;
         }
         notes.push(`${def.name} ${did ? `value ${did}` : 'coding'} ${toHex(before)} to ${toHex(after)}`);
         done.push({ key: moduleId, before, after });
       }
-      success();
-      await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: p.kind === 'restore' ? `${what}.` : `Changed: ${what}. Undo it in Customise > Backups.` });
+      // Nothing in the car changed: no record to keep.
+      if (failed && !done.length) {
+        if (alive.current) setMessage({ id: runId, tone: 'danger', text: failed });
+        return;
+      }
+      if (!failed && alive.current) success();
+      await addDiary({
+        vin: v.vin,
+        vehicleName: vehicleTitle(v),
+        date: today(),
+        kind: SETTING_CHANGED,
+        mileage: null,
+        notes: failed ? `Part changed: ${what}. ${notes.join('; ') || 'A module did not keep the change'}. Check it in Customise.` : p.kind === 'restore' ? `${what}.` : `Changed: ${what}. Put it back in Customise, then Backups.`,
+      });
       // One line per module for the change timeline, with the backup each came from.
-      const setting = p.kind === 'item' ? p.item.title : p.kind === 'learned' ? p.setting.title : 'Restore original';
+      const setting = p.kind === 'item' ? p.item.title : p.kind === 'learned' ? p.setting.title : 'Put back original';
       const value = p.kind === 'restore' ? undefined : { from: p.on ? 'Off' : 'On', to: p.on ? 'On' : 'Off' };
       await addHistory({
         vin: v.vin,
         kind: 'change',
-        title: what.charAt(0).toUpperCase() + what.slice(1),
+        title: `${what.charAt(0).toUpperCase() + what.slice(1)}${failed ? ' (part done)' : ''}`,
         detail: done.map((d) => defOf(d.key)?.name).join(', '),
         before: done.map((d) => toHex(d.before)).join(' '),
         after: done.map((d) => toHex(d.after)).join(' '),
         odometerKm: v.odometerKm,
         changes: done.map((d) => ({ module: defOf(d.key)?.name ?? d.key, key: d.key, setting, ...value, before: toHex(d.before), after: toHex(d.after), backup: backups[d.key], source: 'Customise' })),
       });
-      setMessage({ id: runId, tone: 'ok', text: `${what}. Switch the ignition off and on to see it. Saved to your Diary.` });
-      // Try mode: a setting not yet confirmed on this car asks whether it worked.
-      if (settingId && p.kind !== 'restore' && p.on && tried[settingId] !== 'works') {
-        setAsk({ id: settingId, title: p.kind === 'item' ? p.item.title : p.setting.title, done, login: p.kind === 'learned' ? p.setting.login : undefined });
+      if (failed) {
+        if (alive.current) setMessage({ id: runId, tone: 'danger', text: `${failed} Saved to History and your diary.` });
+        return;
       }
+      // A setting from another of your cars that this car's module kept joins
+      // this car's own learned list (it then shows under Learned from your car).
+      if (p.kind === 'learned' && p.on) {
+        const from = borrowed.find((s) => s.id === p.setting.id);
+        const now = garage.latest(v.vin)?.learned ?? [];
+        if (from && !now.some((s) => settingKey(s) === settingKey(from))) {
+          const own: LearnedSetting = { id: `learned-${Date.now()}`, title: from.title, learnedAt: new Date().toISOString(), parts: from.parts, ...(from.login ? { login: from.login } : {}) };
+          await garage.update(v.vin, { learned: [...now, own] });
+          runId = own.id;
+        }
+      }
+      // No question after a change: the switch itself puts it back.
+      if (alive.current) setMessage({ id: runId, tone: 'ok', text: `${what}. Switch the ignition off and on to see it. Saved to History and your diary.` });
     } catch (e) {
       if (alive.current) setMessage({ id: runId, tone: 'danger', text: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -332,10 +335,32 @@ export default function Customise() {
   const borrowedFit = borrowed.filter((s) => tried[s.id] !== 'no-effect' && tried[s.id] !== 'refused' && sharedFits(s, codings));
   const learnedWaiting = learned.filter((s) => !reading && !learnedReady(s, codings));
 
+  // Which cars have built-in switches, said plainly on a car that has none.
+  const noSwitches =
+    v.group !== 'vag'
+      ? `Caristini has built-in switches for VW group cars only (VW, Audi, SEAT, Skoda and Cupra). Your ${v.brand || 'car'} has none yet.${client?.supportsModules ? ' You can still teach Caristini a setting: change it once in Carista and Caristini learns what changed.' : ''}${mods.length ? ' The guides below show what can be changed and how.' : ''}`
+      : !v.platform
+        ? `Caristini has built-in switches for VW group cars whose model it knows, and it does not know this car’s model yet. Set the model under Your cars, or run Learn my car.${client?.supportsModules ? ' You can still teach Caristini a setting from Carista.' : ''}`
+        : `Caristini has no built-in switches for the ${v.model || v.brand} yet.${client?.supportsModules ? ' You can still teach Caristini a setting: change it once in Carista and Caristini learns what changed.' : ''}`;
+  // Ways to add a setting. First on the page for a car with no built-in switches.
+  const moreGroup = (
+    <Group
+      header="Get more settings"
+      help={SECTIONS.customiseMore}
+      footer="A switch appears only where a source, or your own car, shows which coding bit does what."
+    >
+      {client?.supportsModules ? (
+        <ListRow first {...tool('learnSetting')} title="Learn from Carista" subtitle="Change a setting in Carista; Caristini learns what changed" onPress={() => router.push('/customise/learn')} />
+      ) : null}
+      <ListRow first={!client?.supportsModules} {...tool('learn')} title="Learn my car" subtitle="Finds every module and reads its part number and coding" onPress={() => router.push('/learn-car')} />
+      <ListRow icon="refresh" iconColour={TOOLS.customise.colour} title="Read settings again" subtitle="Settings are kept while connected; this reads them fresh" disabled={reading} onPress={() => read(true)} />
+    </Group>
+  );
+
   return (
     <Screen>
       {items.length || learned.length ? (
-        <GlowCard tone="brand" style={styles.hero}>
+        <GlowCard tone={reading || busy ? 'brand' : 'plain'} style={styles.hero}>
           <Mascot mood={reading || busy ? 'scanning' : 'happy'} size={96} />
           <View style={{ flex: 1 }}>
             <Text style={[type.title3, { color: t.text }]}>Settings on your {v.model || v.brand}</Text>
@@ -348,6 +373,22 @@ export default function Customise() {
 
       {message && !message.id ? <Notice tone={message.tone} icon={message.tone === 'ok' ? 'check' : 'alert-circle-outline'} text={message.text} /> : null}
 
+      {/* A put back opened from the change timeline: the user is at the top of the page. */}
+      {busy?.startsWith('restore-top-') ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={t.muted} />
+          <Text style={[type.sub, { color: t.muted, flex: 1 }]}>{WRITING}</Text>
+        </View>
+      ) : null}
+
+      {/* No built-in switches for this car: say so, and put the way to add one first. */}
+      {!items.length ? (
+        <>
+          <Notice icon="information-outline" tone="info" text={noSwitches} />
+          {moreGroup}
+        </>
+      ) : null}
+
       {moduleIds.length && reading ? (
         <View style={styles.loading}>
           <ActivityIndicator color={t.muted} />
@@ -358,32 +399,18 @@ export default function Customise() {
       ) : null}
 
       {groups.length + (unconfirmed.length ? 1 : 0) + (learned.length ? 1 : 0) > 1 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          {[
-            { key: null, label: 'All', n: available.length + learnedReadyList.length },
-            ...groups.map((g) => ({ key: g, label: g, n: confirmed.filter((i) => i.category === g).length })),
-            ...(unconfirmed.length ? [{ key: 'Try these (not confirmed)', label: 'Try these', n: unconfirmed.length }] : []),
-            ...(learned.length ? [{ key: 'Learned', label: 'Learned', n: learnedReadyList.length }] : []),
-          ].map((c) => {
-            const on = cat === c.key;
-            return (
-              <Pressable
-                key={c.label}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on }}
-                onPress={() => {
-                  tap();
-                  setCat(c.key);
-                }}
-                style={[styles.chip, { backgroundColor: on ? t.accent : t.surface }]}
-              >
-                <Text style={[type.sub, { color: on ? t.onAccent : t.text, fontWeight: '600' }]}>{c.label}</Text>
-                {/* Counts show once every module has answered, so they do not jump. */}
-                {!reading ? <Text style={[type.small, type.number, { color: on ? t.onAccent : t.muted }]}>{c.n}</Text> : null}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        // Counts show once every module has answered, so they do not jump.
+        <Chips
+          scroll
+          options={[
+            { id: '', label: 'All', n: available.length + learnedReadyList.length },
+            ...groups.map((g) => ({ id: g, label: g, n: confirmed.filter((i) => i.category === g).length })),
+            ...(unconfirmed.length ? [{ id: 'Try these (not confirmed)', label: 'Try these', n: unconfirmed.length }] : []),
+            ...(learned.length ? [{ id: 'Learned', label: 'Learned', n: learnedReadyList.length }] : []),
+          ].map((c) => ({ id: c.id, label: c.label, count: reading ? undefined : c.n }))}
+          value={cat ?? ''}
+          onPick={(id) => setCat(id || null)}
+        />
       ) : null}
 
       {[...groups.map((g) => ({ g, list: confirmed.filter((i) => i.category === g) })), ...(unconfirmed.length ? [{ g: 'Try these (not confirmed)', list: unconfirmed }] : [])]
@@ -393,7 +420,7 @@ export default function Customise() {
           key={g}
           header={g}
           help={g === 'Try these (not confirmed)' ? SECTIONS.customiseTry : k === 0 ? SECTIONS.customiseSettings : undefined}
-          footer={g === 'Try these (not confirmed)' ? 'One vague source each. Caristini writes the change, checks the module kept it, then asks whether you saw it, and puts it back if not.' : undefined}
+          footer={g === 'Try these (not confirmed)' ? 'One vague source each. Caristini writes the change and checks the module kept it. Switch it back off if you see no effect.' : undefined}
         >
           {list
             .map((i, n) => {
@@ -426,8 +453,9 @@ export default function Customise() {
                         {techId === i.id ? (
                           <>
                             {i.note ? <Text style={[type.small, { color: t.muted }]}>{i.note}</Text> : null}
-                            <Text style={[type.small, { color: t.faint, marginTop: 4 }]}>
+                            <Text style={[type.small, { color: t.muted, marginTop: 4 }]}>
                               {defOf(i.module)?.name ?? i.module}, byte {i.byte}, {bitsLabel(i)}
+                              {i.length && codings[i.module] && codings[i.module]!.length !== i.length ? `. The source car’s coding is ${i.length} bytes; yours is ${codings[i.module]!.length}, so check the result in the car.` : ''}
                             </Text>
                             <Pressable accessibilityRole="link" hitSlop={6} onPress={() => Linking.openURL(i.sources[0].url)} style={{ marginTop: 6 }}>
                               <Text style={[type.small, { color: t.accentText }]}>Source: {i.sources[0].label}</Text>
@@ -436,11 +464,11 @@ export default function Customise() {
                         ) : null}
                       </>
                     ) : (
-                      <Text style={[type.small, { color: t.muted, marginTop: 1 }]} numberOfLines={2}>
-                        {stateText(i, on)}
-                      </Text>
+                      // The whole description shows; it is never cut short.
+                      <Text style={[type.small, { color: t.muted, marginTop: 1 }]}>{stateText(i, on)}</Text>
                     )}
                     {message?.id === i.id ? <Text style={[type.small, { color: message.tone === 'ok' ? t.ok : t.danger, marginTop: 4 }]}>{message.text}</Text> : null}
+                    {working ? <Text style={[type.small, { color: t.muted, marginTop: 4 }]}>{WRITING}</Text> : null}
                   </Pressable>
                   {working ? (
                     <ActivityIndicator color={t.accentText} />
@@ -452,7 +480,7 @@ export default function Customise() {
                       accessibilityLabel={i.title}
                       onValueChange={(next) => {
                         tap();
-                        setPending({ kind: 'item', item: i, on: next });
+                        run({ kind: 'item', item: i, on: next });
                       }}
                     />
                   )}
@@ -464,7 +492,7 @@ export default function Customise() {
 
       {v.deepFound?.length && !cat ? (
         <Group
-          header="Older modules on this car"
+          header="Older VW modules on this car"
           footer="A switch shows only where a public source says which coding bit does what. For a module with none yet, open it to read and change its coding bit by bit, or run Learn my car below to look its settings up."
         >
           {v.deepFound.map((d, n) => {
@@ -473,8 +501,7 @@ export default function Customise() {
               <ListRow
                 key={d.address}
                 first={n === 0}
-                icon="chip"
-                iconColour="indigo"
+                {...tool('module')}
                 title={defOf(d.moduleId)?.name ?? d.moduleId}
                 subtitle={[d.component, d.part].filter(Boolean).join(' · ') || undefined}
                 value={count ? `${count} setting${count === 1 ? '' : 's'}` : 'Open coding'}
@@ -488,7 +515,7 @@ export default function Customise() {
       {borrowedFit.length && !cat ? (
         <Group
           header="From your other cars"
-          footer="Learned on another of your cars with the same module. Not confirmed on this car: Caristini backs up, makes the change, asks whether you saw it, and puts the old value back if not."
+          footer="Learned on another of your cars with the same module, and not yet tried on this one. Caristini backs up, writes the change and checks the module kept it. A setting the module keeps moves to Learned from your car. Switch it back off if you see no effect."
         >
           {borrowedFit.map((s, n) => {
             const on = learnedIsOn(s, codings);
@@ -505,6 +532,7 @@ export default function Customise() {
                     {` · from your ${s.from}${s.tier === 2 ? ' (same part, another revision)' : ''}`}
                   </Text>
                   {message?.id === s.id ? <Text style={[type.small, { color: message.tone === 'ok' ? t.ok : t.danger, marginTop: 4 }]}>{message.text}</Text> : null}
+                  {working ? <Text style={[type.small, { color: t.muted, marginTop: 4 }]}>{WRITING}</Text> : null}
                 </View>
                 {working ? (
                   <ActivityIndicator color={t.accentText} />
@@ -516,7 +544,7 @@ export default function Customise() {
                     accessibilityLabel={s.title}
                     onValueChange={(next) => {
                       tap();
-                      setPending({ kind: 'learned', setting: s, on: next });
+                      run({ kind: 'learned', setting: s, on: next });
                     }}
                   />
                 )}
@@ -545,6 +573,7 @@ export default function Customise() {
                     <Text style={[type.small, { color: t.accentText }]}>Forget</Text>
                   </Pressable>
                   {message?.id === s.id ? <Text style={[type.small, { color: message.tone === 'ok' ? t.ok : t.danger, marginTop: 4 }]}>{message.text}</Text> : null}
+                  {working ? <Text style={[type.small, { color: t.muted, marginTop: 4 }]}>{WRITING}</Text> : null}
                 </View>
                 {working ? (
                   <ActivityIndicator color={t.accentText} />
@@ -556,7 +585,7 @@ export default function Customise() {
                     accessibilityLabel={s.title}
                     onValueChange={(next) => {
                       tap();
-                      setPending({ kind: 'learned', setting: s, on: next });
+                      run({ kind: 'learned', setting: s, on: next });
                     }}
                   />
                 )}
@@ -566,25 +595,18 @@ export default function Customise() {
         </Group>
       ) : null}
 
-      <Group
-        header="Get more settings"
-        help={SECTIONS.customiseMore}
-        footer="A switch appears only where a source, or your own car, shows which coding bit does what."
-      >
-        {client?.supportsModules ? (
-          <ListRow first icon="compare-horizontal" iconColour="purple" title="Learn from Carista" subtitle="Change settings in Carista; Caristini learns what changed" onPress={() => router.push('/customise/learn')} />
-        ) : null}
-        <ListRow first={!client?.supportsModules} icon="school-outline" iconColour="teal" title="Learn my car" subtitle="Finds every module and reads its part number and coding" onPress={() => router.push('/learn-car')} />
-        <ListRow icon="refresh" iconColour="blue" title="Read settings again" subtitle="Settings are kept while connected; this reads them fresh" disabled={reading} onPress={() => read(true)} />
-      </Group>
+      {items.length ? moreGroup : null}
 
       {kbNotes.length ? (
-        <Group header="Notes from the knowledge base" footer="Not confirmed on a car, so Caristini does not offer these as switches.">
+        <Group header="From Research notes" footer="Not confirmed on a car, so Caristini does not offer these as switches.">
           {kbNotes.map((n, i) => (
             <ListRow key={n.id} first={i === 0} icon="note-text-outline" iconColour="grey" title={n.title} subtitle={n.summary} noChevron />
           ))}
         </Group>
       ) : null}
+
+      {/* The result of a put back shows here, where it was tapped, and stays when the Backups list empties. */}
+      {message?.id === RESTORE_MSG ? <Notice tone={message.tone} icon={message.tone === 'ok' ? 'check' : 'alert-circle-outline'} text={message.text} /> : null}
 
       {restorable.length ? (
         <Group header="Backups" help={SECTIONS.customiseBackups} footer="The coding each module had before Caristini first changed it.">
@@ -596,8 +618,8 @@ export default function Customise() {
                 first={i === 0}
                 icon="restart"
                 iconColour="grey"
-                title={`Restore ${defOf(id)?.name ?? id} ${did ? 'setting' : 'coding'}`}
-                subtitle={did ? `Puts back the original setting. Technical: ${did}` : 'Puts back the original coding'}
+                title={`Put back ${defOf(id)?.name ?? id} ${did ? 'setting' : 'coding'}`}
+                subtitle={busy === `restore-${id}` ? WRITING : did ? `The original setting. Technical: ${did}` : 'The original coding'}
                 disabled={!!busy || !checked.has(id)}
                 onPress={() => setPending({ kind: 'restore', module: id })}
               />
@@ -609,8 +631,7 @@ export default function Customise() {
       <Group>
         <ListRow
           first
-          icon="timeline-text-outline"
-          iconColour="purple"
+          {...tool('timeline')}
           title="Change timeline"
           subtitle={Object.keys(originals).length ? 'Every change made to this car, with old and new values. Put one back or share the list.' : 'No changes yet. Each setting you change is listed here.'}
           onPress={() => router.push({ pathname: '/customise/timeline', params: { vin: v.vin } })}
@@ -621,7 +642,7 @@ export default function Customise() {
         <Group
           header="Not reachable on this car yet"
           help={SECTIONS.customiseUnreachable}
-          footer="These settings live in modules that did not answer Caristini on this car, or whose coding is not the length the sources describe, so they are not offered."
+          footer="These settings live in modules that did not give Caristini their coding on this car. Tap Read settings again with the ignition on."
         >
           {unreachable.map((i, n) => (
             <ListRow key={i.id} first={n === 0} title={i.title} subtitle={MODULES.find((m) => m.id === i.module)?.name} />
@@ -656,74 +677,21 @@ export default function Customise() {
       ) : null}
 
       <ConfirmSheet
-        visible={!!ask && !pending}
-        title={`Did you see ${ask?.title.toLowerCase() ?? 'the change'}?`}
-        lines={['The module kept the change. Switch the ignition off and on, then check the car.', 'If nothing changed, Caristini puts the old value back and remembers it for this car.']}
-        confirmLabel="Yes, it works"
-        cancelLabel="No, put it back"
-        neutral
-        onConfirm={() => {
-          const a = ask;
-          setAsk(null);
-          if (!a) return;
-          const from = borrowed.find((s) => s.id === a.id);
-          if (from) {
-            // Confirmed on this car: it becomes one of this car's own switches.
-            const own = { id: `learned-${Date.now()}`, title: from.title, learnedAt: new Date().toISOString(), parts: from.parts, ...(from.login ? { login: from.login } : {}) };
-            garage.update(v.vin, { learned: [...(garage.latest(v.vin)?.learned ?? []), own], tried: { ...(garage.latest(v.vin)?.tried ?? {}), [own.id]: 'works' } });
-          } else mark(a.id, 'works');
-        }}
-        onCancel={undoTry}
-      />
-
-      <ConfirmSheet
         visible={!!pending}
         title={
-          pending?.kind === 'item'
-            ? `Switch ${pending.on ? 'on' : 'off'}: ${pending.item.title}?`
-            : pending?.kind === 'learned'
-              ? `Switch ${pending.on ? 'on' : 'off'}: ${pending.setting.title}?`
-              : pending?.kind === 'forget'
-                ? `Forget ${pending.setting.title}?`
-                : pending?.kind === 'restore'
-              ? `Restore the original ${(defOf(pending.module)?.name ?? 'module').toLowerCase()} coding?`
+          pending?.kind === 'forget'
+            ? `Forget ${pending.setting.title}?`
+            : pending?.kind === 'restore'
+              ? 'Put back the original coding?'
               : ''
         }
-        lines={
-          pending?.warn
-            ? [pending.warn, 'Caristini still saves the current coding first and puts it back if the module does not keep the change.']
-            : pending?.kind === 'item'
-            ? [
-                'Ignition on and engine off is best.',
-                `Changes the ${MODULES.find((m) => m.id === pending.item.module)?.name.toLowerCase()} coding. The current coding is saved first, and put back automatically if the module does not keep the change.`,
-                ...(pending.item.confidence === 'medium' ? ['This setting comes from one community source. Check the result in the car.'] : []),
-                ...(pending.item.confidence === 'low' ? ['Unconfirmed: the sources are vague. Caristini will ask whether it worked and put it back if not.'] : []),
-                ...byteChange(pending.item, codings[pending.item.module], pending.on),
-              ]
-            : pending?.kind === 'learned'
-              ? [
-                  'Ignition on and engine off is best.',
-                  'Writes the bytes learned from your car. The current coding is saved first, and put back automatically if a module does not keep the change.',
-                ]
-              : pending?.kind === 'forget'
-                ? ['Removes the switch from Caristini. The car keeps whatever is set now.']
-                : ['Ignition on, engine off. Puts back the coding this module had before Caristini first changed it.']
-        }
-        confirmLabel={pending?.warn ? 'Change anyway' : pending?.kind === 'restore' ? 'Restore' : pending?.kind === 'forget' ? 'Forget' : 'Change setting'}
+        lines={pending?.kind === 'forget' ? ['Removes the switch from Caristini. The car keeps whatever is set now.'] : [`Puts back the coding ${(defOf(pending?.kind === 'restore' ? pending.module : '')?.name ?? 'this module')} had before Caristini first changed it.`]}
+        confirmLabel={pending?.kind === 'forget' ? 'Forget' : 'Put back'}
         onCancel={() => setPending(null)}
         onConfirm={() => pending && run(pending)}
       />
     </Screen>
   );
-}
-
-// The exact change, for the confirmation: "Byte 2: 0A to 0B (bit 0)".
-function byteChange(item: CodingItem, coding: number[] | null | undefined, on: boolean): string[] {
-  if (!coding || coding.length <= item.byte) return [];
-  const before = coding[item.byte];
-  const after = withItem(item, coding, on)[item.byte];
-  const hex = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
-  return [`Technical: byte ${item.byte} changes from ${hex(before)} to ${hex(after)} (${bitsLabel(item)}).`];
 }
 
 const TRIED_TEXT: Record<TryResult, string> = { works: 'Works on your car', refused: 'Did not take', 'no-effect': 'No effect seen' };
@@ -738,6 +706,5 @@ const styles = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg },
   // A badge always sits on its own line under the setting's name.
   badge: { flexDirection: 'row', marginTop: 4 },
-  chips: { gap: space.sm, paddingBottom: space.lg },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: space.md + 2, paddingVertical: 7, borderRadius: 999 },
+
 });

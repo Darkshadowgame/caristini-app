@@ -2,17 +2,19 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { addDiary, today } from '../diary';
-import { addHistory } from '../history';
+import { addHistory, loadHistory, updateHistory } from '../history';
 import { FaultCodes, ModuleFaults } from '../obd/elm';
 import { ModuleDef, modulesFor } from '../obd/modules';
 import { SECOND_BUS_ADAPTER_TEXT, SECOND_BUS_NOTICE } from '../obd/msCan';
 import { pidInfo } from '../obd/pids';
 import { Tp20Module, tp20Name } from '../obd/tp20';
-import { describeFailureType, STATE_LABEL, UdsFault } from '../obd/uds';
 import { useConnection } from '../state';
-import { MONO, radius, space, type, useTheme } from '../theme';
+import { radius, space, type, useTheme } from '../theme';
 import { Mascot } from '../brand/Mascot';
-import { Arrive, Button, ConfirmSheet, GlowCard, Group, Icon, IconName, ListRow, ModuleRing, NeedsConnection, Notice, Pill, ScanPulse, Screen, success, tap } from '../ui';
+import { TOOLS, Arrive, Button, ConfirmSheet, GlowCard, Group, Icon, ListRow, ModuleRing, NeedsConnection, Notice, Pill, ScanPulse, Screen, success, tap, tool } from '../ui';
+import { CodeRow, FaultRow } from '../components/CodeRow';
+import { allowSleep, stayAwake } from '../keepAwake';
+import { leftText } from '../timeText';
 import { quickCheckDue, useGarage, vehicleTitle } from '../vehicle/garage';
 import { sendLogNow } from '../share/sendLog';
 import { LastScan, useLastScan } from '../components/LastScan';
@@ -25,11 +27,19 @@ import { addOlderToCheck, HealthCheckResult, runHealthCheck, saveOlderModules } 
 import { monitorMeaning, MONITOR_STATE_LABEL, readinessSummary } from '../diag/readiness';
 import { ScanChanges, useScanDiff } from '../components/ScanChanges';
 import { extraObdCodes, faultKey, faultMeaning, obdStates } from '../diag/faults';
+import { mergeRetried, recheckMessage, retriedHistoryPatch, uniqueFaultCodes } from '../diag/recheck';
+import { LeaveRunGuard } from '../leaveRun';
+import { diaryMileage } from '../diaryCars';
+import { recentHealthCheck } from '../mot/read';
 
 
 type Confirm = { kind: 'all' } | { kind: 'module'; def: ModuleDef } | { kind: 'tp20'; address: number } | null;
 
-// Engine speed, read before any clear: faults must be cleared with the engine off.
+// The one line about the engine on every clear-faults sheet (Workshop uses the
+// same words).
+const CLEAR_ENGINE_LINE = 'Works with the engine running. A few modules only clear with the engine off and the ignition on.';
+
+// Engine speed, read before a clear, so a refusal can say the engine was running.
 const RPM = pidInfo(0x0c)!;
 
 export default function Diagnostics() {
@@ -63,6 +73,13 @@ export default function Diagnostics() {
   const [deep, setDeep] = useState<Tp20Module[] | null>(null);
   const [deepPct, setDeepPct] = useState(0);
   const alive = useRef(true);
+  // The phone stays awake while a check, a clear or the older-module search
+  // runs, the same as every other long read (src/keepAwake.ts).
+  useEffect(() => {
+    if (!busy) return undefined;
+    stayAwake('health-check');
+    return () => allowSleep('health-check');
+  }, [busy]);
   // Stop: ends the scan after the module being read; leaving the screen stops it too.
   const stop = useRef(false);
   const [stopping, setStopping] = useState(false);
@@ -85,8 +102,10 @@ export default function Diagnostics() {
   // The History entry this visit's check saved, so older modules found later are added to it.
   const lastCheck = useRef<HealthCheckResult | null>(null);
 
-  const scan = useCallback(async (everyAddress = false) => {
-    if (!client || !vehicle) return;
+  // Returns the check, or null when it did not run (so a clear can say what came back).
+  const scan = useCallback(async (everyAddress = false): Promise<HealthCheckResult | null> => {
+    if (!client || !vehicle) return null;
+    let out: HealthCheckResult | null = null;
     // After 2 complete full checks the car's modules are known: ask only those,
     // and every address again after 30 days or when asked.
     const fresh = garage.latest(vehicle.vin);
@@ -115,7 +134,7 @@ export default function Diagnostics() {
         onStep: (what) => alive.current && what !== 'the control modules' && setCurrent(what),
         onObd: (codes, ff, err) => {
           if (!alive.current) return;
-          if (err) setMessage(`The engine's standard codes could not be read (${err}). The modules were still checked.`);
+          if (err) setMessage(`The engine’s standard codes could not be read (${err}). The modules were still checked.`);
           setObd(codes);
           setFreeze(ff);
           // The first module to be asked, while the module list starts.
@@ -146,9 +165,10 @@ export default function Diagnostics() {
         onOlderProgress: (d, n) => alive.current && setDeepPct(n ? d / n : 1),
         onOlderModule: (m) => alive.current && setDeep((old) => [...(old ?? []), m]),
       });
+      out = r;
       if (r.older) void sendLogNow('older modules', vehicle);
       if (alive.current && r.older) setDeep(r.older);
-      if (alive.current && r.olderError) setError(`The older-module search stopped: ${r.olderError}. Check the ignition is on, then tap Look for older modules.`);
+      if (alive.current && r.olderError) setError(`The search for older VW modules stopped: ${r.olderError}. Check the ignition is on, then tap Look for older VW modules.`);
     } catch (e) {
       if (alive.current) setError(`The check stopped: ${e instanceof Error ? e.message : String(e)}. Check the ignition is on, then tap Check again.`);
     } finally {
@@ -160,6 +180,7 @@ export default function Diagnostics() {
         setCurrent(null);
       }
     }
+    return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, group, withModules, vehicle?.vin]);
 
@@ -168,21 +189,58 @@ export default function Diagnostics() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scan]);
 
+  // "Clear all faults" on the saved result: the car is checked first, and the
+  // usual clear question follows when that check ends with something to clear.
+  const clearAfterCheck = useRef(false);
+  useEffect(() => {
+    if (busy || !clearAfterCheck.current) return;
+    clearAfterCheck.current = false;
+    // A check that failed or was stopped early is not a basis for clearing.
+    if (error || stop.current) return;
+    const any = Object.values(results).some((r) => r.faults.length) || (deep ?? []).some((m) => m.faults.length) || !!obd?.stored.length || !!obd?.pending.length || !!conn.info?.milOn;
+    if (any) setConfirm({ kind: 'all' });
+    else setMessage('Nothing to clear: this check found no faults and the engine light is off.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy]);
+
   // Re-read modules that answered but would not send their fault list.
   const retry = async (list: ModuleDef[]) => {
     if (!client) return;
     setBusy('scan');
     setError(null);
+    stop.current = false;
+    setStopping(false);
+    const got: ModuleFaults[] = [];
     try {
       for (const def of list) {
+        if (stop.current || !alive.current) break;
         setCurrent(def.name);
         const r = await client.readModuleFaults(def);
-        if (!alive.current) return;
-        setResults((old) => ({ ...old, [def.id]: r }));
+        got.push(r);
+        if (alive.current) setResults((old) => ({ ...old, [def.id]: r }));
       }
     } catch (e) {
-      if (alive.current) setError(`The check stopped: ${e instanceof Error ? e.message : String(e)}. Engine off, ignition on, then tap Try these again.`);
+      if (alive.current) setError(`The check stopped: ${e instanceof Error ? e.message : String(e)}. Switch the engine off, leave the ignition on, then tap Try these again.`);
     } finally {
+      // What answered this time joins the saved check: its History entry and,
+      // for a check that ran to the end, the car's saved fault list.
+      const check = lastCheck.current;
+      if (check && vehicle && got.length) {
+        const { changed, ...totals } = mergeRetried(check, got.map((r) => ({ name: r.def.name, state: r.state, faults: r.faults })), vehicle.brand);
+        if (changed) {
+          Object.assign(check, totals, { noAnswer: check.noAnswer && totals.answered === 0 });
+          try {
+            if (check.historyId) {
+              const id = check.historyId;
+              const before = (await loadHistory(vehicle.vin)).find((e) => e.id === id)?.detail;
+              await updateHistory(id, retriedHistoryPatch(totals, before));
+            }
+            if (!check.stopped) await garage.update(vehicle.vin, { lastCodes: totals.codesCounted, lastCheckedAt: Date.now() });
+          } catch {
+            // Storage unavailable: the screen still shows what was read.
+          }
+        }
+      }
       if (alive.current) {
         setBusy(null);
         setCurrent(null);
@@ -209,16 +267,18 @@ export default function Diagnostics() {
       }
       success();
     } catch (e) {
-      if (alive.current) setError(`The check stopped: ${e instanceof Error ? e.message : String(e)}. Check the ignition is on, then tap Check again.`);
+      if (alive.current) setError(`The search for older VW modules stopped: ${e instanceof Error ? e.message : String(e)}. Check the ignition is on, then tap Look for older VW modules again.`);
     } finally {
       if (alive.current) setBusy(null);
     }
   };
 
-  const log = async (notes: string) => {
+  // module: the one module cleared, for the History title ("Engine faults cleared").
+  const log = async (notes: string, module?: string) => {
     if (!vehicle) return;
-    await addHistory({ vin: vehicle.vin, kind: 'clear', title: 'Faults cleared', detail: notes, odometerKm: vehicle.odometerKm });
-    await addDiary({ vin: vehicle.vin, vehicleName: vehicleTitle(vehicle), date: today(), kind: 'Faults cleared', mileage: null, notes });
+    await addHistory({ vin: vehicle.vin, kind: 'clear', title: module ? `${module} faults cleared` : 'Faults cleared', detail: notes, odometerKm: vehicle.odometerKm });
+    // The odometer the car last gave, in the unit from Settings.
+    await addDiary({ vin: vehicle.vin, vehicleName: vehicleTitle(vehicle), date: today(), kind: 'Faults cleared', ...diaryMileage(garage.latest(vehicle.vin)?.odometerKm ?? vehicle.odometerKm, settings.speed === 'mph'), notes });
   };
 
   const clear = async (c: Exclude<Confirm, null>) => {
@@ -228,19 +288,19 @@ export default function Diagnostics() {
     setError(null);
     setMessage(null);
     try {
+      // Clearing is allowed with the engine running; a module that wants it
+      // off refuses by itself, and the result names it.
       const rpm = await client.readLive(RPM).catch(() => null);
-      if (rpm != null && rpm > 300) {
-        setError('The engine is running. Switch it off, leave the ignition on, then clear.');
-        return;
-      }
+      const running = rpm != null && rpm > 300;
       if (c.kind === 'tp20') {
         const name = tp20Name(c.address);
         const before = deep?.find((m) => m.address === c.address)?.faults.map((f) => f.code) ?? [];
         await client.clearTp20(c.address);
-        const [after] = await client.deepScan([c.address]);
+        // known: this address already belongs to a named module, and must still be read again.
+        const [after] = await client.deepScan([c.address], undefined, undefined, undefined, { known: true });
         if (alive.current && after) setDeep((old) => (old ?? []).map((m) => (m.address === c.address ? after : m)));
-        await log(`${name}: cleared ${before.join(', ') || 'fault memory'}`);
-        setMessage(after?.faults.length ? `${name}: faults came straight back, so the cause is still there.` : `${name}: faults cleared. Saved to your Diary.`);
+        await log(`${name}: cleared ${before.join(', ') || 'fault memory'}`, name);
+        setMessage(after?.faults.length ? `${name}: faults came straight back, so the cause is still there.` : `${name}: faults cleared. Saved to History and your diary.`);
       } else if (c.kind === 'module') {
         const before = results[c.def.id]?.faults.map((f) => f.code) ?? [];
         try {
@@ -252,8 +312,8 @@ export default function Diagnostics() {
         }
         const after = await client.readModuleFaults(c.def);
         if (alive.current) setResults((old) => ({ ...old, [c.def.id]: after }));
-        await log(`${c.def.name}: cleared ${before.join(', ') || 'fault memory'}`);
-        setMessage(after.faults.length ? `${c.def.name}: ${after.faults.length} fault${after.faults.length === 1 ? '' : 's'} came straight back, so the cause is still there.` : `${c.def.name}: faults cleared. Saved to your Diary.`);
+        await log(`${c.def.name}: cleared ${before.join(', ') || 'fault memory'}`, c.def.name);
+        setMessage(after.faults.length ? `${c.def.name}: ${after.faults.length} fault${after.faults.length === 1 ? '' : 's'} came straight back, so the cause is still there.` : `${c.def.name}: faults cleared. Saved to History and your diary.`);
       } else {
         // Each module's answer is kept: only codes really cleared are logged,
         // and modules that refused are named.
@@ -285,19 +345,22 @@ export default function Diagnostics() {
             refused.push(tp20Name(m.address));
           }
         }
-        const unique = [...new Set(cleared)];
+        // Each fault once: P0300 and VW 16684 are one fault read two ways.
+        const unique = uniqueFaultCodes(cleared);
         await log(unique.length ? `Cleared ${unique.join(', ')}${refused.length ? `; refused by ${refused.join(', ')}` : ''}` : `Clear refused by ${refused.join(', ') || 'the car'}`);
         const asked = withFaults.length + (deep ?? []).filter((m) => m.faults.length).length + (obdFaults || info.milOn ? 1 : 0);
-        const refusal = refused.length ? `Cleared ${asked - refused.length} of ${asked}. ${refused.join(', ')} refused: try again with the engine off and the ignition on.` : null;
-        if (alive.current && !refusal) setMessage('Faults cleared and saved to your Diary. Checking again to see what comes back.');
+        const refusal = refused.length ? `Cleared ${asked - refused.length} of ${asked}. ${refused.join(', ')} refused${running ? ': the engine is running, and some modules only clear with it off and the ignition on.' : ': try again with the ignition on.'}` : null;
+        if (alive.current && !refusal) setMessage('Faults cleared. Saved to History and your diary. Checking again to see what comes back.');
         setBusy(null);
-        await scan();
+        const again = await scan();
         // After the new scan (which clears old notices), so it stays on screen.
         if (alive.current && refusal) setError(refusal);
+        // What came back, in place of "Checking again" once the check has ended.
+        else if (alive.current) setMessage(recheckMessage(again ? { stopped: again.stopped, faults: again.logged.length, milOn: again.status?.milOn ?? null } : null));
         return;
       }
     } catch (e) {
-      if (alive.current) setError(`Clearing stopped: ${e instanceof Error ? e.message : String(e)}. Engine off, ignition on, then try again.`);
+      if (alive.current) setError(`Clearing stopped: ${e instanceof Error ? e.message : String(e)}. If a module refuses, switch the engine off, leave the ignition on and try again.`);
     } finally {
       if (alive.current) setBusy(null);
     }
@@ -308,13 +371,13 @@ export default function Diagnostics() {
       <Screen>
         {saved && offlineVin ? (
           <>
-            <Notice icon="bluetooth-off" text="Not connected. This is the last health check saved on this phone. Connect to check again." />
+            <Notice icon="bluetooth-off" text="Not connected. This is the last health check saved on this phone. Connect your car to check again." />
             <LastScan vin={offlineVin} entry={saved} limit={40} />
             {savedDiff ? <ScanChanges diff={savedDiff} /> : null}
             <Button label="Connect adapter" icon="bluetooth" onPress={() => router.push('/connect')} />
           </>
         ) : (
-          <NeedsConnection what="faults" />
+          <NeedsConnection title="Connect your car to check for faults" />
         )}
       </Screen>
     );
@@ -325,6 +388,27 @@ export default function Diagnostics() {
       <Screen>
         {saved ? <LastScan vin={vehicle.vin} entry={saved} limit={60} /> : <Notice icon="information-outline" text="No health check is saved for this car yet." />}
         {savedDiff ? <ScanChanges diff={savedDiff} /> : null}
+        {/* What to do next with the saved result, as under a new check. */}
+        {saved ? (
+          <Group>
+            {saved.faults?.length || conn.info.milOn ? (
+              <ListRow
+                first
+                icon="broom"
+                iconColour={TOOLS.clear.colour}
+                title="Clear all faults"
+                subtitle="Checks the car again first, then asks before clearing"
+                onPress={() => {
+                  clearAfterCheck.current = true;
+                  setShowSaved(false);
+                  void scan();
+                }}
+              />
+            ) : null}
+            <ListRow first={!(saved.faults?.length || conn.info.milOn)} icon="file-document-outline" iconColour={TOOLS.report.colour} title="Make health report" onPress={() => router.push('/report')} />
+            <ListRow icon="clipboard-list-outline" iconColour={TOOLS.mot.colour} title="MOT check" subtitle={recentHealthCheck(saved) ? 'Can use this health check' : undefined} onPress={() => router.push('/mot')} />
+          </Group>
+        ) : null}
         <Button
           label={saved ? 'Check again' : 'Run health check'}
           icon="refresh"
@@ -381,6 +465,14 @@ export default function Diagnostics() {
 
   return (
     <Screen>
+      {/* Back while the check runs asks first; leaving the app or locking the phone does not. */}
+      <LeaveRunGuard
+        active={scanning}
+        onStop={() => {
+          stop.current = true;
+          setStopping(true);
+        }}
+      />
       <GlowCard tone={scanning ? 'brand' : alert ? 'fault' : 'ok'} style={styles.hero}>
         {scanning ? (
           <View style={{ alignItems: 'center' }}>
@@ -406,12 +498,12 @@ export default function Diagnostics() {
             </Text>
             {withModules ? (
               <Text style={[type.small, type.number, { color: t.muted, marginTop: 2 }]}>
-                {answered} module{answered === 1 ? '' : 's'} answered · {total} fault{total === 1 ? '' : 's'} so far{eta != null && eta > 2 ? ` · about ${eta} s left` : ''}
+                {answered} module{answered === 1 ? '' : 's'} answered · {total} fault{total === 1 ? '' : 's'} so far{eta != null && eta > 2 ? ` · ${leftText(eta)}` : ''}
               </Text>
             ) : null}
             {withModules ? (
               <Button
-                label={stopping ? 'Stopping after this module…' : 'Stop and keep results'}
+                label={stopping ? 'Stopping…' : 'Stop and keep results'}
                 variant="secondary"
                 compact
                 disabled={stopping}
@@ -454,27 +546,27 @@ export default function Diagnostics() {
         <Notice
           tone="danger"
           icon="alert-circle-outline"
-          text="No control module answered, so this is not a clean result: only the engine's standard codes were read. Ignition on, then tap Check again."
+          text="No control module answered, so this is not a clean result: only the engine’s standard codes were read. Check the ignition is on, then tap Check again."
         />
       ) : null}
 
       {/* What to do next, straight under the result. */}
       {!scanning ? (
-        <Group footer={busy === 'deep' ? 'Available when the scan finishes.' : undefined}>
-          {anyToClear ? <ListRow first icon="broom" iconColour="red" title="Clear all faults" disabled={!!busy} onPress={() => setConfirm({ kind: 'all' })} /> : null}
-          <ListRow first={!anyToClear} icon="file-document-outline" iconColour="indigo" title="Make a PDF health report" onPress={() => router.push('/report')} />
-          <ListRow icon="clipboard-list-outline" iconColour="green" title="MOT check" subtitle="Can use this health check" onPress={() => router.push('/mot')} />
-          <ListRow icon="refresh" iconColour="blue" title="Check again" disabled={!!busy} onPress={() => scan()} />
+        <Group footer={busy === 'deep' ? 'Available when the check finishes.' : undefined}>
+          {anyToClear ? <ListRow first icon="broom" iconColour={TOOLS.clear.colour} title="Clear all faults" disabled={!!busy} onPress={() => setConfirm({ kind: 'all' })} /> : null}
+          <ListRow first={!anyToClear} icon="file-document-outline" iconColour={TOOLS.report.colour} title="Make health report" onPress={() => router.push('/report')} />
+          <ListRow icon="clipboard-list-outline" iconColour={TOOLS.mot.colour} title="MOT check" subtitle="Can use this health check" onPress={() => router.push('/mot')} />
+          <ListRow icon="refresh" iconColour={TOOLS.health.colour} title="Check again" disabled={!!busy} onPress={() => scan()} />
           <ListRow
             icon="clipboard-check-outline"
-            iconColour="teal"
+            iconColour={TOOLS.emissions.colour}
             title="Emissions self-tests"
             subtitle="Which self-tests have run, with test results and calibration IDs where the engine keeps them"
             disabled={!!busy}
             onPress={() => router.push('/emissions-tests')}
           />
           {withModules && mode === 'quick' ? (
-            <ListRow icon="radar" iconColour="grey" title="Check every address" subtitle="This was a quick check of the modules your car has. A full check runs by itself every 30 days." disabled={!!busy} onPress={() => scan(true)} />
+            <ListRow icon="radar" iconColour={TOOLS.sensors.colour} title="Check every address" subtitle="This was a quick check of the modules your car has. A full check runs by itself every 30 days." disabled={!!busy} onPress={() => scan(true)} />
           ) : null}
         </Group>
       ) : null}
@@ -516,7 +608,7 @@ export default function Diagnostics() {
             : null}
           {!scanning && unread.length ? (
             <Arrive>
-              <Group header="Could not read" help={SECTIONS.diagCouldNotRead} footer="Engine off, ignition on, then tap Try these again.">
+              <Group header="Could not read" help={SECTIONS.diagCouldNotRead} footer="Switch the engine off, leave the ignition on, then tap Try these again.">
                 {unread.map((def, i) => (
                   <ListRow
                     key={def.id}
@@ -563,13 +655,16 @@ export default function Diagnostics() {
               <ListRow
                 first={!showMissing}
                 title={showMissing ? 'Hide' : `${missing.length} module${missing.length === 1 ? '' : 's'} not found`}
+                // Opens and closes in place: an up or down chevron, not the one that goes to another page.
+                noChevron
+                right={<Icon name={showMissing ? 'chevron-up' : 'chevron-down'} size={13} color={t.faint} />}
                 onPress={() => setShowMissing((v) => !v)}
               />
             </Group>
           ) : null}
           {group === 'vag' && !scanning ? (
             <Group
-              header="Older modules"
+              header="Older VW modules"
               help={SECTIONS.diagOlder}
               footer={
                 deep && busy !== 'deep'
@@ -609,12 +704,12 @@ export default function Diagnostics() {
                 </View>
               ))}
               {deep?.some((m) => m.moduleId && !m.error) && busy !== 'deep' ? (
-                <ListRow icon="tune-variant" iconColour="purple" title="Settings for these modules" onPress={() => router.push('/customise')} />
+                <ListRow icon="tune-variant" iconColour={TOOLS.customise.colour} title="Settings for these modules" onPress={() => router.push('/customise')} />
               ) : null}
               {busy === 'deep' ? (
                 <View style={styles.loadingRow}>
                   <ActivityIndicator color={t.muted} />
-                  <Text style={[type.sub, type.number, { color: t.muted }]}>Looking for older modules… {Math.round(deepPct * 100)}%</Text>
+                  <Text style={[type.sub, type.number, { color: t.muted }]}>Looking for older VW modules… {Math.round(deepPct * 100)}%</Text>
                 </View>
               ) : (
                 <Pressable
@@ -626,7 +721,7 @@ export default function Diagnostics() {
                   }}
                   style={({ pressed }) => [styles.clearRow, { borderColor: t.border, backgroundColor: pressed ? t.raised : 'transparent', opacity: busy ? 0.4 : 1 }]}
                 >
-                  <Text style={[type.body, { color: t.accentText }]}>{deep || vehicle.deepFound ? 'Look for older modules again' : 'Look for older modules'}</Text>
+                  <Text style={[type.body, { color: t.accentText }]}>{deep || vehicle.deepFound ? 'Look for older VW modules again' : 'Look for older VW modules'}</Text>
                 </Pressable>
               )}
             </Group>
@@ -650,7 +745,7 @@ export default function Diagnostics() {
       >
         {obd ? (
           <>
-            <ListRow first title="Engine warning light" value={info.milOn ? 'On' : 'Off'} />
+            <ListRow first title="Engine light" value={info.milOn ? 'On' : 'Off'} />
             {[...new Set([...obd.stored, ...obd.pending, ...obd.permanent])].map((code) => (
               <CodeRow
                 key={code}
@@ -695,7 +790,7 @@ export default function Diagnostics() {
           <ListRow
             first
             icon={incomplete ? 'progress-clock' : 'check-circle-outline'}
-            iconColour={incomplete ? 'orange' : 'green'}
+            iconColour={incomplete ? 'grey' : 'green'}
             title={readinessSummary(info.monitors).text}
             noChevron
           />
@@ -704,7 +799,7 @@ export default function Diagnostics() {
               key={m.name}
               title={m.name}
               subtitle={monitorMeaning(m.name)}
-              right={<Pill text={MONITOR_STATE_LABEL[m.state]} tone={m.state === 'complete' ? 'ok' : 'accent'} />}
+              right={<Pill text={MONITOR_STATE_LABEL[m.state]} tone={m.state === 'complete' ? 'ok' : 'neutral'} />}
             />
           ))}
         </Group>
@@ -719,19 +814,19 @@ export default function Diagnostics() {
 
       <ConfirmSheet
         visible={!!confirm}
-        title={confirm?.kind === 'module' ? `Clear ${confirm.def.name}?` : confirm?.kind === 'tp20' ? `Clear ${tp20Name(confirm.address)}?` : 'Clear all faults?'}
+        title={confirm?.kind === 'module' ? `Clear ${confirm.def.name} faults?` : confirm?.kind === 'tp20' ? `Clear ${tp20Name(confirm.address)} faults?` : 'Clear all faults?'}
         lines={
           confirm?.kind === 'tp20'
-            ? ['Ignition on, engine off.', `Clears the faults of the module at ${tp20Name(confirm.address).toLowerCase()}. Faults that are still present come back.`]
+            ? [CLEAR_ENGINE_LINE, `Clears the faults of the module at ${tp20Name(confirm.address).toLowerCase()}. Faults that are still present come back.`]
             : confirm?.kind === 'module'
-            ? ['Ignition on, engine off.', `Clears ${results[confirm.def.id]?.faults.length ?? 0} fault${results[confirm.def.id]?.faults.length === 1 ? '' : 's'} in the ${confirm.def.name} module. Faults that are still present come back.`]
+            ? [CLEAR_ENGINE_LINE, `Clears ${results[confirm.def.id]?.faults.length ?? 0} fault${results[confirm.def.id]?.faults.length === 1 ? '' : 's'} in the ${confirm.def.name} module. Faults that are still present come back.`]
             : [
-                'Ignition on, engine off.',
+                CLEAR_ENGINE_LINE,
                 `Clears ${total} fault${total === 1 ? '' : 's'}${faulty.length ? ` in ${faulty.map((d) => d.name).join(', ')}` : ''}${info.milOn ? ' and the engine light' : ''}.`,
                 'This also resets the emissions self-tests, so an MOT can fail until you have driven enough for them to complete.',
               ]
         }
-        confirmLabel={confirm?.kind === 'module' ? `Clear ${confirm.def.name}` : confirm?.kind === 'tp20' ? 'Clear faults' : 'Clear all faults'}
+        confirmLabel={confirm?.kind === 'all' ? 'Clear all faults' : 'Clear faults'}
         onConfirm={() => confirm && clear(confirm)}
         onCancel={() => setConfirm(null)}
       />
@@ -783,66 +878,6 @@ function ModuleBlock({
   );
 }
 
-function FaultRow({ fault, module, moduleId, first }: { fault: UdsFault; module: string; moduleId?: string; first?: boolean }) {
-  const brand = useConnection().vehicle?.brand;
-  const ftb = describeFailureType(fault.failureType);
-  // The same title and type the code page shows for this module.
-  const title = faultMeaning(fault.code, { module, brand }).title;
-  const sub = fault.kwp
-    ? 'Stored in the module'
-    : [STATE_LABEL[fault.state], fault.failureType ? ftb : null, fault.warningLamp ? 'Warning light on' : null].filter(Boolean).join(' · ');
-  // The chip shows the code people look up (P0011); the type byte is in the line below.
-  return <CodeRow label={fault.base || undefined} code={fault.code} title={title} sub={sub} module={module} moduleId={moduleId} state={STATE_LABEL[fault.state]} first={first} />;
-}
-
-function CodeRow({
-  code,
-  label,
-  title,
-  sub,
-  module,
-  moduleId,
-  state,
-  first,
-}: {
-  code: string;
-  label?: string;
-  title?: string;
-  sub: string;
-  module?: string;
-  moduleId?: string;
-  state?: string;
-  first?: boolean;
-}) {
-  const t = useTheme();
-  const brand = useConnection().vehicle?.brand;
-  const meaning = faultMeaning(code, { module, brand });
-  const entry = meaning.entry;
-  const serious = entry?.severity === 'high';
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${code}. ${title ?? entry?.title ?? ''}. ${sub}`}
-      onPress={() => {
-        tap();
-        router.push({ pathname: '/code/[code]', params: { code, ...(module ? { module } : {}), ...(moduleId ? { moduleId } : {}), ...(state ? { state } : {}) } });
-      }}
-      style={({ pressed }) => [styles.code, { borderColor: t.border, borderTopWidth: first ? 0 : StyleSheet.hairlineWidth, backgroundColor: pressed ? t.raised : 'transparent' }]}
-    >
-      <View style={[styles.codeChip, { backgroundColor: serious ? t.dangerSoft : t.sunken }]}>
-        <Text style={[styles.codeId, { color: serious ? t.danger : t.text }]}>{label ?? code}</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[type.callout, { color: t.text }]} numberOfLines={2}>
-          {title ?? meaning.title}
-        </Text>
-        <Text style={[type.small, { color: t.muted, marginTop: 1 }]}>{sub}</Text>
-      </View>
-      <Icon name="chevron-right" size={13} color={t.faint} />
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   hero: { paddingVertical: space.xl, paddingHorizontal: space.xl, marginBottom: space.xl },
   pct: { fontSize: 34, lineHeight: 41, fontWeight: '700', marginTop: space.sm },
@@ -851,8 +886,5 @@ const styles = StyleSheet.create({
   big: { fontSize: 56, lineHeight: 62, fontWeight: '700', letterSpacing: -1 },
   stateIcon: { width: 56, height: 56, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.lg },
-  code: { flexDirection: 'row', gap: space.md, paddingVertical: space.md, paddingLeft: space.lg, paddingRight: space.lg, borderTopWidth: StyleSheet.hairlineWidth, alignItems: 'center' },
-  codeChip: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 4 },
-  codeId: { fontSize: 13, fontWeight: '700', fontFamily: MONO, fontVariant: ['tabular-nums'] },
   clearRow: { borderTopWidth: StyleSheet.hairlineWidth, marginLeft: space.lg, minHeight: 48, justifyContent: 'center' },
 });

@@ -1,12 +1,14 @@
 // Knock and timing monitor. Logic and sources: src/monitors/knock.ts.
 import { alertBuzz } from '../sound';
-import { useKeepAwake } from 'expo-keep-awake';
+import { useStayAwake } from '../keepAwake';
 import React, { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { groupLabels } from '../data/groupLabels';
 import { SECTIONS } from '../help';
 import { addKnockSample, assessKnock, cellDegrees, KNOCK_GROUP, KNOCK_GUIDE_DEG, KNOCK_GUIDE_SOURCE, KNOCK_RELATED, KnockLevel, KnockSession, knockSupport, newKnockSession, retardsFrom, sessionVerdict } from '../monitors/knock';
+import { answerRate, loadKnock, peaksText, SavedKnock, saveKnock } from '../monitors/knockStore';
+import { when } from '../components/LastScan';
 import { pidInfo } from '../obd/pids';
 import { MeasuringCell } from '../obd/tp20';
 import { useConnection } from '../state';
@@ -49,14 +51,27 @@ function GroupsMonitor() {
   const t = useTheme();
   const conn = useConnection();
   const client = conn.client!;
-  useKeepAwake();
+  useStayAwake('knock');
   const [phase, setPhase] = useState<'idle' | 'finding' | 'live' | 'no-engine'>('idle');
   const [related, setRelated] = useState(true);
   const [cells, setCells] = useState<Record<number, MeasuringCell[] | null>>({});
   const [session, setSession] = useState<KnockSession>(newKnockSession());
   const [rate, setRate] = useState<number | null>(null);
+  // Why the reading stopped, in the adapter's own words.
+  const [fail, setFail] = useState<string | null>(null);
+  // The last session saved for this car, shown until a new one has readings.
+  const [lastSaved, setLastSaved] = useState<SavedKnock | null>(null);
+  const vin = conn.vehicle?.vin ?? null;
+  const sessionRef = useRef<KnockSession>(session);
   const liveRef = useRef(false);
   const levelRef = useRef<KnockLevel>('none');
+  useEffect(() => {
+    let on = true;
+    if (vin) loadKnock(vin).then((k) => on && setLastSaved(k), () => undefined);
+    return () => {
+      on = false;
+    };
+  }, [vin]);
   useEffect(
     () => () => {
       liveRef.current = false;
@@ -78,9 +93,11 @@ function GroupsMonitor() {
         return;
       }
     }
-    setSession(newKnockSession());
+    sessionRef.current = newKnockSession();
+    setSession(sessionRef.current);
     setCells({});
     setRate(null);
+    setFail(null);
     levelRef.current = 'none';
     liveRef.current = true;
     setPhase('live');
@@ -93,21 +110,39 @@ function GroupsMonitor() {
           if (!liveRef.current) return;
           setCells((old) => ({ ...old, [g]: c }));
           if (g !== KNOCK_GROUP) return;
+          // Only answers that hold values count: a group the engine refuses
+          // has no reading rate.
+          if (!c?.length) {
+            times.length = 0;
+            setRate(null);
+            return;
+          }
           const now = Date.now();
           times.push(now);
           if (times.length > 10) times.shift();
-          if (times.length >= 2) setRate((times.length - 1) / ((times[times.length - 1] - times[0]) / 1000));
+          setRate(answerRate(times));
           const r = retardsFrom(c);
           const level = assessKnock(r).level;
           if (level === 'warn' && levelRef.current !== 'warn') alertBuzz('warn');
           levelRef.current = level;
-          setSession((s) => addKnockSample(s, r));
+          sessionRef.current = addKnockSample(sessionRef.current, r);
+          setSession(sessionRef.current);
         },
         () => liveRef.current,
       )
-      .catch(() => false);
+      .catch((e) => {
+        // The real reason (a lost link, an adapter error), not "the engine did not answer".
+        setFail(e instanceof Error ? e.message : String(e));
+        return null;
+      });
     liveRef.current = false;
-    setPhase(ok ? 'idle' : 'no-engine');
+    setRate(null);
+    // The peaks and verdict of this session stay on the car.
+    if (vin) {
+      const kept = await saveKnock(vin, sessionRef.current).catch(() => null);
+      if (kept) setLastSaved(kept);
+    }
+    setPhase(ok === false ? 'no-engine' : 'idle');
   };
 
   const g20 = cells[KNOCK_GROUP];
@@ -126,7 +161,7 @@ function GroupsMonitor() {
 
   return (
     <>
-      <GlowCard tone={verdict.level === 'warn' ? 'fault' : verdict.level === 'ok' ? 'ok' : 'brand'} style={{ padding: space.xl, marginBottom: space.xl }}>
+      <GlowCard tone={verdict.level === 'warn' ? 'fault' : verdict.level === 'ok' ? 'ok' : phase === 'live' ? 'brand' : 'plain'} style={{ padding: space.xl, marginBottom: space.xl }}>
         <Text style={[type.label, { color: t.muted }]}>Knock retard now</Text>
         <Text style={[styles.big, type.number, { color: colour(now.level) }]}>
           {now.worst == null ? '–' : `${now.worst.toFixed(1)}°`}
@@ -141,6 +176,7 @@ function GroupsMonitor() {
       {phase === 'no-engine' ? (
         <Notice tone="danger" icon="alert-circle-outline" text="The engine did not answer on the older VW protocol, so knock values cannot be read on this car. Switch the ignition on and try again." />
       ) : null}
+      {fail ? <Notice tone="danger" icon="alert-circle-outline" text={`Reading stopped: ${fail}. Check the ignition is on, then tap Start again.`} /> : null}
       {g20 === null ? <Notice icon="information-outline" text="The engine did not answer value group 020, so knock retard is not available on this engine." /> : null}
       {notDegrees ?<Notice icon="information-outline" text="Group 020 on this engine does not give degrees, so Caristini cannot judge knock. The raw values are shown below." /> : null}
 
@@ -158,6 +194,14 @@ function GroupsMonitor() {
           onPress={() => setRelated((v) => !v)}
         />
       </View>
+
+      {lastSaved && phase !== 'live' && !session.samples ? (
+        <Group header={`Last session, ${when(lastSaved.at)}`} footer="Kept on this phone. A new session with readings replaces it.">
+          <ListRow first title={sessionVerdict(lastSaved.session).text} noChevron />
+          <ListRow title="Peak retard, cylinders 1 to 4" value={peaksText(lastSaved.session)} noChevron />
+          <ListRow title="Readings" value={String(lastSaved.session.samples)} noChevron />
+        </Group>
+      ) : null}
 
       <Group header="Per cylinder" help={SECTIONS.monKnockCylinders} footer={`Bars run to ${scale.toFixed(0)}°. The line marks the ${KNOCK_GUIDE_DEG}° guide.`}>
         {[0, 1, 2, 3].map((i) => {

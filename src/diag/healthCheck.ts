@@ -269,7 +269,7 @@ export async function runHealthCheck(o: HealthCheckOpts): Promise<HealthCheckRes
   // hold is added to this check's History entry and saved fault list.
   if (o.olderSearch && withModules && group === 'vag' && !stopped && !halted() && (!garage.latest(vin)?.deepFound || o.olderAgain)) {
     o.onOlderStart?.();
-    step('the older modules');
+    step('the older VW modules');
     try {
       const addresses = TP20_CANDIDATES.filter((a) => !o.olderSkip?.includes(a));
       const found = await client.deepScan(addresses, o.onOlderProgress, o.onOlderModule, (a) => silentOlder.push(a));

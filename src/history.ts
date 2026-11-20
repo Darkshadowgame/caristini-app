@@ -3,7 +3,7 @@
 // no adapter connected.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type HistoryKind = 'scan' | 'clear' | 'change' | 'service' | 'sensors' | 'discover' | 'mot';
+export type HistoryKind = 'scan' | 'clear' | 'change' | 'service' | 'sensors' | 'discover' | 'mot' | 'battery';
 
 export interface HistoryFault {
   module: string;
@@ -61,8 +61,9 @@ export const HISTORY_LABEL: Record<HistoryKind, string> = {
   change: 'Setting changed',
   service: 'Service reset',
   sensors: 'Find my car’s sensors',
-  discover: 'Learning',
+  discover: 'Learn my car',
   mot: 'MOT check',
+  battery: 'Battery test',
 };
 
 const KEY = 'caristini.history.v1';
@@ -79,43 +80,59 @@ export async function loadHistory(vin?: string): Promise<HistoryEntry[]> {
   }
 }
 
+// Each change loads the whole list, changes it and saves it. They run one
+// after another, so two at once (a check finishing while a clear is logged)
+// cannot save over each other.
+let tail: Promise<unknown> = Promise.resolve();
+function inTurn<T>(job: () => Promise<T>): Promise<T> {
+  const run = tail.then(job, job);
+  tail = run.catch(() => undefined);
+  return run;
+}
+
 // Returns the new entry's id, so a later step can add to it (updateHistory).
 export async function addHistory(entry: Omit<HistoryEntry, 'id' | 'at'> & { at?: number }): Promise<string> {
   // Any fault clear resets the emissions self-tests: drop the saved read.
   if (entry.kind === 'clear') await import('./diag/emissionsStore').then((m) => m.forgetEmissions(entry.vin)).catch(() => undefined);
-  const list = await loadHistory();
-  const id = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
-  const next = [{ ...entry, at: entry.at ?? Date.now(), id }, ...list].slice(0, MAX);
-  try {
-    await AsyncStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    // Storage unavailable (for example a private browser window).
-  }
-  listeners.forEach((l) => l());
-  return id;
+  return inTurn(async () => {
+    const list = await loadHistory();
+    const id = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+    const next = [{ ...entry, at: entry.at ?? Date.now(), id }, ...list].slice(0, MAX);
+    try {
+      await AsyncStorage.setItem(KEY, JSON.stringify(next));
+    } catch {
+      // Storage unavailable (for example a private browser window).
+    }
+    listeners.forEach((l) => l());
+    return id;
+  });
 }
 
 // Adds to an entry already saved: the health check's older-module search
 // finishes after its entry is saved.
-export async function updateHistory(id: string, patch: Partial<Omit<HistoryEntry, 'id' | 'vin'>>): Promise<void> {
-  const list = await loadHistory();
-  if (!list.some((e) => e.id === id)) return;
-  try {
-    await AsyncStorage.setItem(KEY, JSON.stringify(list.map((e) => (e.id === id ? { ...e, ...patch } : e))));
-  } catch {
-    // ignore
-  }
-  listeners.forEach((l) => l());
+export function updateHistory(id: string, patch: Partial<Omit<HistoryEntry, 'id' | 'vin'>>): Promise<void> {
+  return inTurn(async () => {
+    const list = await loadHistory();
+    if (!list.some((e) => e.id === id)) return;
+    try {
+      await AsyncStorage.setItem(KEY, JSON.stringify(list.map((e) => (e.id === id ? { ...e, ...patch } : e))));
+    } catch {
+      // ignore
+    }
+    listeners.forEach((l) => l());
+  });
 }
 
-export async function removeHistory(id: string): Promise<void> {
-  const list = await loadHistory();
-  try {
-    await AsyncStorage.setItem(KEY, JSON.stringify(list.filter((e) => e.id !== id)));
-  } catch {
-    // ignore
-  }
-  listeners.forEach((l) => l());
+export function removeHistory(id: string): Promise<void> {
+  return inTurn(async () => {
+    const list = await loadHistory();
+    try {
+      await AsyncStorage.setItem(KEY, JSON.stringify(list.filter((e) => e.id !== id)));
+    } catch {
+      // ignore
+    }
+    listeners.forEach((l) => l());
+  });
 }
 
 export function onHistory(fn: () => void): () => void {

@@ -70,7 +70,7 @@ export default function Boost() {
   if (!client) {
     return (
       <Screen>
-        <NeedsConnection what="boost" />
+        <NeedsConnection title="Connect your car to watch turbo boost" />
       </Screen>
     );
   }
@@ -99,8 +99,18 @@ export default function Boost() {
 
           <View style={[styles.chart, { backgroundColor: t.surface }]}>
             <View style={styles.legend}>
-              <Text style={[type.caption, { color: t.muted }]}>- - Requested</Text>
-              <Text style={[type.caption, { color: t.accentText }]}>— Actual</Text>
+              {/* Line swatches as the chart draws them: dashed for requested, solid for actual. */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <View style={{ flexDirection: 'row', gap: 3 }} accessible={false}>
+                  <View style={{ width: 5, height: 2, backgroundColor: t.muted }} />
+                  <View style={{ width: 5, height: 2, backgroundColor: t.muted }} />
+                </View>
+                <Text style={[type.caption, { color: t.muted }]}>Requested</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <View style={{ width: 13, height: 2, backgroundColor: t.accentText }} accessible={false} />
+                <Text style={[type.caption, { color: t.accentText }]}>Actual</Text>
+              </View>
               {last?.rpm != null ? <Text style={[type.caption, type.number, { color: t.muted, marginLeft: 'auto' }]}>{Math.round(last.rpm)} rpm</Text> : null}
             </View>
             <View>
@@ -123,7 +133,7 @@ export default function Boost() {
 
           {problem ? <Notice tone="danger" icon="alert-circle-outline" text={problem} /> : null}
           <View style={styles.buttons}>
-            <Button label={running ? 'Stop' : 'Start'} icon={running ? 'stop' : 'play'} onPress={() => setRunning((r) => !r)} style={{ flex: 1 }} />
+            <Button label={running ? 'Stop' : 'Start'} icon={running ? 'stop' : 'play'} variant={running ? 'secondary' : 'primary'} onPress={() => setRunning((r) => !r)} style={{ flex: 1 }} />
             <Button label="Reset" icon="restart" variant="secondary" onPress={() => setSamples([])} style={{ flex: 1 }} disabled={!samples.length} />
           </View>
 
@@ -131,9 +141,9 @@ export default function Boost() {
             header="This session"
             footer={`Pressures are absolute, in kPa as on Live data: about 100 kPa is no boost at sea level. ${source === 'group' ? `Read from engine group ${LEON_BOOST_GROUP}.` : 'Read from standard PID 70.'}`}
           >
-            <ListRow first title="Peak actual" value={sum.peakActual == null ? 'None yet' : kpa(sum.peakActual)} />
-            <ListRow title="Largest shortfall" value={samples.length ? signed(sum.worstUnder) : 'None yet'} />
-            <ListRow title="Largest overshoot" value={samples.length ? signed(sum.worstOver) : 'None yet'} />
+            <ListRow first title="Peak actual" value={sum.peakActual == null ? 'No reading' : kpa(sum.peakActual)} />
+            <ListRow title="Largest shortfall" value={samples.length ? signed(sum.worstUnder) : 'No reading'} />
+            <ListRow title="Largest overshoot" value={samples.length ? signed(sum.worstOver) : 'No reading'} />
           </Group>
           {source === 'group' ? (
             <Body muted small>

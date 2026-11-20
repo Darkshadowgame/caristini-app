@@ -1,5 +1,5 @@
 // Trip computer. Maths and sources: src/monitors/trip.ts.
-import { useKeepAwake } from 'expo-keep-awake';
+import { useStayAwake } from '../keepAwake';
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SECTIONS } from '../help';
@@ -10,6 +10,7 @@ import { useSettings } from '../settings';
 import { useConnection } from '../state';
 import { space, type, useTheme } from '../theme';
 import { Button, ConfirmSheet, GlowCard, Group, ListRow, NeedsConnection, Notice, Screen, success } from '../ui';
+import { dateTimeText } from '../timeText';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -134,7 +135,7 @@ function TripBody() {
   return (
     <>
       {running ? <Awake /> : null}
-      <GlowCard tone="brand" style={{ padding: space.xl, marginBottom: space.xl }}>
+      <GlowCard tone={running ? 'brand' : 'plain'} style={{ padding: space.xl, marginBottom: space.xl }}>
         <Text style={[type.label, { color: t.muted }]}>{running ? 'This trip' : 'Trip'}</Text>
         <Text style={[styles.big, type.number, { color: t.text }]}>{sum ? distance(sum.km) : distance(0)}</Text>
         <View style={styles.stats}>
@@ -152,7 +153,7 @@ function TripBody() {
 
       <View style={{ marginBottom: space.xl }}>
         {running ? (
-          <Button label="Finish trip" icon="flag-checkered" onPress={finish} />
+          <Button label="Finish trip" icon="flag-checkered" variant="danger" onPress={finish} />
         ) : (
           <Button label="Start trip" icon="play" onPress={start} disabled={!canRun} busy={!supported} />
         )}
@@ -172,7 +173,7 @@ function TripBody() {
               <ListRow
                 key={s.id}
                 first={i === 0}
-                title={new Date(s.startedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                title={dateTimeText(s.startedAt)}
                 subtitle={parts.join(', ')}
                 value={distance(s.km)}
                 onPress={() => setRemove(s)}
@@ -186,9 +187,9 @@ function TripBody() {
 
       <ConfirmSheet
         visible={!!remove}
-        title="Remove this trip?"
-        lines={['Removes it from this phone.']}
-        confirmLabel="Remove trip"
+        title="Delete this trip?"
+        lines={['Deletes it from this phone. This cannot be undone.']}
+        confirmLabel="Delete"
         onCancel={() => setRemove(null)}
         onConfirm={async () => {
           const r = remove;
@@ -215,7 +216,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function Awake() {
-  useKeepAwake();
+  useStayAwake('trip');
   return null;
 }
 

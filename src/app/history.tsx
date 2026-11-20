@@ -1,25 +1,28 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { HISTORY_LABEL, HistoryEntry, HistoryKind, loadHistory, onHistory } from '../history';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { HISTORY_LABEL, HistoryEntry, HistoryKind, loadHistory, onHistory, removeHistory } from '../history';
 import { diffScans, previousFull } from '../diag/scanDiff';
 import { useSettings } from '../settings';
 import { useConnection } from '../state';
-import { MONO, radius, space, type, useTheme, ToolColour } from '../theme';
-import { Group, Icon, IconName, ListRow, Pill, Screen, tap } from '../ui';
+import { MONO, radius, space, type, useTheme } from '../theme';
+import { Chips, ConfirmSheet, Group, Icon, ListRow, Pill, Screen, tap, tool, ToolId, TOOLS } from '../ui';
 import { faultLabel } from '../diag/faults';
+import { clockText, dateText } from '../timeText';
 import { useGarage, vehicleTitle } from '../vehicle/garage';
 
-const KIND_ICON: Record<HistoryKind, IconName> = {
-  scan: 'stethoscope',
-  clear: 'broom',
-  change: 'tune-variant',
-  service: 'wrench-clock',
-  sensors: 'radar' as IconName,
-  discover: 'telescope' as IconName,
-  mot: 'clipboard-list-outline',
+// Each entry wears the square of the tool that made it (TOOLS in src/ui.tsx),
+// the same icon and colour that tool has on the Car tab.
+const KIND_TOOL: Record<HistoryKind, ToolId> = {
+  scan: 'health',
+  clear: 'clear',
+  change: 'customise',
+  service: 'service',
+  sensors: 'sensors',
+  discover: 'discover',
+  mot: 'mot',
+  battery: 'battery',
 };
-const KIND_COLOUR: Record<HistoryKind, ToolColour> = { scan: 'blue', clear: 'orange', change: 'purple', service: 'green', sensors: 'teal', discover: 'indigo', mot: 'green' };
 const FILTERS: { key: 'all' | HistoryKind; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'scan', label: 'Health checks' },
@@ -27,8 +30,9 @@ const FILTERS: { key: 'all' | HistoryKind; label: string }[] = [
   { key: 'change', label: 'Changes' },
   { key: 'service', label: 'Service' },
   { key: 'sensors', label: 'Sensors' },
-  { key: 'discover', label: 'Learning' },
+  { key: 'discover', label: 'Learn my car' },
   { key: 'mot', label: 'MOT' },
+  { key: 'battery', label: 'Battery' },
 ];
 
 // Everything Caristini did with a car, readable with no adapter connected:
@@ -44,6 +48,8 @@ export default function History() {
   const [list, setList] = useState<HistoryEntry[] | null>(null);
   const [filter, setFilter] = useState<'all' | HistoryKind>('all');
   const [open, setOpen] = useState<string | null>(null);
+  // The entry the owner asked to delete; deleted only after the confirm.
+  const [removing, setRemoving] = useState<HistoryEntry | null>(null);
 
   const load = useCallback(() => {
     if (vin) loadHistory(vin).then(setList);
@@ -63,8 +69,9 @@ export default function History() {
 
   const shown = (list ?? []).filter((e) => filter === 'all' || e.kind === filter);
   const changes = (list ?? []).filter((e) => e.kind === 'change').length;
-  const day = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-  const time = (ms: number) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  // The app's one date and time format (src/timeText.ts).
+  const day = dateText;
+  const time = clockText;
   const miles = (km?: number) => (km == null ? null : settings.speed === 'mph' ? `${Math.round(km / 1.609344).toLocaleString('en-GB')} mi` : `${Math.round(km).toLocaleString('en-GB')} km`);
 
   // Group by day for the timeline.
@@ -79,33 +86,14 @@ export default function History() {
   return (
     <Screen>
       <Text style={[type.sub, { color: t.muted, marginBottom: space.md }]}>{vehicleTitle(v)}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm, paddingBottom: space.lg }}>
-        {FILTERS.map((f) => {
-          const on = filter === f.key;
-          return (
-            <Pressable
-              key={f.key}
-              accessibilityRole="button"
-              accessibilityState={{ selected: on }}
-              onPress={() => {
-                tap();
-                setFilter(f.key);
-              }}
-              style={[styles.chip, { backgroundColor: on ? t.accent : t.surface }]}
-            >
-              <Text style={[type.sub, { color: on ? t.onAccent : t.text, fontWeight: '600' }]}>{f.label}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <Chips scroll options={FILTERS.map((f) => ({ id: f.key, label: f.label }))} value={filter} onPick={setFilter} />
 
       {/* Always shown, so the timeline can be found before the first change. */}
       {filter === 'all' || filter === 'change' ? (
         <Group>
           <ListRow
             first
-            icon="timeline-text-outline"
-            iconColour="purple"
+            {...tool('timeline')}
             title="Change timeline"
             subtitle={changes ? `${changes} change${changes === 1 ? '' : 's'}, with old and new values. Put one back or share the list.` : 'No setting changes yet. Each one you make is listed here.'}
             onPress={() => router.push({ pathname: '/customise/timeline', params: { vin } })}
@@ -116,7 +104,7 @@ export default function History() {
       {list && !shown.length ? (
         <View style={{ alignItems: 'center', paddingVertical: space.xxl }}>
           <Icon name="progress-clock" size={40} color={t.faint} />
-          <Text style={[type.heading, { color: t.text, marginTop: space.md }]}>Nothing here yet</Text>
+          <Text style={[type.heading, { color: t.text, marginTop: space.md }]}>No entries yet</Text>
           <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: 4 }]}>Run a health check and it is saved here, with every fault, so you can look back any time.</Text>
         </View>
       ) : null}
@@ -144,8 +132,8 @@ export default function History() {
                 }}
                 style={({ pressed }) => [styles.entry, { borderColor: t.border, borderTopWidth: i ? StyleSheet.hairlineWidth : 0 }, pressed && { backgroundColor: t.raised }]}
               >
-                <View style={[styles.icon, { backgroundColor: t[KIND_COLOUR[e.kind]] }]}>
-                  <Icon name={KIND_ICON[e.kind]} size={16} color="#FFFFFF" />
+                <View style={[styles.icon, { backgroundColor: t[TOOLS[KIND_TOOL[e.kind]].colour] }]}>
+                  <Icon name={TOOLS[KIND_TOOL[e.kind]].icon} size={17} color="#FFFFFF" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
@@ -160,8 +148,8 @@ export default function History() {
                   {/* The title already gives the fault count; these say how it compares with the check before. */}
                   {e.kind === 'scan' && (diff?.added || diff?.recurring || gone.length) ? (
                     <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                      {diff?.added ? <Pill text={`${diff.added} new`} tone="accent" /> : null}
-                      {diff?.recurring ? <Pill text={`${diff.recurring} also in the last check`} /> : null}
+                      {diff?.added ? <Pill text={`${diff.added} new`} tone="danger" /> : null}
+                      {diff?.recurring ? <Pill text={`${diff.recurring} seen before`} /> : null}
                       {gone.length ? <Pill text={`${gone.length} cleared`} tone="ok" /> : null}
                     </View>
                   ) : null}
@@ -185,7 +173,7 @@ export default function History() {
                             {f.module}
                             {faultLabel(f) ? ` · ${faultLabel(f)}` : ''}
                           </Text>
-                          {tag(f) ? <Pill text={tag(f)!} tone={tag(f) === 'New' ? 'accent' : 'neutral'} /> : null}
+                          {tag(f) ? <Pill text={tag(f)!} tone={tag(f) === 'New' ? 'danger' : 'neutral'} /> : null}
                         </Pressable>
                       ))}
                       {gone.map((f, k) => (
@@ -218,19 +206,40 @@ export default function History() {
                           {e.before} → {e.after}
                         </Text>
                       ) : null}
+                  {/* On an opened entry only, and it asks first, like every other delete of saved data. */}
+                  {expanded ? (
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Delete this entry: ${e.title}`} onPress={() => setRemoving(e)} style={styles.delete}>
+                      <Text style={[type.sub, { color: t.danger }]}>Delete entry</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </Pressable>
             );
           })}
         </Group>
       ))}
+
+      <ConfirmSheet
+        visible={!!removing}
+        title="Delete this entry?"
+        lines={removing ? [`${removing.title}, ${day(removing.at)}, ${time(removing.at)}. Taken out of History on this phone. This cannot be undone.`] : []}
+        confirmLabel="Delete entry"
+        onCancel={() => setRemoving(null)}
+        onConfirm={async () => {
+          const e = removing;
+          setRemoving(null);
+          if (!e) return;
+          setOpen(null);
+          await removeHistory(e.id);
+        }}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  chip: { paddingHorizontal: space.md + 2, paddingVertical: 7, borderRadius: 999 },
   entry: { flexDirection: 'row', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
-  icon: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  icon: { width: 30, height: 30, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  delete: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: space.xs },
   fault: { flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.sm, borderRadius: radius.sm },
 });

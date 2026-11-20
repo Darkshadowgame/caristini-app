@@ -1,9 +1,6 @@
-// Customisations documented in public community sources, filtered per car.
-// Caristini does not write coding yet: no public source confirms the diagnostic
-// identifiers and security access needed for these writes, and a wrong write
-// can leave warning lights or a module that needs a dealer. Each entry says
-// where the setting lives and links its source, so a write can be added once
-// it is verified on the owner's own car with a backup taken first.
+// Guides: customisations documented in public community sources that
+// Caristini has no switch for yet (the switches are in src/coding). Each entry
+// says where the setting lives and links its source.
 import type { MakeGroup } from '../vehicle/vin';
 
 export type ModStatus = 'owner' | 'documented' | 'dealer';
@@ -26,14 +23,14 @@ export interface ModEntry {
 
 export const STATUS_LABEL: Record<ModStatus, string> = {
   owner: 'Owner procedure',
-  documented: 'Steps known, not yet tested by Caristini',
+  documented: 'Guide only, no switch yet',
   dealer: 'Dealer tool only',
 };
 
 export const STATUS_HELP: Record<ModStatus, string> = {
   owner: 'You can change this yourself with the car’s own controls. Steps are in the source.',
   documented:
-    'Community sources say where this setting lives. Caristini reads but does not write it yet: the write command and security access are not publicly confirmed for your car.',
+    'A guide, not a switch. Sources say where this setting lives, but not the exact value to write on your car, so Caristini has no switch for it yet. Learn from Carista (under Get more settings) can make one from your own car.',
   dealer: 'Public sources only report this being changed with the maker’s dealer tool.',
 };
 

@@ -1,13 +1,12 @@
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { View } from 'react-native';
 import { addDiary, DIARY_KINDS, parseUkDate, shiftDate, today, ukDate } from '../diary';
 import { useSettings } from '../settings';
 import { useConnection } from '../state';
-import { radius, space, type, useTheme } from '../theme';
-import { Body, Button, Card, Label, Screen } from '../ui';
+import { space, useTheme } from '../theme';
+import { Body, Button, Chips, Field, Group, Screen } from '../ui';
 import { useGarage, vehicleTitle } from '../vehicle/garage';
-import { Choices } from './vehicle';
 
 export default function DiaryAdd() {
   const t = useTheme();
@@ -28,59 +27,39 @@ export default function DiaryAdd() {
     { id: shiftDate(today(), -1), label: 'Yesterday' },
   ];
 
-  const input = [
-    type.body,
-    styles.input,
-    { color: t.text, borderColor: t.border, backgroundColor: t.bg },
-    Platform.OS === 'web' && ({ outlineStyle: 'none' } as object),
-  ];
-
   return (
     <Screen>
       {garage.vehicles.length ? (
-        <Card>
-          <Label>Car</Label>
-          <Choices options={garage.vehicles.map((v) => ({ id: v.vin, label: vehicleTitle(v) }))} value={vin} onPick={setVin} />
-        </Card>
+        <Group header="Car" padded>
+          <Chips onCard role="radio" options={garage.vehicles.map((v) => ({ id: v.vin, label: vehicleTitle(v) }))} value={vin} onPick={setVin} />
+        </Group>
       ) : null}
-      <Card>
-        <Label>What was done</Label>
-        <Choices options={DIARY_KINDS.map((k) => ({ id: k, label: k }))} value={kind} onPick={setKind} />
-      </Card>
-      <Card>
-        <Label>Details</Label>
-        <Text style={[type.small, { color: t.muted, marginBottom: 4 }]}>Date (day/month/year)</Text>
-        <Choices options={quick} value={date ?? ''} onPick={(iso) => setDateText(ukDate(iso))} />
-        <TextInput
+      <Group header="What was done" padded>
+        <Chips onCard role="radio" options={DIARY_KINDS.map((k) => ({ id: k, label: k }))} value={kind} onPick={setKind} />
+      </Group>
+      <Group header="Details" padded>
+        <Field
+          label="Date (day/month/year)"
           value={dateText}
-          onChangeText={setDateText}
+          onChange={setDateText}
           accessibilityLabel="Date, day/month/year"
           placeholder="For example 12/11/2026"
-          placeholderTextColor={t.faint}
-          keyboardType="numbers-and-punctuation"
-          style={[input, { marginTop: space.sm }]}
+          keyboard="numbers-and-punctuation"
+          number
         />
-        <Text style={[type.small, { color: t.muted, marginBottom: 4, marginTop: space.md }]}>Mileage in {unit === 'mi' ? 'miles' : 'km'} (optional)</Text>
-        <TextInput
+        <Chips onCard options={quick} value={date ?? ''} onPick={(iso) => setDateText(ukDate(iso))} style={{ marginTop: space.sm }} />
+        <Field
+          label={`Mileage in ${unit === 'mi' ? 'miles' : 'km'} (optional)`}
           value={mileage}
-          onChangeText={(x) => setMileage(x.replace(/[^\d]/g, ''))}
-          keyboardType="number-pad"
+          onChange={(x) => setMileage(x.replace(/[^\d]/g, ''))}
+          keyboard="number-pad"
           accessibilityLabel={`Mileage in ${unit === 'mi' ? 'miles' : 'km'}`}
           placeholder="For example 48200"
-          placeholderTextColor={t.faint}
-          style={input}
+          number
+          style={{ marginTop: space.md }}
         />
-        <Text style={[type.small, { color: t.muted, marginBottom: 4, marginTop: space.md }]}>Notes</Text>
-        <TextInput
-          value={notes}
-          onChangeText={setNotes}
-          multiline
-          accessibilityLabel="Notes"
-          placeholder="Parts, garage, cost"
-          placeholderTextColor={t.faint}
-          style={[input, { minHeight: 90, textAlignVertical: 'top' }]}
-        />
-      </Card>
+        <Field label="Notes" value={notes} onChange={setNotes} multiline placeholder="Parts, garage, cost" style={{ marginTop: space.md }} />
+      </Group>
       {!date ? <Body small style={{ color: t.danger, marginBottom: space.sm }}>Type the date as day/month/year, for example 12/11/2026.</Body> : null}
       <View>
         <Button
@@ -106,6 +85,3 @@ export default function DiaryAdd() {
   );
 }
 
-const styles = StyleSheet.create({
-  input: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 10 },
-});

@@ -1,11 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { radius, space, type, useTheme } from '../theme';
+import { Text } from 'react-native';
+import { space, type, useTheme } from '../theme';
 import { useConnection } from '../state';
-import { Body, Button, Card, ConfirmSheet, Group, IconName, Label, ListRow, Notice, Row, Screen, tap } from '../ui';
+import { Body, Button, Chips, ConfirmSheet, Field, Group, ListRow, Notice, Screen, tool } from '../ui';
 import { useGarage, Vehicle } from '../vehicle/garage';
+import { CarRecordRows } from '../components/CarRecords';
 import { LastScan, useLastScan } from '../components/LastScan';
+import { detailsPatch } from '../vehicle/records';
 import { decodeVin, GROUP_LABEL, MakeGroup, platformModels } from '../vehicle/vin';
 
 const GROUPS: MakeGroup[] = ['vag', 'ford', 'mazda', 'other'];
@@ -44,28 +46,27 @@ export default function VehicleDetails() {
 
   return (
     <Screen>
-      <Card>
-        <Label>Your details</Label>
-        <Field label="Nickname" value={draft.nickname} onChange={(x) => set({ nickname: x })} placeholder="For example the owner's Golf" />
-        <Field label="Make" value={draft.brand} onChange={(x) => set({ brand: x })} />
-        <Field label="Model" value={draft.model} onChange={(x) => set({ model: x })} placeholder="For example Golf VII" />
+      <Group header="Your details" padded>
+        <Field label="Nickname" value={draft.nickname} onChange={(x) => set({ nickname: x })} placeholder="For example the owner’s Golf" />
+        <Field label="Make" value={draft.brand} onChange={(x) => set({ brand: x })} style={{ marginTop: space.md }} />
+        <Field label="Model" value={draft.model} onChange={(x) => set({ model: x })} placeholder="For example Golf VII" style={{ marginTop: space.md }} />
         <Field
           label="Model year"
           value={yearText}
           onChange={(x) => setYearText(x.replace(/\D/g, '').slice(0, 4))}
           placeholder="For example 2018"
           keyboard="number-pad"
+          number
+          style={{ marginTop: space.md }}
         />
-        <Body muted small style={{ marginTop: space.md, marginBottom: space.sm }}>
-          Maker group (decides service guides and customisations)
-        </Body>
-        <Choices options={GROUPS.map((g) => ({ id: g, label: GROUP_LABEL[g] }))} value={draft.group} onPick={(g) => set({ group: g as MakeGroup })} />
+        <Text style={[type.small, { color: t.muted, marginTop: space.md, marginBottom: space.sm }]}>Maker group (decides service guides and settings)</Text>
+        <Chips onCard role="radio" options={GROUPS.map((g) => ({ id: g, label: GROUP_LABEL[g] }))} value={draft.group} onPick={(g) => set({ group: g as MakeGroup })} />
         {draft.group === 'vag' ? (
           <>
-            <Body muted small style={{ marginTop: space.md, marginBottom: space.sm }}>
-              Platform
-            </Body>
-            <Choices
+            <Text style={[type.small, { color: t.muted, marginTop: space.md, marginBottom: space.sm }]}>Platform</Text>
+            <Chips
+              onCard
+              role="radio"
               options={[{ id: '', label: 'Not sure' }, ...PLATFORMS.map((p) => ({ id: p, label: p }))]}
               value={draft.platform ?? ''}
               onPick={(p) => set({ platform: p || null })}
@@ -77,10 +78,10 @@ export default function VehicleDetails() {
             </Body>
           </>
         ) : null}
-        <Body muted small style={{ marginTop: space.md, marginBottom: space.sm }}>
-          Fuel
-        </Body>
-        <Choices
+        <Text style={[type.small, { color: t.muted, marginTop: space.md, marginBottom: space.sm }]}>Fuel</Text>
+        <Chips
+          onCard
+          role="radio"
           options={[
             { id: 'Petrol', label: 'Petrol' },
             { id: 'Diesel', label: 'Diesel' },
@@ -88,34 +89,36 @@ export default function VehicleDetails() {
           value={draft.fuel ?? ''}
           onPick={(f) => set({ fuel: f as 'Petrol' | 'Diesel' })}
         />
-      </Card>
+      </Group>
 
       <Button
         label="Save"
         icon="content-save-outline"
         onPress={async () => {
-          const year = /^\d{4}$/.test(yearText) ? Number(yearText) : null;
-          await garage.update(v.vin, { ...draft, year, edited: true });
+          // Only what this page edits: anything saved on the car since the
+          // page opened (Parts and IDs, a health check) is kept.
+          await garage.update(v.vin, detailsPatch(draft, yearText));
           router.back();
         }}
       />
-      <Text style={[type.small, { color: t.faint, marginTop: space.sm, marginBottom: space.lg }]}>Saved on this phone only.</Text>
+      <Text style={[type.small, { color: t.muted, marginTop: space.sm, marginBottom: space.xl, textAlign: 'center' }]}>Saved on this phone only.</Text>
 
-      <Card>
-        <Label>Detected from the VIN</Label>
-        <Row label="VIN" value={v.vin} mono />
-        <Row label="Make" value={decoded.brand ?? 'Not recognised'} />
-        <Row label="Model" value={decoded.model ? `${decoded.model} (likely)` : 'Not in the VIN table'} />
-        <Row label="Model year" value={decoded.year ? `${decoded.year}${decoded.yearReliable ? '' : ' (check)'}` : 'Not encoded'} />
-        <Row label="Fuel" value={v.fuel ?? 'Unknown'} />
-      </Card>
+      <Group header="Detected from the VIN">
+        <ListRow first title="VIN" value={v.vin} mono />
+        <ListRow title="Make" value={decoded.brand ?? 'Not recognised'} />
+        <ListRow title="Model" value={decoded.model ? `${decoded.model} (likely)` : 'Not in the VIN table'} />
+        <ListRow title="Model year" value={decoded.year ? `${decoded.year}${decoded.yearReliable ? '' : ' (check)'}` : 'Not encoded'} />
+        <ListRow title="Fuel" value={v.fuel ?? 'Unknown'} />
+      </Group>
 
       {lastScan ? <LastScan vin={v.vin} entry={lastScan} /> : null}
       <Group header="Records" footer="Kept on this phone, readable without the adapter.">
-        <ListRow first icon={'barcode' as IconName} iconColour="indigo" title="Parts and IDs" subtitle="VIN, codes, module part numbers, service parts" onPress={() => router.push({ pathname: '/car-ids', params: { vin: v.vin } })} />
-        <ListRow icon="progress-clock" iconColour="blue" title="History" subtitle="Every health check and its faults, clears and setting changes" onPress={() => router.push({ pathname: '/history', params: { vin: v.vin } })} />
-        <ListRow icon={'book-open-variant' as IconName} iconColour="purple" title="Research notes" subtitle="Notes saved for this kind of car" onPress={() => router.push('/knowledge')} />
-        <ListRow icon="notebook-outline" iconColour="orange" title="Diary" subtitle="Services, repairs and notes" onPress={() => router.push('/diary')} />
+        <ListRow first {...tool('ids')} title="Parts and IDs" subtitle="VIN, codes, module part numbers, service parts" onPress={() => router.push({ pathname: '/car-ids', params: { vin: v.vin } })} />
+        <ListRow {...tool('history')} title="History" subtitle="Every health check and its faults, clears and setting changes" onPress={() => router.push({ pathname: '/history', params: { vin: v.vin } })} />
+        {/* MOT check, saved logs, last battery reading and emissions read: all open with no adapter. */}
+        <CarRecordRows v={v} />
+        <ListRow {...tool('notes')} title="Research notes" subtitle="Notes saved for this kind of car" onPress={() => router.push('/knowledge')} />
+        <ListRow {...tool('diary')} title="Diary" subtitle="Services, repairs and notes" onPress={() => router.push('/diary')} />
       </Group>
 
       <Button label="Remove this car" icon="trash-can-outline" variant="ghost" onPress={() => setConfirmRemove(true)} />
@@ -139,68 +142,4 @@ export default function VehicleDetails() {
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  keyboard,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  keyboard?: 'number-pad';
-}) {
-  const t = useTheme();
-  return (
-    <View style={{ marginTop: space.sm }}>
-      <Text style={[type.small, { color: t.muted, marginBottom: 4 }]}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder}
-        placeholderTextColor={t.faint}
-        keyboardType={keyboard}
-        accessibilityLabel={label}
-        style={[
-          type.body,
-          styles.input,
-          { color: t.text, borderColor: t.border, backgroundColor: t.bg },
-          Platform.OS === 'web' && ({ outlineStyle: 'none' } as object),
-        ]}
-      />
-    </View>
-  );
-}
 
-export function Choices({ options, value, onPick }: { options: { id: string; label: string }[]; value: string; onPick: (id: string) => void }) {
-  const t = useTheme();
-  return (
-    <View style={styles.choices}>
-      {options.map((o) => {
-        const on = o.id === value;
-        return (
-          <Pressable
-            key={o.id || 'none'}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: on }}
-            onPress={() => {
-              tap();
-              onPick(o.id);
-            }}
-            style={[styles.choice, { borderColor: on ? t.accent : t.border, backgroundColor: on ? t.accentSoft : t.surface }]}
-          >
-            <Text style={[type.small, { fontWeight: '700', color: on ? t.accentText : t.text }]}>{o.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  input: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 10 },
-  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  choice: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 8 },
-});

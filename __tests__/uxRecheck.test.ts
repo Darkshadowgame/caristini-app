@@ -285,8 +285,8 @@ describe('15, 16, 20. battery, Customise and copy', () => {
   });
 
   it('describes a setting as it is on the car', () => {
-    expect(stateText({ summary: 'One touch of the stalk gives 3 flashes.' }, false)).toBe('Off on your car. When on, one touch of the stalk gives 3 flashes.');
-    expect(stateText({ summary: 'One touch of the stalk gives 3 flashes.' }, true)).toBe('On on your car: one touch of the stalk gives 3 flashes.');
+    expect(stateText({ summary: 'One touch of the stalk gives 3 flashes.' }, false)).toBe('Off now. When on, one touch of the stalk gives 3 flashes.');
+    expect(stateText({ summary: 'One touch of the stalk gives 3 flashes.' }, true)).toBe('On now: one touch of the stalk gives 3 flashes.');
   });
 
   it('lists each PQ35 model once', () => {

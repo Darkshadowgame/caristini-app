@@ -89,7 +89,7 @@ export default function Connect() {
           </ScanPulse>
           <Text style={[type.title, { color: t.text, marginTop: space.lg, textAlign: 'center' }]}>{leaving ? 'Connected' : `${conn.step}…`}</Text>
           <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: space.sm }]}>
-            The first connection can take up to 30 seconds while the adapter finds the car's protocol.
+            The first connection can take up to 30 seconds while the adapter finds the car’s protocol.
           </Text>
         </View>
       </Screen>

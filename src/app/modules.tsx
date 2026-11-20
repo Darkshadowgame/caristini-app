@@ -10,6 +10,8 @@ import { Arrive, Button, Card, Group, Icon, ListRow, NeedsConnection, Notice, Sc
 import { useGarage } from '../vehicle/garage';
 import { SECTIONS } from '../help';
 import { mergeCodingBackup, mergeModuleIds } from '../vehicle/ids';
+import { dateTimeText } from '../timeText';
+import { useStayAwake } from '../keepAwake';
 
 export default function Modules() {
   const t = useTheme();
@@ -23,11 +25,13 @@ export default function Modules() {
   const [copied, setCopied] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
   const [everyAddress, setEveryAddress] = useState(false);
+  // The phone stays awake while the modules are read, as on every long read.
+  useStayAwake('part-numbers', busy);
 
   if (!conn.client || !conn.vehicle) {
     return (
       <Screen>
-        <NeedsConnection what="part numbers" />
+        <NeedsConnection title="Connect your car to read part numbers" />
       </Screen>
     );
   }
@@ -70,7 +74,7 @@ export default function Modules() {
   const report = () =>
     [
       `${vehicle.brand} ${vehicle.model} · VIN ${vehicle.vin}`,
-      `Read ${new Date().toLocaleString()}`,
+      `Read ${dateTimeText(Date.now())}`,
       '',
       ...(result ?? [])
         .filter((m) => m.responded)
@@ -119,7 +123,7 @@ export default function Modules() {
             <View style={{ alignSelf: 'stretch', marginTop: space.lg }}>
               <Button label={result ? 'Read again' : 'Read part numbers'} icon="chip" variant={result ? 'secondary' : 'primary'} onPress={scan} />
               {onlyKnown && !result ? (
-                <Button label={`Read all ${all.length} addresses`} variant="ghost" onPress={() => setEveryAddress(true)} style={{ marginTop: space.sm }} />
+                <Button label="Read every address" variant="ghost" onPress={() => setEveryAddress(true)} style={{ marginTop: space.sm }} />
               ) : null}
             </View>
           </View>
@@ -192,7 +196,7 @@ function ModuleGroup({ m, first }: { m: ModuleDetails; first?: boolean }) {
           <ListRow key={k} first={i === 0} title={k} value={v!} />
         ))}
       {m.coding ? <CodingRow coding={m.coding} /> : null}
-      <ListRow title={open ? 'Hide technical details' : 'Technical details'} onPress={() => setOpen((v) => !v)} />
+      <ListRow title={open ? 'Hide technical' : 'Technical'} onPress={() => setOpen((v) => !v)} />
     </Group>
   );
 }

@@ -4,7 +4,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { putBackState, stamp, timelineCsv, timelineRows, timelineText, TimelineRow } from '../../diag/timeline';
+import { putBackState, timelineCsv, timelineRows, timelineText, TimelineRow } from '../../diag/timeline';
 import { SECTIONS } from '../../help';
 import { loadHistory, onHistory } from '../../history';
 import { useSettings } from '../../settings';
@@ -12,6 +12,7 @@ import { useConnection } from '../../state';
 import { MONO, space, type, useTheme } from '../../theme';
 import { Button, Group, GuideButton, HelpButton, Icon, Notice, Pill, Screen, success } from '../../ui';
 import { useGarage, vehicleTitle } from '../../vehicle/garage';
+import { clockText, dateText, shareFileName } from '../../timeText';
 
 // Every setting change Caristini wrote to a car, newest first, one line per
 // module, with the backup each came from. Shared as text or CSV. The bytes
@@ -42,14 +43,16 @@ export default function ChangeTimeline() {
     if (!rows || !v) return;
     setBusy(kind);
     setMessage(null);
-    const body = kind === 'csv' ? timelineCsv(rows) : timelineText(rows, `${vehicleTitle(v)}, VIN ${v.vin}`);
+    // The odometer in the owner's unit, as on the screen.
+    const units = { miles: settings.speed === 'mph' };
+    const body = kind === 'csv' ? timelineCsv(rows, units) : timelineText(rows, `${vehicleTitle(v)}, VIN ${v.vin}`, units);
     try {
       if (Platform.OS === 'web' || !(await Sharing.isAvailableAsync())) {
         await Clipboard.setStringAsync(body);
         setMessage({ tone: 'ok', text: 'Sharing is not available here, so the list was copied. Paste it where you need it.' });
         return;
       }
-      const f = new File(Paths.cache, `caristini-changes-${v.vin}.${kind === 'csv' ? 'csv' : 'txt'}`);
+      const f = new File(Paths.cache, `${shareFileName('changes', v.vin)}.${kind === 'csv' ? 'csv' : 'txt'}`);
       if (f.exists) f.delete();
       f.create();
       await f.write(body);
@@ -79,7 +82,7 @@ export default function ChangeTimeline() {
   const putBack = (r: TimelineRow) => {
     if (!r.key) return;
     if (!connected) {
-      setMessage({ tone: 'danger', text: 'Connect to this car with the ignition on, then tap Put back again.' });
+      setMessage({ tone: 'danger', text: 'Connect your car with the ignition on, then tap Put back again.' });
       return;
     }
     router.push({ pathname: '/customise', params: { restore: r.key } });
@@ -88,7 +91,7 @@ export default function ChangeTimeline() {
   // Grouped by day, newest first.
   const days: { day: string; items: TimelineRow[] }[] = [];
   for (const r of rows ?? []) {
-    const d = new Date(r.at).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const d = dateText(r.at);
     const last = days[days.length - 1];
     if (last?.day === d) last.items.push(r);
     else days.push({ day: d, items: [r] });
@@ -123,7 +126,7 @@ export default function ChangeTimeline() {
             <View key={r.id} style={[styles.row, { borderColor: t.border, borderTopWidth: i ? StyleSheet.hairlineWidth : 0 }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
                 <Text style={[type.heading, { color: t.text, flex: 1 }]}>{r.setting}</Text>
-                <Text style={[type.small, type.number, { color: t.muted }]}>{stamp(r.at).time}</Text>
+                <Text style={[type.small, type.number, { color: t.muted }]}>{clockText(r.at)}</Text>
               </View>
               <Text style={[type.small, { color: t.muted, marginTop: 1 }]}>
                 {[r.module, r.source, km(r.odometerKm)].filter(Boolean).join(' · ')}

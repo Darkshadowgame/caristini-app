@@ -41,7 +41,7 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: t.bg },
             }}
           >
-            <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'Home' }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'Car' }} />
             <Stack.Screen name="connect" options={{ title: 'Connect', presentation: 'modal', headerLeft: () => <Cancel colour={t.accentText} />, headerRight: () => <GuideButton id="connect" /> }} />
             <Stack.Screen name="diagnostics" options={{ title: 'Health check', headerRight: () => <GuideButton id="diagnostics" /> }} />
             <Stack.Screen name="live" options={{ title: 'Live data', headerRight: () => <GuideButton id="live" /> }} />
@@ -68,7 +68,7 @@ export default function RootLayout() {
             <Stack.Screen name="customise/[id]" options={{ title: '', headerRight: () => <GuideButton id="customiseGuide" /> }} />
             <Stack.Screen name="customise/learn" options={{ title: 'Learn from Carista', headerRight: () => <GuideButton id="learnSetting" /> }} />
             <Stack.Screen name="code/[code]" options={{ title: 'Fault code', headerRight: () => <GuideButton id="code" /> }} />
-            <Stack.Screen name="vehicle" options={{ title: 'Vehicle details', headerRight: () => <GuideButton id="vehicle" /> }} />
+            <Stack.Screen name="vehicle" options={{ title: 'Car details', headerRight: () => <GuideButton id="vehicle" /> }} />
             <Stack.Screen name="guide" options={{ title: 'User guide' }} />
             <Stack.Screen name="monitors" options={{ title: 'Drive monitors', headerRight: () => <GuideButton id="monitors" /> }} />
             <Stack.Screen name="knock" options={{ title: 'Knock and timing', headerRight: () => <GuideButton id="knock" /> }} />
