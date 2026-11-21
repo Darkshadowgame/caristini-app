@@ -1,4 +1,4 @@
-# Caristini consistency review, round 2
+# Pin16 consistency review, round 2
 
 Date: 20 Nov 2026. Scope: grep and reads over `src` (app, screens, components, help.ts, timeText.ts, and other folders where a visible string was found). Review only. No source file edited, no git, no browser, tests not run.
 
@@ -104,7 +104,7 @@ Counts: 0 high, 2 medium verified (plus 2 open from round 1, not re-verified), 1
 - **C23 colour meaning (low).** Skipped; needs a design decision (amber as "needs attention" or grey).
 - **C33 apostrophes (low).** Partly done. A sample of `src/app` found straight apostrophes only in comments. Not a full sweep.
 - **C16 share as text (low).** Listen recording, MOT check and adapter log are still shared as plain text (fixes log). Not re-checked on the phone.
-- **C9 documents (medium, outside `src`).** `DESIGN.md:426-427` ("Caristini AI card"), `DESIGN.md:432-444` and `PRODUCT.md:31,50` not re-checked.
+- **C9 documents (medium, outside `src`).** `DESIGN.md:426-427` ("Pin16 AI card"), `DESIGN.md:432-444` and `PRODUCT.md:31,50` not re-checked.
 - **C7 tab stack title (low).** Round 1 quoted `_layout.tsx:44` "Home"; not re-checked.
 
 ## 4. Verified as fixed

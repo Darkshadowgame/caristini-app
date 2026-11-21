@@ -1,4 +1,4 @@
-// Control modules Caristini can talk to with UDS on 11-bit CAN, per maker.
+// Control modules Pin16 can talk to with UDS on 11-bit CAN, per maker.
 // Request (tx) and response (rx) CAN IDs come from public sources; the full
 // table with confidence ratings is in replica/uds-sources.md. Entries rated
 // low or tied to other platforms there are left out. A module that is not
@@ -7,7 +7,7 @@
 // Source keys (see replica/uds-sources.md):
 //   ODIS   github.com/ConnorHowell/vag-uds-ids (IDs extracted from ODIS)
 //   A7     github.com/DaSonOfPoseidon/OBDCracker issues 86 and 172, PR 230 (2014 Audi A7, MLB)
-//   A6     Owner's Audi A6 C7, read by Caristini on 11 Nov 2026
+//   A6     Owner's Audi A6 C7, read by Pin16 on 11 Nov 2026
 //   ODBC   github.com/commaai/opendbc (Volkswagen, Ford, Mazda values)
 //   RT     Ross-Tech wiki, Audi A6 (4G) address words
 //   FFG    ffguide.net Focus service manual, module configuration
@@ -15,7 +15,7 @@
 //   MIA    miatafy.com FORScan mod list (Mazda ND, CX-5, Mazda3)
 export type ModuleGroup = 'all' | 'vag' | 'ford' | 'mazda';
 
-// How Caristini can reach a module. A module may answer on more than one
+// How Pin16 can reach a module. A module may answer on more than one
 // route depending on the car (a 2007 SEAT engine speaks KWP2000 over VW TP2.0,
 // a 2012 Audi engine UDS), so each module lists every route a source supports
 // and the client tries them in order, remembering the one that answered.

@@ -1,4 +1,4 @@
-# Caristini: UDS and CAN ID sources
+# Pin16: UDS and CAN ID sources
 
 Research note, 11 Nov 2026. Read-only diagnostics on 11-bit 500 kbit/s CAN through an ELM327-compatible BLE adapter.
 

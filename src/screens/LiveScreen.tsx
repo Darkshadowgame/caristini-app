@@ -38,7 +38,7 @@ interface Series {
   peak?: Peak;
 }
 
-// A recording not yet shared is kept while Caristini is open, so leaving Live
+// A recording not yet shared is kept while Pin16 is open, so leaving Live
 // data does not lose it. One at a time; a new recording replaces it.
 type Reading = { t: number; pid: number; v: number };
 let keptRecording: { vin: string | null; rows: Reading[] } | null = null;
@@ -541,7 +541,7 @@ function MakerData() {
           {watching && regenOn ? (
             <Notice tone="danger" icon="alert-circle-outline" text="The DPF is regenerating. Keep driving at a steady speed and do not switch off until it finishes." />
           ) : watching && regenOn === false ? (
-            <Notice tone="ok" icon="check" text="No DPF regeneration running. Caristini checks every 20 seconds while this page is open." />
+            <Notice tone="ok" icon="check" text="No DPF regeneration running. Pin16 checks every 20 seconds while this page is open." />
           ) : null}
           <Button label={watching ? 'Stop' : 'Watch for DPF regeneration'} icon={watching ? 'stop' : 'bell-alert-outline'} variant="secondary" onPress={() => setWatching((w) => !w)} />
         </View>
@@ -777,7 +777,7 @@ function RecordingSummary({ rows, pids }: { rows: { t: number; pid: number; v: n
   const used = [...new Set(rows.map((r) => r.pid))];
   const secs = (rows[rows.length - 1]?.t ?? 0) / 1000;
   return (
-    <Group header={`Recording, ${secs.toFixed(0)} s, ${rows.length.toLocaleString('en-GB')} reading${rows.length === 1 ? '' : 's'}`} help={SECTIONS.liveRecording} footer="Share CSV opens in Numbers or Excel. The recording is kept until you record again or close Caristini. For recordings saved on the phone with charts, use the Data logger.">
+    <Group header={`Recording, ${secs.toFixed(0)} s, ${rows.length.toLocaleString('en-GB')} reading${rows.length === 1 ? '' : 's'}`} help={SECTIONS.liveRecording} footer="Share CSV opens in Numbers or Excel. The recording is kept until you record again or close Pin16. For recordings saved on the phone with charts, use the Data logger.">
       {used.map((pid, i) => {
         const p = pids.find((x) => x.pid === pid);
         const vals = rows.filter((r) => r.pid === pid).map((r) => r.v);

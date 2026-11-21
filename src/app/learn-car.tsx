@@ -36,9 +36,9 @@ const RESULT_LINKS: { step: LearnStep; title: string; icon: IconName; colour: 'r
   { step: 'sensors', title: 'Live data', icon: 'chart-timeline-variant', colour: 'blue', go: () => router.push('/live') },
 ];
 
-const LOOK: Record<StepOutcome['state'], { icon: IconName; colour: 'green' | 'orange' | 'grey' | 'red' }> = {
+const LOOK: Record<StepOutcome['state'], { icon: IconName; colour: 'green' | 'gold' | 'grey' | 'red' }> = {
   done: { icon: 'check-circle', colour: 'green' },
-  partial: { icon: 'progress-clock', colour: 'orange' },
+  partial: { icon: 'progress-clock', colour: 'gold' },
   stopped: { icon: 'pause-circle-outline', colour: 'grey' },
   failed: { icon: 'alert-circle-outline', colour: 'red' },
   skipped: { icon: 'minus-circle-outline', colour: 'grey' },
@@ -61,7 +61,7 @@ export default function LearnCar() {
   const [error, setError] = useState<string | null>(null);
   const stop = useRef(false);
   const [stopping, setStopping] = useState(false);
-  // Whether this run can carry on with Caristini in the background.
+  // Whether this run can carry on with Pin16 in the background.
   const [bg, setBg] = useState<GpsStart | null>(null);
   const learnStarted = useRef(0);
   // When the step on screen began, for the time left.
@@ -101,12 +101,13 @@ export default function LearnCar() {
   const est = learnEstimate(v, garage.vehicles, { everything, pace });
   const [lo, hi] = estimateSeconds(est);
   const about = `${aboutRange(lo, hi)} on this car${pace ? ' at your adapter’s pace' : ''}, engine running.`;
-  const intro =
+  // The hero holds the one-line summary (time and read-only); the detail sits in a footer note under the button.
+  const introNote =
     mode.why === 'repeat'
-      ? `Repeat run: refreshes the faults of every module, emissions, the MOT read, battery and odometer, and carries on exploring values. ${about} Modules and sensors were read on ${dateText(v.learnFullAt!)}.`
+      ? `Repeat run: refreshes the faults of every module, emissions, the MOT read, battery and odometer, and carries on exploring values. Modules and sensors were read on ${dateText(v.learnFullAt!)}.`
       : mode.why === 'first'
-        ? `First run: everything is read once (modules, faults, sensors, values, emissions, MOT and battery). ${about} Later runs are quicker.`
-        : `Full read${mode.why === 'old' ? `, due every ${FULL_READ_DAYS} days` : ''}: reads modules, sensors and every address again. ${about}`;
+        ? 'First run: everything is read once (modules, faults, sensors, values, emissions, MOT and battery). Later runs are quicker.'
+        : `Full read${mode.why === 'old' ? `, due every ${FULL_READ_DAYS} days` : ''}: reads modules, sensors and every address again.`;
 
   const run = async () => {
     // Read once: switching it during a run does not change that run.
@@ -194,7 +195,7 @@ export default function LearnCar() {
       />
       {error ? <Notice tone="danger" icon="alert-circle-outline" text={error} /> : null}
 
-      {/* Amber only while the run is reading the car; waiting to start, the card is plain and the icon wears the tool's own square. */}
+      {/* Orange wash only while the run is reading the car; waiting to start, the card is plain and the icon wears the tool's own square. */}
       <GlowCard tone={running ? 'brand' : 'plain'} style={{ alignItems: 'center' }}>
         <ScanPulse active={!!running} size={128}>
           <View style={[styles.core, { backgroundColor: running ? t.accentSoft : t[TOOLS.learn.colour] }]}>
@@ -210,7 +211,7 @@ export default function LearnCar() {
         <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: 4, marginBottom: space.lg }]}>
           {running
             ? 'Keep the engine running and the phone near the car. Nothing is changed in the car.'
-            : `${intro} Read-only. Stop any time and keep what was found.`}
+            : `${about} Read-only.`}
         </Text>
         {running ? (
           <View style={{ alignSelf: 'stretch' }}>
@@ -230,6 +231,7 @@ export default function LearnCar() {
         ) : (
           <View style={{ alignSelf: 'stretch' }}>
             <Button label={v.learnRun ? 'Learn again' : 'Start learning'} icon="school-outline" onPress={run} />
+            <Text style={[type.small, { color: t.muted, textAlign: 'center', marginTop: space.md }]}>{`${introNote} Stop any time and keep what was found.`}</Text>
           </View>
         )}
       </GlowCard>
@@ -276,7 +278,7 @@ export default function LearnCar() {
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg, paddingVertical: 10, gap: space.sm }}>
             <Text style={[type.body, { color: t.text, flex: 1 }]}>Read everything again</Text>
-            <Switch accessibilityLabel="Read everything again" value={everything} onValueChange={setEverything} />
+            <Switch accessibilityLabel="Read everything again" value={everything} onValueChange={setEverything} trackColor={{ true: t.green, false: t.sunken }} />
           </View>
         </Group>
       ) : null}
@@ -288,7 +290,7 @@ export default function LearnCar() {
               <Text style={[type.body, { color: t.text }]}>Send what this run finds</Text>
               <Text style={[type.sub, { color: t.muted, marginTop: 2 }]}>{sendRun ? 'On: sent when the run ends' : 'Off: this run and its adapter log stay on this phone'}</Text>
             </View>
-            <Switch accessibilityLabel="Send what this run finds" value={sendRun} onValueChange={setSendRun} />
+            <Switch accessibilityLabel="Send what this run finds" value={sendRun} onValueChange={setSendRun} trackColor={{ true: t.green, false: t.sunken }} />
           </View>
         </Group>
       ) : null}
@@ -306,7 +308,7 @@ export default function LearnCar() {
               key={key}
               first={i === 0}
               icon={look?.icon ?? s.icon}
-              iconColour={look?.colour ?? (now ? 'orange' : 'indigo')}
+              iconColour={look?.colour ?? (now ? 'gold' : 'indigo')}
               title={`${i + 1}. ${s.title}`}
               subtitle={o?.note ?? s.detail}
               right={now ? <Pill text="Now" tone="accent" /> : o && PILL[o.state] ? <Pill text={PILL[o.state]!} tone={o.state === 'failed' ? 'danger' : 'neutral'} /> : undefined}
@@ -318,7 +320,7 @@ export default function LearnCar() {
 
       {k.length ? (
         <Group
-          header="What Caristini knows about this car"
+          header="What Pin16 knows about this car"
           help={SECTIONS.learnCarKnows}
           footer={running ? 'These open when the run ends, so nothing else talks to the car while it is being read.' : v.learnRun ? `Last learned ${dateTimeText(v.learnRun.at)}.` : undefined}
         >

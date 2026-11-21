@@ -1,4 +1,4 @@
-// A rolling log of what Caristini sends to the adapter and what comes back,
+// A rolling log of what Pin16 sends to the adapter and what comes back,
 // kept in memory for troubleshooting. With "Send the log automatically" on, new
 // lines go to the owner's private findings store after each check or scan.
 

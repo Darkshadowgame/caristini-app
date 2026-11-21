@@ -1,4 +1,4 @@
-# Caristini: how VCDS, ODIS and open tools do login, coding, adaptation and basic settings
+# Pin16: how VCDS, ODIS and open tools do login, coding, adaptation and basic settings
 
 Research note, 11 Nov 2026. Scope: the protocol steps behind VCDS-level functions (security access, UDS adaptation, KWP2000 on TP2.0, basic settings, output tests) on VW group cars, so the app can copy them safely through an ELM327-type BLE adapter.
 

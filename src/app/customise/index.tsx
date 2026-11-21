@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-import { Mascot } from '../../brand/Mascot';
+import { PinMark } from '../../brand/PinMark';
 import { bitsLabel, CodingItem, codingItemsFor, isOn, stateText, withItem } from '../../coding/items';
 import { LearnedSetting, learnedIsOn, learnedKeys, learnedModules, learnedReady, splitKey, withLearned } from '../../coding/learn';
 import { settingKey, sharedFits, sharedLearned } from '../../coding/shared';
@@ -190,7 +190,7 @@ export default function Customise() {
   const unreachable = items.filter((i) => !reading && checked.has(i.module) && !ready(i));
   const restorable = moduleIds.filter((id) => originals[id] && codings[id] && toHex(codings[id]!) !== originals[id]);
 
-  // Checks every change must pass before Caristini writes anything.
+  // Checks every change must pass before Pin16 writes anything.
   const preflight = () => preflightCheck(client);
   const tried = v.tried ?? {};
   const mark = (id: string, r: TryResult) => garage.update(v.vin, { tried: { ...(garage.latest(v.vin)?.tried ?? {}), [id]: r } });
@@ -265,8 +265,8 @@ export default function Customise() {
           // The module holds something other than before: that is a change too.
           if (res.coding && toHex(res.coding) !== toHex(before)) done.push({ key: moduleId, before, after: res.coding });
           failed = res.restored
-            ? `${def.name} did not keep the change, so Caristini put its original coding back.${notes.length ? ' Modules changed before it keep the new setting; switch it off again to undo them.' : ' Nothing has changed.'}${lowBattery}`
-            : `${def.name} did not keep the change, and Caristini could not confirm the original is back. With the ignition on, Tap Put back under Backups in Customise.${lowBattery}`;
+            ? `${def.name} did not keep the change, so Pin16 put its original coding back.${notes.length ? ' Modules changed before it keep the new setting; switch it off again to undo them.' : ' Nothing has changed.'}${lowBattery}`
+            : `${def.name} did not keep the change, and Pin16 could not confirm the original is back. With the ignition on, Tap Put back under Backups in Customise.${lowBattery}`;
           break;
         }
         notes.push(`${def.name} ${did ? `value ${did}` : 'coding'} ${toHex(before)} to ${toHex(after)}`);
@@ -338,10 +338,10 @@ export default function Customise() {
   // Which cars have built-in switches, said plainly on a car that has none.
   const noSwitches =
     v.group !== 'vag'
-      ? `Caristini has built-in switches for VW group cars only (VW, Audi, SEAT, Skoda and Cupra). Your ${v.brand || 'car'} has none yet.${client?.supportsModules ? ' You can still teach Caristini a setting: change it once in Carista and Caristini learns what changed.' : ''}${mods.length ? ' The guides below show what can be changed and how.' : ''}`
+      ? `Pin16 has built-in switches for VW group cars only (VW, Audi, SEAT, Skoda and Cupra). Your ${v.brand || 'car'} has none yet.${client?.supportsModules ? ' You can still teach Pin16 a setting: change it once in Carista and Pin16 learns what changed.' : ''}${mods.length ? ' The guides below show what can be changed and how.' : ''}`
       : !v.platform
-        ? `Caristini has built-in switches for VW group cars whose model it knows, and it does not know this car’s model yet. Set the model under Your cars, or run Learn my car.${client?.supportsModules ? ' You can still teach Caristini a setting from Carista.' : ''}`
-        : `Caristini has no built-in switches for the ${v.model || v.brand} yet.${client?.supportsModules ? ' You can still teach Caristini a setting: change it once in Carista and Caristini learns what changed.' : ''}`;
+        ? `Pin16 has built-in switches for VW group cars whose model it knows, and it does not know this car’s model yet. Set the model under Your cars, or run Learn my car.${client?.supportsModules ? ' You can still teach Pin16 a setting from Carista.' : ''}`
+        : `Pin16 has no built-in switches for the ${v.model || v.brand} yet.${client?.supportsModules ? ' You can still teach Pin16 a setting: change it once in Carista and Pin16 learns what changed.' : ''}`;
   // Ways to add a setting. First on the page for a car with no built-in switches.
   const moreGroup = (
     <Group
@@ -350,7 +350,7 @@ export default function Customise() {
       footer="A switch appears only where a source, or your own car, shows which coding bit does what."
     >
       {client?.supportsModules ? (
-        <ListRow first {...tool('learnSetting')} title="Learn from Carista" subtitle="Change a setting in Carista; Caristini learns what changed" onPress={() => router.push('/customise/learn')} />
+        <ListRow first {...tool('learnSetting')} title="Learn a setting" subtitle="Change a setting in Carista; Pin16 learns what changed" onPress={() => router.push('/customise/learn')} />
       ) : null}
       <ListRow first={!client?.supportsModules} {...tool('learn')} title="Learn my car" subtitle="Finds every module and reads its part number and coding" onPress={() => router.push('/learn-car')} />
       <ListRow icon="refresh" iconColour={TOOLS.customise.colour} title="Read settings again" subtitle="Settings are kept while connected; this reads them fresh" disabled={reading} onPress={() => read(true)} />
@@ -361,11 +361,11 @@ export default function Customise() {
     <Screen>
       {items.length || learned.length ? (
         <GlowCard tone={reading || busy ? 'brand' : 'plain'} style={styles.hero}>
-          <Mascot mood={reading || busy ? 'scanning' : 'happy'} size={96} />
+          <PinMark size={56} decorative />
           <View style={{ flex: 1 }}>
             <Text style={[type.title3, { color: t.text }]}>Settings on your {v.model || v.brand}</Text>
             <Text style={[type.sub, { color: t.muted, marginTop: 4 }]}>
-              Caristini backs up before every change, checks the car kept it, and puts the original back if anything fails.
+              Pin16 backs up before every change, checks the car kept it, and puts the original back if anything fails.
             </Text>
           </View>
         </GlowCard>
@@ -420,7 +420,7 @@ export default function Customise() {
           key={g}
           header={g}
           help={g === 'Try these (not confirmed)' ? SECTIONS.customiseTry : k === 0 ? SECTIONS.customiseSettings : undefined}
-          footer={g === 'Try these (not confirmed)' ? 'One vague source each. Caristini writes the change and checks the module kept it. Switch it back off if you see no effect.' : undefined}
+          footer={g === 'Try these (not confirmed)' ? 'One vague source each. Pin16 writes the change and checks the module kept it. Switch it back off if you see no effect.' : undefined}
         >
           {list
             .map((i, n) => {
@@ -515,7 +515,7 @@ export default function Customise() {
       {borrowedFit.length && !cat ? (
         <Group
           header="From your other cars"
-          footer="Learned on another of your cars with the same module, and not yet tried on this one. Caristini backs up, writes the change and checks the module kept it. A setting the module keeps moves to Learned from your car. Switch it back off if you see no effect."
+          footer="Learned on another of your cars with the same module, and not yet tried on this one. Pin16 backs up, writes the change and checks the module kept it. A setting the module keeps moves to Learned from your car. Switch it back off if you see no effect."
         >
           {borrowedFit.map((s, n) => {
             const on = learnedIsOn(s, codings);
@@ -598,7 +598,7 @@ export default function Customise() {
       {items.length ? moreGroup : null}
 
       {kbNotes.length ? (
-        <Group header="From Research notes" footer="Not confirmed on a car, so Caristini does not offer these as switches.">
+        <Group header="From Research notes" footer="Not confirmed on a car, so Pin16 does not offer these as switches.">
           {kbNotes.map((n, i) => (
             <ListRow key={n.id} first={i === 0} icon="note-text-outline" iconColour="grey" title={n.title} subtitle={n.summary} noChevron />
           ))}
@@ -609,7 +609,7 @@ export default function Customise() {
       {message?.id === RESTORE_MSG ? <Notice tone={message.tone} icon={message.tone === 'ok' ? 'check' : 'alert-circle-outline'} text={message.text} /> : null}
 
       {restorable.length ? (
-        <Group header="Backups" help={SECTIONS.customiseBackups} footer="The coding each module had before Caristini first changed it.">
+        <Group header="Backups" help={SECTIONS.customiseBackups} footer="The coding each module had before Pin16 first changed it.">
           {restorable.map((id, i) => {
             const did = splitKey(id).did;
             return (
@@ -642,7 +642,7 @@ export default function Customise() {
         <Group
           header="Not reachable on this car yet"
           help={SECTIONS.customiseUnreachable}
-          footer="These settings live in modules that did not give Caristini their coding on this car. Tap Read settings again with the ignition on."
+          footer="These settings live in modules that did not give Pin16 their coding on this car. Tap Read settings again with the ignition on."
         >
           {unreachable.map((i, n) => (
             <ListRow key={i.id} first={n === 0} title={i.title} subtitle={MODULES.find((m) => m.id === i.module)?.name} />
@@ -668,10 +668,10 @@ export default function Customise() {
         ))
       ) : !items.length && !learned.length ? (
         <View style={{ alignItems: 'center', paddingVertical: space.xxl * 2, paddingHorizontal: space.xl }}>
-          <Mascot mood="worried" size={120} />
+          <PinMark lit={false} size={72} decorative />
           <Text style={[type.title3, { color: t.text, marginTop: space.lg, textAlign: 'center' }]}>Nothing for this car yet</Text>
           <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: space.sm }]}>
-            No public source documents settings Caristini can change on this car.
+            No public source documents settings Pin16 can change on this car.
           </Text>
         </View>
       ) : null}
@@ -685,7 +685,7 @@ export default function Customise() {
               ? 'Put back the original coding?'
               : ''
         }
-        lines={pending?.kind === 'forget' ? ['Removes the switch from Caristini. The car keeps whatever is set now.'] : [`Puts back the coding ${(defOf(pending?.kind === 'restore' ? pending.module : '')?.name ?? 'this module')} had before Caristini first changed it.`]}
+        lines={pending?.kind === 'forget' ? ['Removes the switch from Pin16. The car keeps whatever is set now.'] : [`Puts back the coding ${(defOf(pending?.kind === 'restore' ? pending.module : '')?.name ?? 'this module')} had before Pin16 first changed it.`]}
         confirmLabel={pending?.kind === 'forget' ? 'Forget' : 'Put back'}
         onCancel={() => setPending(null)}
         onConfirm={() => pending && run(pending)}

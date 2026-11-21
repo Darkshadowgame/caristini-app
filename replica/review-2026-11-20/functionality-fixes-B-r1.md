@@ -22,7 +22,7 @@ Not checked in the web preview: it serves the `dist-web` export made at 15:58, w
 | 19 | Part | `help.ts:59` (Car tab group names) was already corrected by the wording pass. `dpf.tsx` "every few seconds" now gives the real 15 seconds. The 2 Customise and Workshop lines belong to the other owner. |
 | 21 | Fixed | The cleared list names each fault once (P0300 and 16684 are one). After "Try these again" the saved check is updated: its History entry (faults, modules, title, detail) and the car's saved fault list. |
 | 22 | Fixed | The Diary groups and filters by VIN and shows the car's name as it is now; 2 cars with one name get the last 4 VIN characters. The "Faults cleared" entry from the Health check carries the odometer in the unit from Settings. Limit: the automatic entries written by Customise, Workshop and Service are in the other owner's files and still carry no mileage. |
-| 23 | Fixed without a question | A Live data recording is kept while Caristini is open, so leaving the page and coming back still offers Share CSV; the page and help point to the Data logger for recordings saved with charts. No warning on leaving was added (only finding 5 may add a question). |
+| 23 | Fixed without a question | A Live data recording is kept while Pin16 is open, so leaving the page and coming back still offers Share CSV; the page and help point to the Data logger for recordings saved with charts. No warning on leaving was added (only finding 5 may add a question). |
 | 24 | Fixed | A logger read error ends the recording with "Recording stopped: <error>" (1 line in `src/logger/recorder.ts`). |
 | 25 | Skipped | A health report from saved data needs the report builder in `src/app/report.tsx` reworked and a new History kind in `src/history.ts`; neither file is in this scope. |
 | 26 | Fixed | DPF values show owner-readable sources ("Mazda6 research notes"); regenerations seen are saved per car on the phone and listed on later visits. |
@@ -35,7 +35,7 @@ Not checked in the web preview: it serves the `dist-web` export made at 15:58, w
 | Item | Result | What changed |
 |---|---|---|
 | L6 | Fixed | `transport.onLost` is set before `initialise()`. A link lost while the car is identified fails the connect with "Connection lost" in place of a "connected" state on a dead link. |
-| M1, screen part | Fixed | On Learn my car the rows under "What Caristini knows about this car" and the Unknown values row are disabled while a run is in progress. |
+| M1, screen part | Fixed | On Learn my car the rows under "What Pin16 knows about this car" and the Unknown values row are disabled while a run is in progress. |
 
 ## Files changed
 

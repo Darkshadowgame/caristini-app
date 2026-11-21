@@ -1,4 +1,4 @@
-# Caristini: coding, adaptation and service reset sources
+# Pin16: coding, adaptation and service reset sources
 
 Research note, 11 Nov 2026. Scope: which "customisations" and service resets the app may offer, with a public source for each. Companion to `uds-sources.md` (CAN IDs and read services).
 

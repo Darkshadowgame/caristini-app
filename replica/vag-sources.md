@@ -1,4 +1,4 @@
-# Caristini: VW group (MQB, MLB, MLB evo) sources for discovery, coding, service and live data
+# Pin16: VW group (MQB, MLB, MLB evo) sources for discovery, coding, service and live data
 
 Research note, 11 Nov 2026. Scope: Carista-level functions on all VW group cars, starting with the owner's 2012 Audi A6 C7 2.0 TDI (MLB, VIN WAUZZZ4GXCN000000). Companion to `uds-sources.md` (CAN IDs, read services), `tp20-sources.md` (TP2.0 + KWP2000 transport) and `coding-sources.md` (current coding catalogue). PQ35 KWP detail (Seat Leon 1P) is in `leon-sources.md` and is not repeated here.
 

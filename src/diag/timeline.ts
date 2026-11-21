@@ -1,4 +1,4 @@
-// Change timeline: every setting change Caristini wrote to a car, one
+// Change timeline: every setting change Pin16 wrote to a car, one
 // line per module, newest first, from History (kind 'change'). Exported as
 // plain text or CSV. Pure, so it is tested without a phone.
 import type { HistoryEntry } from '../history';
@@ -111,7 +111,7 @@ export function timelineText(rows: TimelineRow[], car: string, opts: { miles?: b
     if (extra.length) out.push(`  ${extra.join(', ')}`);
     out.push('');
   }
-  out.push('Made with Caristini. Backups are the coding each module had before Caristini first changed it.');
+  out.push('Made with Pin16. Backups are the coding each module had before Pin16 first changed it.');
   return out.join('\n');
 }
 

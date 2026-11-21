@@ -4,7 +4,7 @@ import { backgroundNote, keepRunning, letStop, setBackgroundRuns } from '../src/
 test('the screen says what to expect', () => {
   expect(backgroundNote('on')).toMatch(/lock the phone/);
   expect(backgroundNote('on')).toMatch(/app switcher/);
-  expect(backgroundNote('denied')).toMatch(/Keep Caristini on the screen/);
+  expect(backgroundNote('denied')).toMatch(/Keep Pin16 on the screen/);
   expect(backgroundNote('off')).toMatch(/Location Services are off/);
   expect(backgroundNote('unavailable')).toBeNull();
   expect(backgroundNote(null)).toBeNull();

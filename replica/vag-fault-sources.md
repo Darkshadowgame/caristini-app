@@ -1,4 +1,4 @@
-# Caristini: VAG 5-digit fault number meanings, sources
+# Pin16: VAG 5-digit fault number meanings, sources
 
 Research note, 12 Nov 2026. Feeds `src/data/vagFaults.ts` (`VAG_FAULTS`, `vagFaultText()`). Scope: 5-digit decimal fault numbers reported by KW1281 and KWP2000 (TP2.0) modules, for example the 2007 SEAT Leon 1P and the 09/46/42/52 body modules of the 2012 Audi A6 C7.
 

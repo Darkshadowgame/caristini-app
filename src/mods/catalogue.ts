@@ -1,5 +1,5 @@
 // Guides: customisations documented in public community sources that
-// Caristini has no switch for yet (the switches are in src/coding). Each entry
+// Pin16 has no switch for yet (the switches are in src/coding). Each entry
 // says where the setting lives and links its source.
 import type { MakeGroup } from '../vehicle/vin';
 
@@ -30,7 +30,7 @@ export const STATUS_LABEL: Record<ModStatus, string> = {
 export const STATUS_HELP: Record<ModStatus, string> = {
   owner: 'You can change this yourself with the car’s own controls. Steps are in the source.',
   documented:
-    'A guide, not a switch. Sources say where this setting lives, but not the exact value to write on your car, so Caristini has no switch for it yet. Learn from Carista (under Get more settings) can make one from your own car.',
+    'A guide, not a switch. Sources say where this setting lives, but not the exact value to write on your car, so Pin16 has no switch for it yet. Learn a setting (under Get more settings) can make one from your own car.',
   dealer: 'Public sources only report this being changed with the maker’s dealer tool.',
 };
 

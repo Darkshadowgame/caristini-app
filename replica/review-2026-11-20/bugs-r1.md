@@ -1,4 +1,4 @@
-# Caristini review round 1: Bugs
+# Pin16 review round 1: Bugs
 
 Date: 20 Nov 2026. Commit reviewed: 99c3910. Review only: no source file was changed.
 
@@ -29,7 +29,7 @@ Confidence words: **confirmed** = traced end to end in the code (2 were also run
 
 **M1. Standard OBD requests skip the module lock, so they can land inside another conversation**
 - Where: `src/obd/elm.ts:737-740` (`command`), `:771-781` (`request`). Callers with no lock and no `addressed` check: `readStatus` `:831`, `readFreezeFrame` `:854`, `readVin` `:879`, `readCodes` `:921`, `clearFaultCodes` `:956`, `supportedPids` `:969`, `carAwake` `:1839`, `src/diag/freeze.ts:80`, `src/diag/service06.ts:260`, `src/diag/service09.ts:132`. Only `readLive` and `readLiveMany` check `addressed`.
-- Trigger: 2 activities at once. Concrete case: Learn my car is running; the rows under "What Caristini knows about this car" stay tappable (`src/app/learn-car.tsx:310`) and open Workshop, where a coding write can start. The reads Learn makes itself (`runLearn.ts:617-618` self-tests and services 06 and 09, the fault and freeze-frame reads at the start of its health check) then go out while the write holds the adapter.
+- Trigger: 2 activities at once. Concrete case: Learn my car is running; the rows under "What Pin16 knows about this car" stay tappable (`src/app/learn-car.tsx:310`) and open Workshop, where a coding write can start. The reads Learn makes itself (`runLearn.ts:617-618` self-tests and services 06 and 09, the fault and freeze-frame reads at the start of its health check) then go out while the write holds the adapter.
 - What goes wrong: with the adapter pointed at a module (ATSH 7xx), `03` or `0101` goes to that module: "NO DATA" is read as no engine codes, or a clear is reported as refused. With a TP2.0 channel open (`inTp20`), `command` sends the text as a raw CAN frame on the channel ID: `0101` is a TP2.0 data frame, number 1, 1 byte. If the module expects that number it becomes part of the message being built (a coding write included).
 - Fix: route every standard request through one helper that takes the module lock (or waits for `whenIdle()`), and refuse non-AT text in `command()` while `inTp20` or `addressed` is held by another owner. Disable the rows on the Learn screen while a run is in progress.
 - Confidence: confirmed (mechanism and the screen path); frame acceptance by the module is plausible.
@@ -100,7 +100,7 @@ Confidence words: **confirmed** = traced end to end in the code (2 were also run
 
 **L4. Customise read overwrites a newer saved coding.** `src/app/customise/index.tsx:135-138`. `read` keeps the `v` of the render that created it; a switch flipped while other modules are still being read saves the new coding, then the end of `read` writes `{...v.codingCache}` back with the old bytes. Fix: build from `garage.latest(v.vin)?.codingCache`. Confirmed.
 
-**L5. Try mode cannot start, but the screen says it asks.** `src/app/customise/index.tsx:100`, `:193`, `:484`, `:651-670`; `src/coding/items.ts:24`. `setAsk` is only ever called with null, so the "Did you see it?" sheet and `mark(..., 'works')` are dead; a setting borrowed from another car can never become one of the settings of this car. The footer at `:484` still says Caristini asks. Fix: remove the dead code and reword, or restore the question for borrowed settings. Confirmed.
+**L5. Try mode cannot start, but the screen says it asks.** `src/app/customise/index.tsx:100`, `:193`, `:484`, `:651-670`; `src/coding/items.ts:24`. `setAsk` is only ever called with null, so the "Did you see it?" sheet and `mark(..., 'works')` are dead; a setting borrowed from another car can never become one of the settings of this car. The footer at `:484` still says Pin16 asks. Fix: remove the dead code and reword, or restore the question for borrowed settings. Confirmed.
 
 **L6. A link lost during connect is missed.** `src/state.tsx:86-121`. `transport.onLost` is set after `initialise()`, `readVinFromModules()` and the garage saves; `BleTransport.lost()` fires once (`bleTransport.ts:200-207`), so a drop in that window leaves status "connected" on a dead link. Fix: set `onLost` before `initialise()` and check it after. Confirmed.
 
@@ -110,7 +110,7 @@ Confidence words: **confirmed** = traced end to end in the code (2 were also run
 
 **L9. UDS login treats an all-zero seed as locked.** `src/obd/elm.ts:2247-2248`. The comment says all-zero or empty means unlocked; only empty is checked, so a key is sent to an unlocked module and its refusal reads as a wrong code. Fix: `if (!seed.length || seed.every((b) => b === 0)) return`. Confirmed.
 
-**L10. The test suite fails at this commit.** `__tests__/uxFixes.test.ts:55` expects "Steps known, not yet tested by Caristini"; `src/mods/catalogue.ts:26` now says "Guide only, no switch yet". Fix: update the test. Confirmed (run).
+**L10. The test suite fails at this commit.** `__tests__/uxFixes.test.ts:55` expects "Steps known, not yet tested by Pin16"; `src/mods/catalogue.ts:26` now says "Guide only, no switch yet". Fix: update the test. Confirmed (run).
 
 **L11. Tests cannot catch the new protocol faults.** `src/obd/simTransport.ts:683-692` accepts request frames with any sequence number, so the 2 coding-write tests pass whatever `txSeq` does. No test covers: a refusal in the middle of a multi-frame request (H1), a lost link during `enter`, `open` or the deep scan (M2, M3), a clear after a search (M5), or more than 16 frames (M4). Fix: check sequence numbers in the simulator and add one scripted test per case. Confirmed.
 

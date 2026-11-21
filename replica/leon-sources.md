@@ -1,4 +1,4 @@
-# Caristini: SEAT Leon II Cupra (1P1, PQ35) sources
+# Pin16: SEAT Leon II Cupra (1P1, PQ35) sources
 
 Research note, 11 Nov 2026. Car: 2007 SEAT Leon Cupra, type 1P1 (Leon II, PQ35), VIN VSSZZZ1PZ7R000000, 2.0 TFSI (owner believes BWJ, 240 PS), probably 6-speed manual. Adapter: Carista BLE, reports "ELM327 v1.5" (clone), OBD pins 6/14.
 

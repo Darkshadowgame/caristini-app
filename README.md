@@ -1,8 +1,8 @@
-# Caristini
+# Pin16
 
 A free DIY OBD2 car scanner and coding app for VW group cars (VW, Audi, SEAT, Cupra, Skoda), Ford and Mazda, inspired by Carista. Not affiliated with Carista. Built with Expo for iPhone (Android builds are possible too) and a Bluetooth LE ELM327-type adapter.
 
-A hobby project for the owner's own cars, shared as it is. Use it at your own risk: coding changes can stop modules working. Caristini backs up a module's coding before every change, reads it back and puts the original back if anything fails, but test on your own car with care.
+A hobby project for the owner's own cars, shared as it is. Use it at your own risk: coding changes can stop modules working. Pin16 backs up a module's coding before every change, reads it back and puts the original back if anything fails, but test on your own car with care.
 
 ## What it does
 

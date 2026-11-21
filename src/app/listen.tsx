@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { sendBack } from '../share/sendBack';
 import React, { useEffect, useRef, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
-import { Mascot } from '../brand/Mascot';
+import { PinMark } from '../brand/PinMark';
 import { resetFromRecording, resetTargets } from '../service/obdReset';
 import { useConnection } from '../state';
 import { useGarage } from '../vehicle/garage';
@@ -45,7 +45,7 @@ export default function Listen() {
   const stamp = () => ((Date.now() - started.current) / 1000).toFixed(3);
 
   const start = async () => {
-    log.current = [`# Caristini listen ${new Date().toISOString()} ${v.brand} ${v.model} ${v.vin} filter=${filter}`];
+    log.current = [`# Pin16 listen ${new Date().toISOString()} ${v.brand} ${v.model} ${v.vin} filter=${filter}`];
     setLines([]);
     setCount(0);
     setEnded(null);
@@ -116,11 +116,11 @@ export default function Listen() {
   return (
     <Screen>
       <GlowCard tone={running ? 'brand' : 'plain'} style={styles.hero}>
-        <Mascot mood={running ? 'scanning' : 'happy'} size={88} />
+        <PinMark size={56} decorative />
         <View style={{ flex: 1 }}>
           <Text style={[type.title3, { color: t.text }]}>Record another tool</Text>
           <Text style={[type.sub, { color: t.muted, marginTop: 4 }]}>
-            Caristini listens while VCDS or another tool works on the car, and saves exactly what it sends.
+            Pin16 listens while VCDS or another tool works on the car, and saves exactly what it sends.
           </Text>
         </View>
       </GlowCard>
@@ -128,7 +128,7 @@ export default function Listen() {
       <Group header="Set up" help={SECTIONS.listenSetup} footer="The adapter only listens: it sends nothing to the car while recording.">
         <ListRow first title="Plug an OBD Y-splitter into the car" noChevron />
         <ListRow title="This adapter in one plug, the other tool’s cable in the other" noChevron />
-        <ListRow title="Ignition on, start recording here, then use the other tool" subtitle="Recording carries on while Caristini is in the background" noChevron />
+        <ListRow title="Ignition on, start recording here, then use the other tool" subtitle="Recording carries on while Pin16 is in the background" noChevron />
       </Group>
 
       <Group header="What to record" help={SECTIONS.listenWhat}>
@@ -163,7 +163,7 @@ export default function Listen() {
 
       {!running && count ? (
         <View style={{ gap: space.sm, marginTop: space.lg }}>
-          <Button label="Share recording" icon="share-variant" onPress={() => Share.share({ message: log.current.join('\n'), title: 'Caristini recording' })} />
+          <Button label="Share recording" icon="share-variant" onPress={() => Share.share({ message: log.current.join('\n'), title: 'Pin16 recording' })} />
           <Text style={[type.small, { color: t.muted, textAlign: 'center' }]}>The recording is sent to your private findings store by itself. You can also save it to Files.</Text>
           {resetTargets(v.group).length ? <Button label="Use as service reset" icon="wrench-clock" variant="secondary" onPress={useForService} /> : null}
           {used ? <Notice tone="danger" icon="alert-circle-outline" text={used} /> : null}

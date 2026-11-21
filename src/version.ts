@@ -14,4 +14,4 @@ export function versionLine(): string {
   return `Version ${APP_VERSION}${date ? `, updated ${date}` : ''}`;
 }
 
-export const releaseUrl = () => (APP_VERSION === 'dev' ? null : `https://github.com/Darkshadowgame/caristini-app/releases/tag/v${APP_VERSION}`);
+export const releaseUrl = () => (APP_VERSION === 'dev' ? null : `https://github.com/Darkshadowgame/pin16-app/releases/tag/v${APP_VERSION}`);

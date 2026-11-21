@@ -1,4 +1,4 @@
-// Writes the HTML used to render Caristini's app icon, splash and Android
+// Writes the HTML used to render Pin16's app icon, splash and Android
 // adaptive icon foreground at full resolution (rendered to PNG in a browser).
 // The artwork mirrors src/brand/Mascot.tsx (happy face).
 import { mkdirSync, writeFileSync } from 'node:fs';

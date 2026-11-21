@@ -14,6 +14,7 @@ import { radius, space, type, useTheme } from '../theme';
 import { Button, Chips, ConfirmSheet, Field, Group, HelpButton, Icon, IconName, ListRow, NeedsConnection, Notice, Screen, SearchField, Segmented } from '../ui';
 import { filterPids } from '../live/sets';
 import { useGarage } from '../vehicle/garage';
+import { useDisplay } from '../fonts';
 
 const RPM = 0x0c;
 const COOLANT = 0x05;
@@ -407,6 +408,7 @@ function DashTile({
   onLongPress: () => void;
 }) {
   const t = useTheme();
+  const displayFont = useDisplay();
   const fg = hud ? '#FFFFFF' : t.text;
   const fgMuted = hud ? 'rgba(255,255,255,0.72)' : t.muted;
   const conv = p && value != null ? toUserUnits(value, p.unit, settings) : null;
@@ -439,7 +441,7 @@ function DashTile({
       </Text>
       {tileStyle === 'gauge' ? <Dial frac={frac} peak={peakFrac} colour={warn ? t.danger : t.accent} /> : null}
       {/* Under a dial the figure is centred on it, clear of the ends of the arc. */}
-      <Text numberOfLines={1} adjustsFontSizeToFit style={[small ? styles.figureSmall : styles.figure, type.number, { color: colour, fontWeight: hud ? '800' : '700' }, tileStyle === 'gauge' && styles.dialFigure]}>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={[small ? styles.figureSmall : styles.figure, type.number, { color: colour, fontWeight: hud ? '800' : '700' }, tileStyle === 'gauge' && styles.dialFigure, displayFont]}>
         {text}
         {small && unit ? <Text style={[type.sub, { color: fgMuted, fontWeight: '500' }]}> {unit}</Text> : null}
       </Text>

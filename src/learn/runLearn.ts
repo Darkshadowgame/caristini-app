@@ -144,7 +144,7 @@ const day = (ms: number) => dateText(ms);
 // "2.5-minute", "3-minute".
 const minutesText = (ms: number) => `${Math.round(ms / 6000) / 10 || 1}`;
 
-// Modules whose identity Caristini already has for this car.
+// Modules whose identity Pin16 already has for this car.
 const identifiedIds = (v: Vehicle) => new Set([...(v.ids?.modules ?? []).map((m) => m.id), ...Object.keys(v.knowledge ?? {})]);
 
 // The adapter's pace for the estimate: measured on this connection or the
@@ -468,7 +468,7 @@ export async function runLearn(d: LearnDeps): Promise<LearnSummary> {
       // search has run on this car yet).
       const search = all.length > 0 && (mode.full ? refresh || !scan?.complete : newTx.size > 0 || !scan);
       if (search) {
-        // A family other cars already taught Caristini gets the quick check
+        // A family other cars already taught Pin16 gets the quick check
         // of those sensors only; the full search stays on Find my car's
         // sensors and skips whatever was asked here.
         let rows = shared.size ? quickRows(all, shared, asked) : remainingRows(all, asked);

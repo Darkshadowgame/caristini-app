@@ -1,4 +1,4 @@
-# Caristini: service interval and oil reset sources
+# Pin16: service interval and oil reset sources
 
 Research note, 12 Nov 2026. Scope: how to reset the oil service or service interval on the 4 cars, by the car's own controls and over OBD, with exact bytes only where a public source gives them. Companion to `coding-sources.md` (A7, B, C), `kwp-write-sources.md` (KWP adaptation routine), `vcds-sources.md` (UDS login and adaptation), `focus-st-sources.md` (section 6) and `mazda6-sources.md` (oil DIDs). Settled points there are referenced, not repeated.
 

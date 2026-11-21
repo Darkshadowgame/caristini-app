@@ -1,5 +1,5 @@
 // The phone's GPS for the data logger, through expo-location's location
-// updates. Running the updates also keeps Caristini working while the screen
+// updates. Running the updates also keeps Pin16 working while the screen
 // is off: iOS lets an app that is following the phone's position keep running
 // in the background (a blue pill shows at the top of the screen), so the
 // logger keeps reading the car and saving the log.

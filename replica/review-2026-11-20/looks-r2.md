@@ -1,4 +1,4 @@
-# Caristini: looks, formatting and branding review, round 2
+# Pin16: looks, formatting and branding review, round 2
 
 Date: 20 Nov 2026. Build: web build at http://localhost:8090, 390 x 844, SEAT Leon Cupra demo car. Screenshots: `replica/review-2026-11-20/shots/looks2-01` to `looks2-09` (Car, Health check, Live data, Customise, Data logger, Settings, MOT check in dark; Car and Settings in light). 10 shots taken (1 retaken); the limit was 12. Most of the review is from code.
 
@@ -83,4 +83,4 @@ SF Symbol coverage (round 1 M12) and the icon and splash ground colour (round 1 
 
 ## 6. Not reached
 
-Native iOS chrome, Add to diary, Vehicle details, Service reset, Lookup results, Learn my car and the Caristini AI card. These were not opened this round; findings there are from code only.
+Native iOS chrome, Add to diary, Vehicle details, Service reset, Lookup results, Learn my car and the Pin16 AI card. These were not opened this round; findings there are from code only.

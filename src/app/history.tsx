@@ -5,7 +5,7 @@ import { HISTORY_LABEL, HistoryEntry, HistoryKind, loadHistory, onHistory, remov
 import { diffScans, previousFull } from '../diag/scanDiff';
 import { useSettings } from '../settings';
 import { useConnection } from '../state';
-import { MONO, radius, space, type, useTheme } from '../theme';
+import { MONO, onTool, radius, space, type, useTheme } from '../theme';
 import { Chips, ConfirmSheet, Group, Icon, ListRow, Pill, Screen, tap, tool, ToolId, TOOLS } from '../ui';
 import { faultLabel } from '../diag/faults';
 import { clockText, dateText } from '../timeText';
@@ -35,7 +35,7 @@ const FILTERS: { key: 'all' | HistoryKind; label: string }[] = [
   { key: 'battery', label: 'Battery' },
 ];
 
-// Everything Caristini did with a car, readable with no adapter connected:
+// Everything Pin16 did with a car, readable with no adapter connected:
 // each scan with its faults, what was cleared, every setting changed.
 export default function History() {
   const t = useTheme();
@@ -133,7 +133,7 @@ export default function History() {
                 style={({ pressed }) => [styles.entry, { borderColor: t.border, borderTopWidth: i ? StyleSheet.hairlineWidth : 0 }, pressed && { backgroundColor: t.raised }]}
               >
                 <View style={[styles.icon, { backgroundColor: t[TOOLS[KIND_TOOL[e.kind]].colour] }]}>
-                  <Icon name={TOOLS[KIND_TOOL[e.kind]].icon} size={17} color="#FFFFFF" />
+                  <Icon name={TOOLS[KIND_TOOL[e.kind]].icon} size={17} color={onTool(TOOLS[KIND_TOOL[e.kind]].colour)} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>

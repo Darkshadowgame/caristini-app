@@ -28,5 +28,5 @@ export function reconnectingText(r: Reconnecting, adapter?: string | null): stri
 
 // What it says when every try has failed.
 export function reconnectGaveUp(reason: string): string {
-  return `Connection lost: ${reason} Caristini tried the adapter ${RECONNECT_TRIES} times. Check the ignition is on, then tap Connect adapter.`;
+  return `Connection lost: ${reason} Pin16 tried the adapter ${RECONNECT_TRIES} times. Check the ignition is on, then tap Connect adapter.`;
 }

@@ -133,7 +133,7 @@ export default function Dpf() {
   return (
     <Screen>
       <WakeWhile on={watching} />
-      <GlowCard tone={regenOn ? 'fault' : regenOn === false ? 'ok' : 'brand'} style={{ padding: space.xl, marginBottom: space.xl }}>
+      <GlowCard tone={regenOn ? 'fault' : regenOn === false ? 'ok' : 'plain'} style={{ padding: space.xl, marginBottom: space.xl }}>
         <Text style={[type.label, { color: t.muted }]}>Regeneration</Text>
         <Text style={[type.title, { color: t.text, marginTop: space.xs }]}>
           {!plan?.regen && plan?.found.length ? (watching ? 'Your car’s DPF values' : 'Not read yet') : !plan?.regen ? 'Not known for this car' : !watching && regenOn == null ? 'Not read yet' : regenOn == null ? 'No answer' : regenOn ? 'Running now' : 'Not running'}
@@ -144,7 +144,7 @@ export default function Dpf() {
             : watching
               ? `Reads every ${EVERY_MS / 1000} seconds while this page is open.${readAt ? ` Last read ${clockText(readAt)}.` : ''}`
               : unknown
-                ? 'Caristini does not know where this car keeps it. Find my car’s sensors can look for its own DPF values, such as soot mass and distance since the last regeneration.'
+                ? 'Pin16 does not know where this car keeps it. Find my car’s sensors can look for its own DPF values, such as soot mass and distance since the last regeneration.'
                 : plan?.found.length
                   ? `Reads the ${plan.found.length} DPF value${plan.found.length === 1 ? '' : 's'} found on your car (Live data, Diesel filter and exhaust). Tap Start watching.`
                   : `Tap Start watching to read the filter now and every ${EVERY_MS / 1000} seconds.`}
@@ -155,7 +155,7 @@ export default function Dpf() {
         {unknown ? <Button label="Find my car’s sensors" icon={'radar' as IconName} onPress={() => router.push('/sensors')} /> : null}
         {!unknown || canRead ? (
           <Button
-            label={watching ? 'Stop' : unknown ? 'Read the values Caristini knows' : 'Start watching'}
+            label={watching ? 'Stop' : unknown ? 'Read the values Pin16 knows' : 'Start watching'}
             icon={watching ? 'stop' : 'bell-alert-outline'}
             variant={watching || unknown ? 'secondary' : 'primary'}
             disabled={!plan}

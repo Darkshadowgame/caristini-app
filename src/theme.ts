@@ -6,91 +6,104 @@ export const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', defaul
 // it a browser draws Times.
 export const SANS = Platform.select({ ios: 'Helvetica Neue', android: 'sans-serif', default: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" });
 
-// Caristini on iOS conventions: system grounds and grouped lists, one amber
-// tint for everything you can tap, and system colours for state and for each
-// tool's icon square (as in iOS Settings). Dark is the default scene: the
-// driver's seat at night.
+// Pin16 colours: graphite ground, burnt orange accent. Dark is the main
+// scene: the driver's seat at night. Orange fills the primary button, the lit
+// pin and the selected state; switches that are on are green. Orange as text
+// uses accentText, a lighter orange that holds 4.5:1 on every surface. Status
+// is green, warn yellow and danger pink-red; orange is never a status colour.
 //
-// Contrast: every text colour (text, muted, accentText, danger, ok, info) is
-// at least 4.5:1 on bg, surface, sunken, the glow washes and its own soft
-// wash, in both appearances (WCAG AA, measured 20 Nov 2026). faint is for
-// chevrons and empty-state glyphs only, never for words.
+// Contrast: every text colour (text, muted, faint, accentText, danger, ok,
+// info, warn) is at least 4.5:1 on bg, surface, raised, sunken and its own
+// soft wash, in both appearances (WCAG AA; __tests__/contrast.test.ts checks
+// it).
 const light = {
-  bg: '#F2F2F7',
+  bg: '#EFEFF2',
   surface: '#FFFFFF',
   raised: '#FFFFFF',
-  sunken: '#E5E5EA',
-  text: '#000000',
-  muted: 'rgba(60,60,67,0.78)',
-  faint: 'rgba(60,60,67,0.36)',
-  border: 'rgba(60,60,67,0.22)',
-  accent: '#FF9F0A',
-  accentSoft: 'rgba(255,159,10,0.16)',
-  accentText: '#8A4E00',
-  onAccent: '#1A1205',
-  danger: '#B80012',
+  sunken: '#E4E4E9',
+  text: '#131316',
+  muted: 'rgba(19,19,22,0.72)',
+  faint: 'rgba(19,19,22,0.64)',
+  border: 'rgba(19,19,22,0.14)',
+  accent: '#E2560B',
+  accentSoft: 'rgba(226,86,11,0.12)',
+  accentText: '#A63A00',
+  onAccent: '#0A0A0A',
+  danger: '#B8123A',
   onDanger: '#FFFFFF',
-  dangerSoft: 'rgba(255,59,48,0.12)',
+  dangerSoft: 'rgba(184,18,58,0.1)',
   ok: '#196B2D',
   okSoft: 'rgba(52,199,89,0.14)',
   info: '#0058BA',
   infoSoft: 'rgba(0,122,255,0.12)',
+  warn: '#6E5000',
+  warnSoft: 'rgba(214,170,0,0.18)',
   hero: '#FFFFFF',
-  onHero: '#000000',
-  onHeroMuted: 'rgba(60,60,67,0.78)',
-  // Tool icon squares (white glyph on these).
-  red: '#FF3B30',
+  onHero: '#131316',
+  onHeroMuted: 'rgba(19,19,22,0.72)',
+  // Tool icon squares (glyph colour from onTool).
+  red: '#E5304F',
   blue: '#007AFF',
   green: '#34C759',
   indigo: '#5856D6',
   purple: '#AF52DE',
   teal: '#30B0C7',
-  orange: '#FF9500',
+  gold: '#C99700',
   grey: '#8E8E93',
   // Gradient pairs for state cards: brand (waiting), ok, fault.
-  glowBrand: ['#FFF0D6', '#FFFFFF'] as [string, string],
+  glowBrand: ['#FFE6D8', '#FFFFFF'] as [string, string],
   glowOk: ['#E2F6E8', '#FFFFFF'] as [string, string],
-  glowFault: ['#FDE3E1', '#FFFFFF'] as [string, string],
+  glowFault: ['#FDE1E8', '#FFFFFF'] as [string, string],
 };
 
 const dark: typeof light = {
-  bg: '#000000',
-  surface: '#1C1C1E',
-  raised: '#2C2C2E',
-  sunken: '#2C2C2E',
-  text: '#FFFFFF',
-  muted: 'rgba(235,235,245,0.72)',
-  faint: 'rgba(235,235,245,0.4)',
-  border: 'rgba(84,84,88,0.6)',
-  accent: '#FFB340',
-  accentSoft: 'rgba(255,179,64,0.18)',
-  accentText: '#FFB340',
-  onAccent: '#1A1205',
-  danger: '#FF857D',
-  onDanger: '#2A0604',
-  dangerSoft: 'rgba(255,69,58,0.2)',
+  bg: '#131316',
+  surface: '#1B1B1F',
+  raised: '#24242A',
+  sunken: '#24242A',
+  text: '#F5F5F7',
+  muted: '#B0B0BB',
+  faint: '#9A9AA6',
+  border: '#303036',
+  accent: '#E2560B',
+  accentSoft: 'rgba(226,86,11,0.2)',
+  accentText: '#FF8546',
+  onAccent: '#0A0A0A',
+  danger: '#FF7A97',
+  onDanger: '#2A0612',
+  dangerSoft: 'rgba(255,72,110,0.16)',
   ok: '#30D158',
-  okSoft: 'rgba(48,209,88,0.18)',
+  okSoft: 'rgba(48,209,88,0.16)',
   info: '#64B5FF',
-  infoSoft: 'rgba(10,132,255,0.2)',
-  hero: '#1C1C1E',
-  onHero: '#FFFFFF',
-  onHeroMuted: 'rgba(235,235,245,0.72)',
-  red: '#FF453A',
+  infoSoft: 'rgba(10,132,255,0.18)',
+  warn: '#F5D33B',
+  warnSoft: 'rgba(245,211,59,0.14)',
+  hero: '#1B1B1F',
+  onHero: '#F5F5F7',
+  onHeroMuted: '#B0B0BB',
+  red: '#FF5C7A',
   blue: '#0A84FF',
   green: '#30D158',
   indigo: '#5E5CE6',
   purple: '#BF5AF2',
   teal: '#40C8E0',
-  orange: '#FF9F0A',
+  gold: '#D9A400',
   grey: '#8E8E93',
-  glowBrand: ['#3D2A0C', '#1C1C1E'],
-  glowOk: ['#0E2E1A', '#1C1C1E'],
-  glowFault: ['#3F1412', '#1C1C1E'],
+  glowBrand: ['#3A1F10', '#1B1B1F'],
+  glowOk: ['#0F2A1A', '#1B1B1F'],
+  glowFault: ['#3A1620', '#1B1B1F'],
 };
 
+export const themes = { light, dark };
+
 export type Theme = typeof light;
-export type ToolColour = 'red' | 'blue' | 'green' | 'indigo' | 'purple' | 'teal' | 'orange' | 'grey';
+export type ToolColour = 'red' | 'blue' | 'green' | 'indigo' | 'purple' | 'teal' | 'gold' | 'grey';
+
+// The glyph on a tool square: white on the deep colours, near-black on the
+// light ones (gold, teal, green), where white would be under 3:1.
+export function onTool(colour: ToolColour): string {
+  return colour === 'gold' || colour === 'teal' || colour === 'green' ? '#0A0A0A' : '#FFFFFF';
+}
 
 export function useTheme(): Theme {
   return useColorScheme() === 'light' ? light : dark;
@@ -124,3 +137,7 @@ export const type = {
   figureMid: { fontSize: 48, lineHeight: 56, fontWeight: '700' as const, letterSpacing: -1 },
   number: { fontVariant: ['tabular-nums' as const] },
 };
+
+// Display face (Space Grotesk) for large titles, hero numbers and the
+// wordmark only; body text stays the system font.
+export const DISPLAY_FONT = { medium: 'SpaceGrotesk_500Medium', semibold: 'SpaceGrotesk_600SemiBold' } as const;

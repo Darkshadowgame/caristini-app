@@ -1,4 +1,4 @@
-# Caristini: Ford Focus ST Mk3 and Mazda6 GJ customisation catalogue
+# Pin16: Ford Focus ST Mk3 and Mazda6 GJ customisation catalogue
 
 Research note, 11 Nov 2026. Cars: UK Ford Focus ST-3 Mk3 (about 2015, VIN WF05XXGCC5FM00000) and UK Mazda6 GJ 2016 2.2 Skyactiv-D. Public sources only. Facts as stated by each source; "my inference" marks a conclusion I drew.
 

@@ -1,8 +1,8 @@
-# Put Caristini on your phone without a Mac
+# Put Pin16 on your phone without a Mac
 
 GitHub Actions builds both apps on every push to `main`. You get 2 files from each run:
 
-- `Caristini-unsigned.ipa` for iPhone. Sideloadly on Windows signs it with your Apple ID and installs it.
+- `Pin16-unsigned.ipa` for iPhone. Sideloadly on Windows signs it with your Apple ID and installs it.
 - `app-release.apk` for Android. Open it on the phone to install.
 
 Both are Release builds with the JavaScript inside, so they run without `npx expo start` on the PC.
@@ -29,7 +29,7 @@ Optional: the local branch is called `master`. The workflow builds `main` and `m
 git branch -m master main
 ```
 
-The code is at https://github.com/Darkshadowgame/caristini-app. The iPhone app is built there on request (Actions > Build sideload apps > Run workflow) and attached to a release. A push runs the checks:
+The code is at https://github.com/Darkshadowgame/pin16-app. The iPhone app is built there on request (Actions > Build sideload apps > Run workflow) and attached to a release. A push runs the checks:
 
 ```bash
 git push
@@ -45,14 +45,14 @@ Or open the repo on github.com > Actions > "Build sideload apps". The iOS job ta
 
 ### 3. Download the IPA
 
-Open the finished run on github.com. Under **Artifacts**, download `Caristini-unsigned.ipa`. The workflow uploads it unzipped and keeps it for 7 days.
+Open the finished run on github.com. Under **Artifacts**, download `Pin16-unsigned.ipa`. The workflow uploads it unzipped and keeps it for 7 days.
 
 ### 4. Install with Sideloadly (Windows)
 
 1. Install Sideloadly from https://sideloadly.io/.
 2. Sideloadly needs the web (non-Microsoft Store) versions of iTunes and iCloud. Uninstall the Microsoft Store versions first. Links are on the same page. Source: https://sideloadly.io/
 3. Connect the iPhone by USB, unlock it and tap Trust if asked.
-4. Open Sideloadly, drag in `Caristini-unsigned.ipa`, and type your Apple ID into Sideloadly yourself. Do not put your Apple ID password in this repo, a script or a chat.
+4. Open Sideloadly, drag in `Pin16-unsigned.ipa`, and type your Apple ID into Sideloadly yourself. Do not put your Apple ID password in this repo, a script or a chat.
 5. Click Start.
 
 ### 4b. Install with Impactor (Bazzite or other Linux)
@@ -61,7 +61,7 @@ This is the route that worked on the owner's Bazzite PC on 11 Nov 2026.
 
 1. Plug in the iPhone, unlock it and tap Trust.
 2. Check usbmuxd sees it: `idevice_id -l` prints the phone's ID.
-3. Open Impactor (Flatpak) after that, drop in `Caristini-unsigned.ipa`, and sign in with your Apple ID in Impactor yourself.
+3. Open Impactor (Flatpak) after that, drop in `Pin16-unsigned.ipa`, and sign in with your Apple ID in Impactor yourself.
 4. If Impactor does not list the phone: close Impactor, replug the phone, run `idevice_id -l` again, then reopen Impactor.
 5. First launch on iOS 16 or later asks for Developer Mode: Settings > Privacy & Security > Developer Mode, turn on, restart, confirm.
 
@@ -129,17 +129,17 @@ The Expo free plan's build allowance was not checked.
 
 The APK is signed with the debug keystore from the Expo template (`signingConfig signingConfigs.debug` in `android/app/build.gradle`). That is fine for your own phone. It cannot go on the Play Store. Source: https://developer.android.com/studio/publish/app-signing
 
-Android only installs an update over an existing app if both are signed with the same certificate (same source). If you switch between this APK and an EAS build, uninstall Caristini first.
+Android only installs an update over an existing app if both are signed with the same certificate (same source). If you switch between this APK and an EAS build, uninstall Pin16 first.
 
 The workflow builds for 64-bit ARM phones only (`arm64-v8a`). For an old 32-bit phone, remove `-PreactNativeArchitectures=arm64-v8a` from the workflow.
 
 ## Troubleshooting
 
-**No Bluetooth prompt, or scan finds nothing (iPhone).** The first scan should show "Caristini uses Bluetooth to talk to your OBD2 adapter." If you tapped Don't Allow, go to Settings > Privacy & Security > Bluetooth and turn Caristini on. Source: https://support.apple.com/102267
+**No Bluetooth prompt, or scan finds nothing (iPhone).** The first scan should show "Pin16 uses Bluetooth to talk to your OBD2 adapter." If you tapped Don't Allow, go to Settings > Privacy & Security > Bluetooth and turn Pin16 on. Source: https://support.apple.com/102267
 
 **No Bluetooth prompt, or scan finds nothing (Android 12 or later).** Android asks for "Nearby devices". If you denied it, allow it in the app's permissions in Settings. Source: https://developer.android.com/develop/connectivity/bluetooth/bt-permissions
 
-**The adapter must be Bluetooth LE.** Caristini talks to the adapter through `react-native-ble-plx`, a Bluetooth Low Energy library (its own package description). An adapter that only does classic Bluetooth (often sold as "SPP") will not appear in the scan, on iPhone or Android. On iPhone, apps reach other Bluetooth accessories through Apple's External Accessory framework, which is for MFi accessories. Source: https://developer.apple.com/documentation/externalaccessory
+**The adapter must be Bluetooth LE.** Pin16 talks to the adapter through `react-native-ble-plx`, a Bluetooth Low Energy library (its own package description). An adapter that only does classic Bluetooth (often sold as "SPP") will not appear in the scan, on iPhone or Android. On iPhone, apps reach other Bluetooth accessories through Apple's External Accessory framework, which is for MFi accessories. Source: https://developer.apple.com/documentation/externalaccessory
 
 **App will not open after a week (iPhone, Route A).** The free profile has expired. Install the IPA again with Sideloadly.
 

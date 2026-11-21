@@ -23,7 +23,7 @@ const STARTERS = [
 // Offered only on cars whose settings list has a needle sweep.
 const SWEEP_STARTER = 'Turn on the needle sweep';
 
-// Caristini AI: a chat that works with the car. It reads sensors, faults,
+// Pin16 AI: a chat that works with the car. It reads sensors, faults,
 // modules and settings through tools, explains them for this car, and can
 // change a setting when asked, after the owner taps Allow.
 // The conversation per car, kept while the app runs, so leaving the chat
@@ -89,7 +89,7 @@ export default function Ask() {
     const q = text.trim();
     if (!q || busy) return;
     if (!v) {
-      setError('Connect your car once so Caristini AI knows which car it is.');
+      setError('Connect your car once so Pin16 AI knows which car it is.');
       return;
     }
     stopAsk.current = false;
@@ -153,7 +153,7 @@ export default function Ask() {
         <Icon name={'creation' as IconName} size={44} color={t.accent} />
         <Text style={[type.title3, { color: t.text, marginTop: space.md }]}>Add your Claude key</Text>
         <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: space.sm, marginBottom: space.lg }]}>
-          Caristini AI uses your own Claude API key. Paste it once in Settings; it stays on this phone.
+          Pin16 AI uses your own Claude API key. Paste it once in Settings; it stays on this phone.
         </Text>
         <Button label="Open Settings" icon="tune-variant" onPress={() => router.push('/settings')} />
       </View>
@@ -169,7 +169,7 @@ export default function Ask() {
               <Icon name={'creation' as IconName} size={28} color={t.accent} />
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: space.md }}>
-              <Text style={[type.title, { color: t.text, flex: 1 }]}>Caristini AI</Text>
+              <Text style={[type.title, { color: t.text, flex: 1 }]}>Pin16 AI</Text>
               <HelpButton help={GUIDES.ai} size={22} label="How it works" />
             </View>
             <Text style={[type.sub, { color: t.muted, marginTop: 4, marginBottom: space.lg }]}>

@@ -1,6 +1,9 @@
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
+import { SpaceGrotesk_500Medium, SpaceGrotesk_600SemiBold } from '@expo-google-fonts/space-grotesk';
+import { useFonts } from 'expo-font';
+import { setDisplayFontReady } from '../fonts';
 import { syncKb } from '../kb';
 import { flushOutbox } from '../share/sendBack';
 import { Platform, Pressable, Text } from 'react-native';
@@ -16,6 +19,11 @@ import '../logger/phoneGps';
 export default function RootLayout() {
   const t = useTheme();
   const dark = useIsDark();
+  // Display font for titles and big numbers. Never blocks the first render: until it loads, or if it fails, the system font shows.
+  const [fontsLoaded] = useFonts({ SpaceGrotesk_500Medium, SpaceGrotesk_600SemiBold });
+  useEffect(() => {
+    setDisplayFontReady(!!fontsLoaded);
+  }, [fontsLoaded]);
   // New knowledge (from any install) arrives when the app opens.
   useEffect(() => {
     syncKb().catch(() => undefined);
@@ -66,7 +74,7 @@ export default function RootLayout() {
             <Stack.Screen name="workshop/[id]" options={{ title: 'Control module', headerRight: () => <GuideButton id="module" /> }} />
             <Stack.Screen name="customise/index" options={{ title: 'Customise', headerRight: () => <GuideButton id="customise" /> }} />
             <Stack.Screen name="customise/[id]" options={{ title: '', headerRight: () => <GuideButton id="customiseGuide" /> }} />
-            <Stack.Screen name="customise/learn" options={{ title: 'Learn from Carista', headerRight: () => <GuideButton id="learnSetting" /> }} />
+            <Stack.Screen name="customise/learn" options={{ title: 'Learn a setting', headerRight: () => <GuideButton id="learnSetting" /> }} />
             <Stack.Screen name="code/[code]" options={{ title: 'Fault code', headerRight: () => <GuideButton id="code" /> }} />
             <Stack.Screen name="vehicle" options={{ title: 'Car details', headerRight: () => <GuideButton id="vehicle" /> }} />
             <Stack.Screen name="guide" options={{ title: 'User guide' }} />

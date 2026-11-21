@@ -1,4 +1,4 @@
-# Caristini: Ford Focus ST Mk3 (C346) sources
+# Pin16: Ford Focus ST Mk3 (C346) sources
 
 Research note, 11 Nov 2026. Target car: UK Ford Focus ST-3, VIN WF05XXGCC5FM00000, about 2015. Adapter: Carista BLE (ELM327 v1.5 clone). Goal: match the Audi A6 C7 feature set (scan all modules, clear faults, identification, maker live data, customisations, service reset).
 

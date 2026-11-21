@@ -1,4 +1,4 @@
-# Caristini review round 2: Bugs and Functionality
+# Pin16 review round 2: Bugs and Functionality
 
 Date: 20 Nov 2026. Review only: no source file was changed. Each round 1 HIGH and MEDIUM finding was checked in the current code at the file and line it names; the fix records were not trusted.
 

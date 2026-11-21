@@ -14,7 +14,7 @@ import { Button, Group, GuideButton, HelpButton, Icon, Notice, Pill, Screen, suc
 import { useGarage, vehicleTitle } from '../../vehicle/garage';
 import { clockText, dateText, shareFileName } from '../../timeText';
 
-// Every setting change Caristini wrote to a car, newest first, one line per
+// Every setting change Pin16 wrote to a car, newest first, one line per
 // module, with the backup each came from. Shared as text or CSV. The bytes
 // sit behind Technical; Put back opens Customise's own restore and its
 // confirmation, so nothing is written from this page.

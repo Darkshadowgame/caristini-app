@@ -117,9 +117,9 @@ export function fileDate(at: number | Date = Date.now()): string {
 }
 
 // One name for every file the app shares, without the extension:
-// "Caristini-health-report-WVWZZZ1KZBW000001-20261109". what: lower-case
+// "Pin16-health-report-WVWZZZ1KZBW000001-20261109". what: lower-case
 // words; stamp: a log's own start time in place of the date.
 export function shareFileName(what: string, vin: string | null | undefined, at: number | Date = Date.now(), stamp?: string): string {
   const clean = (s: string) => s.trim().replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return ['Caristini', clean(what.toLowerCase()), vin ? clean(vin.toUpperCase()) : null, stamp ? stamp.replace(/[^0-9-]/g, '') : fileDate(at)].filter(Boolean).join('-');
+  return ['Pin16', clean(what.toLowerCase()), vin ? clean(vin.toUpperCase()) : null, stamp ? stamp.replace(/[^0-9-]/g, '') : fileDate(at)].filter(Boolean).join('-');
 }

@@ -283,7 +283,7 @@ export default function Battery() {
 
   return (
     <Screen>
-      <GlowCard tone="brand" style={{ padding: space.xl }}>
+      <GlowCard tone={busy ? 'brand' : 'plain'} style={{ padding: space.xl }}>
         <Text style={[type.label, { color: t.muted }]}>{crankNow ? 'Cranking' : 'Last reading'}</Text>
         <Text style={[{ fontSize: 56, lineHeight: 62, fontWeight: '700', letterSpacing: -1, color: t.text }, type.number]} accessibilityLabel={shown == null ? 'No reading' : undefined}>
           {shown == null ? '–' : shown.toFixed(2)}

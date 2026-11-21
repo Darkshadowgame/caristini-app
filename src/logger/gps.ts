@@ -40,7 +40,7 @@ export function gpsFields(fix: GpsFix | null, now: number): { lat?: number; lon?
 
 // What the logger screen says about GPS after Record or auto-start.
 export function gpsNote(r: GpsStart | null): string | null {
-  if (r === 'denied') return 'Location is not allowed for Caristini, so this log has no route and stops reading when the screen turns off. Allow it in iPhone Settings, Caristini, Location, While Using the App.';
+  if (r === 'denied') return 'Location is not allowed for Pin16, so this log has no route and stops reading when the screen turns off. Allow it in iPhone Settings, Pin16, Location, While Using the App.';
   if (r === 'off') return 'Location Services are off on this phone, so this log has no route and stops reading when the screen turns off.';
   return null;
 }
@@ -125,7 +125,7 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 // The route as a GPX track, for Google Earth, Strava or a map app.
 export function toGpx(name: string, startedAt: number, route: RoutePoint[], markers: { n: number; t: number }[] = []): string {
   const time = (t: number) => new Date(startedAt + t).toISOString();
-  const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<gpx version="1.1" creator="Caristini" xmlns="http://www.topografix.com/GPX/1/1">'];
+  const lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<gpx version="1.1" creator="Pin16" xmlns="http://www.topografix.com/GPX/1/1">'];
   for (const m of markers) {
     const i = routeIndexAt(route, m.t);
     if (i < 0) continue;

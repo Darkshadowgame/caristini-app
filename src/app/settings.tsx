@@ -57,7 +57,7 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
   );
 
   const rt = report?.roundTrip;
-  // The older VW protocol needs Caristini's reply within about 100 ms of the module's frame.
+  // The older VW protocol needs Pin16's reply within about 100 ms of the module's frame.
   const slow = rt ? rt.avg > 80 : false;
 
   return (
@@ -94,7 +94,7 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
         }, undefined, true)}
       </Group>
 
-      <Group header="Long reads" footer="Learn my car, Find my car’s sensors and Unknown values carry on when you switch apps or lock the phone. iPhone asks once to use your location: that is what lets an app keep running. No position is saved or sent. Swiping Caristini away in the app switcher still stops it.">
+      <Group header="Long reads" footer="Learn my car, Find my car’s sensors and Unknown values carry on when you switch apps or lock the phone. iPhone asks once to use your location: that is what lets an app keep running. No position is saved or sent. Swiping Pin16 away in the app switcher still stops it.">
         {toggle('Keep going in the background', settings.backgroundRuns !== false, (v) => set({ backgroundRuns: v }), undefined, true)}
       </Group>
 
@@ -145,8 +145,8 @@ export default function SettingsScreen({ title, guide }: { title?: string; guide
           disabled={!logCount}
           onPress={() =>
             Share.share({
-              title: 'Caristini adapter log',
-              message: trafficLog.text(`# Caristini adapter log ${new Date().toISOString()} ${conn.vehicle ? `${conn.vehicle.brand} ${conn.vehicle.model} ${conn.vehicle.vin}` : ''}`),
+              title: 'Pin16 adapter log',
+              message: trafficLog.text(`# Pin16 adapter log ${new Date().toISOString()} ${conn.vehicle ? `${conn.vehicle.brand} ${conn.vehicle.model} ${conn.vehicle.vin}` : ''}`),
             })
           }
         />
@@ -293,7 +293,7 @@ function OutboxRows() {
     <>
       <ListRow
         icon={waiting ? 'tray-arrow-up' : 'check-circle'}
-        iconColour={waiting ? 'orange' : 'green'}
+        iconColour={waiting ? 'gold' : 'green'}
         title={waiting ? `${waiting} waiting to send` : 'Nothing waiting to send'}
         subtitle={waiting ? (error ?? undefined) : undefined}
         value={waiting ? (busy ? 'Sending' : 'Send now') : undefined}

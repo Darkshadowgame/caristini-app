@@ -1,4 +1,4 @@
-# Caristini final functionality review
+# Pin16 final functionality review
 
 Date: 20 Nov 2026. Review only: nothing but this report was written. No git, no browser, no test run (the code was read, and the tests named below were read against it).
 

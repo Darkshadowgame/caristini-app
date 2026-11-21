@@ -22,9 +22,11 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mascot } from './brand/Mascot';
+import { PinMark } from './brand/PinMark';
+import { Wordmark } from './brand/Wordmark';
+import { useDisplay } from './fonts';
 import { GuideId, GUIDES, Help } from './help';
-import { MONO, radius, space, Theme, ToolColour, type, useTheme } from './theme';
+import { MONO, onTool, radius, space, Theme, ToolColour, type, useTheme } from './theme';
 import { timeLeft } from './timeText';
 
 export type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -132,10 +134,11 @@ export function Icon({ name, size = 22, color }: { name: IconName; size?: number
 // One icon and one colour square per tool, on every screen (the One Square
 // Rule in DESIGN.md). Rows and tiles read from here: <ListRow {...tool('history')} />.
 export const TOOLS = {
-  health: { icon: 'heart-pulse', colour: 'red' },
-  history: { icon: 'progress-clock', colour: 'red' },
+  // Red is for faults only: the fault-clearing tool. Everything else stays off red.
+  health: { icon: 'heart-pulse', colour: 'teal' },
+  history: { icon: 'progress-clock', colour: 'indigo' },
   clear: { icon: 'broom', colour: 'red' },
-  performance: { icon: 'timer-outline', colour: 'red' },
+  performance: { icon: 'timer-outline', colour: 'blue' },
   live: { icon: 'chart-timeline-variant', colour: 'blue' },
   sensors: { icon: 'radar', colour: 'blue' },
   dashboard: { icon: 'speedometer', colour: 'blue' },
@@ -157,8 +160,8 @@ export const TOOLS = {
   ids: { icon: 'barcode', colour: 'indigo' },
   report: { icon: 'file-document-outline', colour: 'indigo' },
   logger: { icon: 'chart-line', colour: 'indigo' },
-  workshop: { icon: 'wrench-outline', colour: 'orange' },
-  diary: { icon: 'notebook-outline', colour: 'orange' },
+  workshop: { icon: 'wrench-outline', colour: 'gold' },
+  diary: { icon: 'notebook-outline', colour: 'gold' },
   listen: { icon: 'ear-hearing', colour: 'grey' },
   details: { icon: 'pencil-outline', colour: 'grey' },
 } satisfies Record<string, { icon: IconName; colour: ToolColour }>;
@@ -212,6 +215,7 @@ export function Screen({
 }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
+  const display = useDisplay();
   // On a phone the tab's own stack header shows the title (a large title on
   // iOS) with any trailing control as its right button; the web preview has
   // no header, so the title is drawn in the page.
@@ -234,13 +238,17 @@ export function Screen({
       keyboardShouldPersistTaps="handled"
       contentInsetAdjustmentBehavior="automatic"
     >
-      {title && !inPage ? <Stack.Screen options={{ title, headerRight: right ? () => right : undefined }} /> : null}
+      {title && !inPage ? <Stack.Screen options={{ title, ...(title === 'Pin16' ? { headerTitle: () => <Wordmark size={17} /> } : null), headerRight: right ? () => right : undefined }} /> : null}
       <View style={styles.column}>
         {inPage ? (
           <View style={styles.largeTitleRow}>
-            <Text accessibilityRole="header" style={[type.display, { color: t.text, flex: 1 }]}>
-              {title}
-            </Text>
+            {title === "Pin16" ? (
+              <Wordmark style={{ flex: 1 }} />
+            ) : (
+              <Text accessibilityRole="header" style={[type.display, display, { color: t.text, flex: 1 }]}>
+                {title}
+              </Text>
+            )}
             {right}
           </View>
         ) : null}
@@ -281,12 +289,13 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
   return <View style={[styles.card, { backgroundColor: t.surface }, style]}>{children}</View>;
 }
 
-// A card washed with a soft diagonal glow in the colour of its state: amber
-// while the car is being read, green healthy, red a fault. "plain" is the
-// same card with no wash, for a tool that is waiting to be started.
+// A card washed with a soft diagonal glow in the colour of its state: orange
+// while the car is being read or needs attention, green healthy, red a fault.
+// "plain" is the same card with no wash: the idle state of a tool that is
+// waiting to be started or not connected.
 export function GlowCard({ tone, children, style }: { tone: 'brand' | 'ok' | 'fault' | 'plain'; children: React.ReactNode; style?: ViewStyle }) {
   const t = useTheme();
-  if (tone === 'plain') return <View style={[styles.card, { backgroundColor: t.surface }, style]}>{children}</View>;
+  if (tone === 'plain') return <View style={[styles.card, { backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border }, style]}>{children}</View>;
   const colors = tone === 'ok' ? t.glowOk : tone === 'fault' ? t.glowFault : t.glowBrand;
   return (
     <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[styles.card, style]}>
@@ -635,7 +644,7 @@ export function ListRow({
       {leading ? <View style={{ marginRight: space.md }}>{leading}</View> : null}
       {icon && !leading ? (
         <View style={[styles.rowIcon, { backgroundColor: iconColour ? t[iconColour] : tone.bg }]}>
-          <Icon name={icon} size={17} color={iconColour ? '#FFFFFF' : tone.fg} />
+          <Icon name={icon} size={17} color={iconColour ? onTool(iconColour) : tone.fg} />
         </View>
       ) : null}
       <View style={[styles.rowMain, { borderColor: t.border, borderTopWidth: first ? 0 : StyleSheet.hairlineWidth }]}>
@@ -697,7 +706,7 @@ export function Notice({ text, tone = 'neutral', icon }: { text: string; tone?: 
 }
 
 // The one text field: a sunken well with the label above it in small muted
-// type. No border and no ring; the amber cursor shows focus. Without a label
+// type. No border and no ring; the orange cursor shows focus. Without a label
 // it sits in a row beside a button (flex: 1 through style).
 export function Field({
   label,
@@ -782,7 +791,7 @@ export function Field({
   );
 }
 
-// The one chip: a 36 pt capsule (tap target 44 pt), amber when selected.
+// The one chip: a 36 pt capsule (tap target 44 pt), orange when selected.
 // On the page ground it is filled with surface; inside a card, with sunken.
 export function Chip({
   label,
@@ -927,7 +936,7 @@ export function Segmented<T extends string>({
   );
 }
 
-// Lower and higher around a value: 2 amber-soft buttons, tap target 44 pt.
+// Lower and higher around a value: 2 orange-soft buttons, tap target 44 pt.
 export function Stepper({ value, onStep, disabled, width = 78 }: { value: string; onStep: (d: 1 | -1) => void; disabled?: boolean; width?: number }) {
   const t = useTheme();
   const button = (d: 1 | -1) => (
@@ -1092,7 +1101,7 @@ export function ProgressBar({ value, label, done, total, startedAt }: { value: n
 }
 
 // The signature moment: the car symbol inside rings that ripple outwards
-// while Caristini talks to the car. Still under Reduce Motion.
+// while Pin16 talks to the car. Still under Reduce Motion.
 export function ScanPulse({ active, size = 120, colour, children }: { active: boolean; size?: number; colour?: string; children?: React.ReactNode }) {
   const t = useTheme();
   const c = colour ?? t.accent;
@@ -1161,7 +1170,7 @@ export function NeedsConnection({ what, title }: { what?: string; title?: string
   const router = useRouter();
   return (
     <View style={{ alignItems: 'center', paddingVertical: space.xxl * 2, paddingHorizontal: space.xl }}>
-      <Mascot mood="asleep" size={120} />
+      <PinMark lit={false} size={72} />
       <Text style={[type.title3, { color: t.text, marginTop: space.lg, textAlign: 'center' }]}>{title ?? `Connect your car to see ${what}`}</Text>
       <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: space.sm }]}>
         Plug in the adapter and switch the ignition on.
@@ -1240,7 +1249,7 @@ export type RingState = 'pending' | 'current' | 'ok' | 'faults' | 'none' | 'erro
 
 // The health check's signature: one dot per control module around the car,
 // filling in as each answers (green clear, red faults, dim not fitted) while
-// the module being asked pulses amber. Still under Reduce Motion.
+// the module being asked pulses orange. Still under Reduce Motion.
 export function ModuleRing({ states, size = 170, children }: { states: RingState[]; size?: number; children?: React.ReactNode }) {
   const t = useTheme();
   const reduce = useReduceMotion();
@@ -1259,7 +1268,7 @@ export function ModuleRing({ states, size = 170, children }: { states: RingState
   const n = Math.max(1, states.length);
   const dot = Math.max(6, Math.min(12, (Math.PI * size) / n - 4));
   const r = size / 2 - dot;
-  const colour = (s: RingState) => (s === 'ok' ? t.ok : s === 'faults' ? t.danger : s === 'current' ? t.accent : s === 'error' ? t.orange : s === 'none' ? t.faint : t.sunken);
+  const colour = (s: RingState) => (s === 'ok' ? t.ok : s === 'faults' ? t.danger : s === 'current' ? t.accent : s === 'error' ? t.warn : s === 'none' ? t.faint : t.sunken);
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel={`${states.filter((s) => s !== 'pending' && s !== 'current').length} of ${states.length} modules checked`}>
       {states.map((s, i) => {

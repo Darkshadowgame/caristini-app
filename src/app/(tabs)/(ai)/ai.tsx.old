@@ -3,11 +3,11 @@ import React from 'react';
 import { GuideButton } from '../../../ui';
 import Ask from '../../ask';
 
-// The Caristini AI tab: the same assistant as the Ask screen, always one tap away.
+// The Pin16 AI tab: the same assistant as the Ask screen, always one tap away.
 export default function AiTab() {
   return (
     <>
-      <Stack.Screen options={{ title: 'Caristini AI', headerLargeTitle: false, headerRight: () => <GuideButton id="ai" /> }} />
+      <Stack.Screen options={{ title: 'Pin16 AI', headerLargeTitle: false, headerRight: () => <GuideButton id="ai" /> }} />
       <Ask />
     </>
   );

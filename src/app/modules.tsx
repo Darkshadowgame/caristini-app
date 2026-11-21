@@ -1,3 +1,4 @@
+import { useDisplay } from '../fonts';
 import * as Clipboard from 'expo-clipboard';
 import React, { useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
@@ -14,6 +15,7 @@ import { dateTimeText } from '../timeText';
 import { useStayAwake } from '../keepAwake';
 
 export default function Modules() {
+  const displayFont = useDisplay();
   const t = useTheme();
   const conn = useConnection();
   const garage = useGarage();
@@ -104,7 +106,7 @@ export default function Modules() {
         {busy ? (
           <View style={{ alignItems: 'center' }}>
             <ScanPulse active size={120} />
-            <Text style={[styles.pct, type.number, { color: t.text }]}>{Math.round(progress * 100)}%</Text>
+            <Text style={[styles.pct, type.number, displayFont, { color: t.text }]}>{Math.round(progress * 100)}%</Text>
             <Text style={[type.sub, { color: t.muted, textAlign: 'center' }]} numberOfLines={1}>
               {current ? `Reading ${current}…` : 'Finishing…'}
             </Text>

@@ -22,7 +22,7 @@ const KIND_ICON: Record<KbKind, IconName> = {
   note: 'note-outline',
 };
 
-// Everything Caristini knows about this car beyond the built-in lists, shared
+// Everything Pin16 knows about this car beyond the built-in lists, shared
 // through the repo with every install.
 export default function Knowledge() {
   const t = useTheme();

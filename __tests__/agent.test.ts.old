@@ -28,7 +28,7 @@ function reply(content: unknown[], stop: string) {
   return { ok: true, status: 200, json: async () => ({ content, stop_reason: stop }) } as unknown as Response;
 }
 
-describe('Caristini AI tool loop', () => {
+describe('Pin16 AI tool loop', () => {
   it('changes a setting only after Allow, then answers', async () => {
     const c = new ElmClient(new SimTransport(a6, 0));
     await c.initialise();

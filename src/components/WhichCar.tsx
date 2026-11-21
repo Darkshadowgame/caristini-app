@@ -1,6 +1,6 @@
 // Shown on the Car tab when the connected car gave no VIN (some older cars do
 // not answer the OBD VIN request, and their modules did not give it either).
-// The owner picks one of their saved cars or types the VIN, and Caristini
+// The owner picks one of their saved cars or types the VIN, and Pin16
 // remembers that car for the next connect without a VIN.
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -44,7 +44,7 @@ export function WhichCar() {
   return (
     <Group
       header="Which car is this?"
-      footer="This car did not report its VIN. Pick it, or type the VIN from the V5C, the bottom of the windscreen or the data label in the boot. Caristini then knows the make and uses the right modules."
+      footer="This car did not report its VIN. Pick it, or type the VIN from the V5C, the bottom of the windscreen or the data label in the boot. Pin16 then knows the make and uses the right modules."
     >
       {others.map((v, i) => (
         <ListRow

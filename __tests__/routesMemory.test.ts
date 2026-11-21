@@ -16,7 +16,7 @@ function counted(): { t: Transport; n: () => number } {
   return { t: sim, n: () => n };
 }
 
-describe('what a car taught Caristini is reused on the next connection', () => {
+describe('what a car taught Pin16 is reused on the next connection', () => {
   it('saves how each module answered and tries that way first next time', async () => {
     const first = new ElmClient(new SimTransport(a6, 0));
     await first.initialise();

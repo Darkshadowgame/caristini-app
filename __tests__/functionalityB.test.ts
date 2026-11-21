@@ -128,7 +128,7 @@ describe('finding 10: a dropped link is tried again', () => {
   it('says what is happening', () => {
     expect(reconnectingText({ attempt: 2, of: 4 }, 'Carista')).toBe('Reconnecting to Carista: try 2 of 4. Keep the ignition on and the phone near the car.');
     expect(reconnectingText({ attempt: 1, of: 4 })).toMatch(/^Reconnecting: try 1 of 4\./);
-    expect(reconnectGaveUp('The adapter disconnected.')).toBe('Connection lost: The adapter disconnected. Caristini tried the adapter 4 times. Check the ignition is on, then tap Connect adapter.');
+    expect(reconnectGaveUp('The adapter disconnected.')).toBe('Connection lost: The adapter disconnected. Pin16 tried the adapter 4 times. Check the ignition is on, then tap Connect adapter.');
   });
 });
 

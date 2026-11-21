@@ -24,7 +24,7 @@ import { LeaveRunGuard } from '../leaveRun';
 
 // Discover: asks each module for every value number in the usual ranges and
 // keeps whatever answers, named or not. Nothing is written to the car. The
-// findings go back to be built into Caristini for every car of this kind.
+// findings go back to be built into Pin16 for every car of this kind.
 export default function Discover() {
   const t = useTheme();
   const conn = useConnection();
@@ -331,7 +331,7 @@ export default function Discover() {
               <ListRow
                 first={i === 0}
                 icon={st.state === 'done' ? 'check-circle' : st.state === 'silent' ? 'close-circle' : 'chip'}
-                iconColour={st.state === 'done' ? 'green' : st.state === 'silent' ? 'grey' : st.state === 'partial' ? 'orange' : 'indigo'}
+                iconColour={st.state === 'done' ? 'green' : st.state === 'silent' ? 'grey' : st.state === 'partial' ? 'gold' : 'indigo'}
                 title={`${def.code && group === 'vag' ? `${def.code} · ` : ''}${def.name}`}
                 subtitle={st.text}
                 right={<Icon name={shown ? 'chevron-up' : 'chevron-down'} size={13} color={t.faint} />}
@@ -362,7 +362,7 @@ export default function Discover() {
                     {!entries.length ? (
                       <Text style={[type.small, { color: t.muted }]}>{mod.silent ? 'This module did not answer.' : 'No values found here yet. Explore it to look for values.'}</Text>
                     ) : (
-                      <Text style={[type.small, { color: t.muted }]}>Named values are already in Caristini’s lists. Moving values change between samples and are most likely sensors. Tap one for its readings.</Text>
+                      <Text style={[type.small, { color: t.muted }]}>Named values are already in Pin16’s lists. Moving values change between samples and are most likely sensors. Tap one for its readings.</Text>
                     )}
                   </View>
                   {entries.map(([did, f]) => (

@@ -1,5 +1,5 @@
 // History per car: every scan, fault clear, setting change, service tool and
-// search Caristini runs is logged on the phone, so it can be read later with
+// search Pin16 runs is logged on the phone, so it can be read later with
 // no adapter connected.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

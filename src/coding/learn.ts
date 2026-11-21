@@ -1,5 +1,5 @@
-// Learn from Carista (or the car's own menus): Caristini saves module values,
-// the owner changes one setting elsewhere, and Caristini reads again. The bytes
+// Learn from Carista (or the car's own menus): Pin16 saves module values,
+// the owner changes one setting elsewhere, and Pin16 reads again. The bytes
 // that changed become a switch for this car. Nothing is guessed: the values
 // come from the owner's own car.
 //

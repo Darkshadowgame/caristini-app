@@ -1,4 +1,4 @@
-# Fuse boxes and manual links: source data for Caristini
+# Fuse boxes and manual links: source data for Pin16
 
 Research note, 11 Nov 2026. Four UK right-hand-drive cars. Fuse data is copied as facts only (number, rating, function) from the owner's manual named for each car. Manual prose and images are not copied. Every table cites its URL.
 

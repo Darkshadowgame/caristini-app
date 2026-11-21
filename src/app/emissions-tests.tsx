@@ -175,7 +175,7 @@ export default function EmissionsTests() {
                 key={g.name}
                 header={g.name}
                 help={k === 0 ? SECTIONS.diagTestResults : undefined}
-                footer={g.items.some((r) => !r.value) ? 'Raw: the unit code is not in the standard table Caristini uses, so the bytes are shown as sent.' : undefined}
+                footer={g.items.some((r) => !r.value) ? 'Raw: the unit code is not in the standard table Pin16 uses, so the bytes are shown as sent.' : undefined}
               >
                 {g.items.map((r, i) => (
                   <ListRow
@@ -203,7 +203,7 @@ export default function EmissionsTests() {
             ) : null}
           </>
         ) : (
-          <Group header="Test results" help={SECTIONS.diagTestResults} footer="This car does not use CAN, so its test results use an older layout set by the maker. Caristini shows them raw.">
+          <Group header="Test results" help={SECTIONS.diagTestResults} footer="This car does not use CAN, so its test results use an older layout set by the maker. Pin16 shows them raw.">
             {tests.raw.length ? (
               tests.raw.map((l, i) => (
                 <Text key={i} selectable style={[type.small, styles.raw, { color: t.muted, borderColor: t.border, borderTopWidth: i ? StyleSheet.hairlineWidth : 0 }]}>

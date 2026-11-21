@@ -9,7 +9,7 @@
 //   Mazda6 GJ: replica/mazda6-sources.md section 1.3, RBCM 7B7 is "MS",
 //     "not reachable on pins 6/14".
 // A standard ELM327 has one CAN transceiver on pins 6 and 14 and cannot reach
-// these (focus-st-sources 2.2, FS1). Caristini switches bus with the STN
+// these (focus-st-sources 2.2, FS1). Pin16 switches bus with the STN
 // command STP 53 (focus-st-sources 2.3, FS16), so only STN adapters (OBDLink
 // MX+, EX, MX) are used for it. The vLinker FS is sold with automatic HS/MS
 // switching for FORScan, but its commands are not published (2.3,
@@ -24,7 +24,7 @@ export const SECOND_BUS_ONLY: Record<'ford' | 'mazda', string[]> = {
 export const SECOND_BUS_ADAPTER_TEXT = 'On the second CAN bus. Needs an OBDLink MX+ or vLinker FS; a standard ELM327 cannot reach it.';
 
 export const SECOND_BUS_NOTICE =
-  'Some modules on this car sit on a second CAN bus (OBD pins 3 and 11). A standard ELM327 adapter cannot reach them: they need an OBDLink MX+ or vLinker FS. Caristini switches bus with OBDLink commands; the vLinker FS has not been tested.';
+  'Some modules on this car sit on a second CAN bus (OBD pins 3 and 11). A standard ELM327 adapter cannot reach them: they need an OBDLink MX+ or vLinker FS. Pin16 switches bus with OBDLink commands; the vLinker FS has not been tested.';
 
 // True when this module is on the second bus only for this make.
 export function onSecondBusOnly(def: Pick<ModuleDef, 'id'>, make: string): boolean {

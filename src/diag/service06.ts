@@ -180,7 +180,7 @@ export function monitorName(mid: number): string {
 
 export function testName(tid: number): { name: string; known: boolean } {
   if (TEST_NAMES[tid]) return { name: TEST_NAMES[tid], known: true };
-  return { name: tid >= 0x80 ? `Maker test ${hex2(tid)} (meaning not public)` : `Test ${hex2(tid)} (meaning not in Caristini)`, known: false };
+  return { name: tid >= 0x80 ? `Maker test ${hex2(tid)} (meaning not public)` : `Test ${hex2(tid)} (meaning not in Pin16)`, known: false };
 }
 
 export interface ScaledValue {

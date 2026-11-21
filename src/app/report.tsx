@@ -2,7 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import React, { useState } from 'react';
 import { Platform, Text, View } from 'react-native';
-import { Mascot } from '../brand/Mascot';
+import { PinMark } from '../brand/PinMark';
 import { extrasFor, formatExtra } from '../obd/extras';
 import { loadHistory } from '../history';
 import { useSettings } from '../settings';
@@ -65,7 +65,7 @@ export default function Report() {
         .ok{font-weight:600} .bad{font-weight:600} .small{font-size:10px}
       </style></head><body>
         <h1>${esc(vehicleTitle(v))}</h1>
-        <div>VIN ${esc(v.vin)} · Report made ${esc(dateTimeText(Date.now()))} with Caristini</div>
+        <div>VIN ${esc(v.vin)} · Report made ${esc(dateTimeText(Date.now()))} with Pin16</div>
         <h2>Car</h2><table>
           ${row('Make and model', `${v.brand} ${v.model}`.trim())}
           ${v.year ? row('Model year', String(v.year)) : ''}
@@ -92,7 +92,7 @@ export default function Report() {
       } else {
         const { uri } = await Print.printToFileAsync({ html });
         // A named copy, so the shared file says what it is, like every file
-        // the app shares: Caristini-health-report-<VIN>-<date>.pdf. If the
+        // the app shares: Pin16-health-report-<VIN>-<date>.pdf. If the
         // copy cannot be made the system's own file is shared.
         let shareUri = uri;
         try {
@@ -116,7 +116,7 @@ export default function Report() {
   return (
     <Screen>
       <GlowCard tone={busy ? 'brand' : 'plain'} style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg }}>
-        <Mascot mood={busy ? 'scanning' : 'happy'} size={88} />
+        <PinMark size={56} decorative />
         <View style={{ flex: 1 }}>
           <Text style={[type.sub, { color: t.muted }]}>A one-page PDF of this car: odometer, engine light, faults, emissions self-tests and battery. Handy for an MOT, a sale or a garage.</Text>
         </View>

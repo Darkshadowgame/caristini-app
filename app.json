@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Caristini",
+    "name": "Pin16",
     "slug": "caristini",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,7 +13,7 @@
     "android": {
       "package": "com.philmuspratt.caristini",
       "adaptiveIcon": {
-        "backgroundColor": "#16213A",
+        "backgroundColor": "#131316",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
@@ -30,15 +30,17 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
-          "modes": ["central"],
+          "modes": [
+            "central"
+          ],
           "neverForLocation": true,
-          "bluetoothAlwaysPermission": "Caristini uses Bluetooth to talk to your OBD2 adapter."
+          "bluetoothAlwaysPermission": "Pin16 uses Bluetooth to talk to your OBD2 adapter."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Caristini uses your location only while the data logger or a long read such as Learn my car is running. It keeps the read going when you switch apps or lock the phone, and saves the route with data logs. Your location stays on this phone.",
+          "locationWhenInUsePermission": "Pin16 uses your location only while the data logger or a long read such as Learn my car is running. It keeps the read going when you switch apps or lock the phone, and saves the route with data logs. Your location stays on this phone.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "motionUsagePermission": false,
@@ -57,12 +59,12 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
-          "imageWidth": 220,
+          "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#F2F2F7",
+          "backgroundColor": "#131316",
           "dark": {
             "image": "./assets/splash-icon.png",
-            "backgroundColor": "#0B1020"
+            "backgroundColor": "#131316"
           }
         }
       ]

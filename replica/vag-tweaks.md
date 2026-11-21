@@ -1,4 +1,4 @@
-# Caristini: VW group customisation ("tweak") catalogue
+# Pin16: VW group customisation ("tweak") catalogue
 
 Research note, 11 Nov 2026. Scope: VW, Audi, SEAT, Skoda and Cupra coding tweaks with exact coding locations, from public sources only. Owner's cars first (Audi A6 C7 2012, SEAT Leon II 1P1 Cupra 2007), then platforms (MQB, MQB evo, MLB evo, PQ25/PQ26, PQ46). Companion to `coding-sources.md` (write sequence, logins, service reset), `vag-sources.md` (MLB discovery and transport) and `leon-sources.md` (PQ35 KWP2000 detail). Rows here are facts as stated by each source; nothing is copied wholesale from a label file or a tool database.
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-11-11T12:39:40.675Z",
-  "title": "Design System: Caristini",
+  "title": "Design System: Pin16",
   "extensions": {
     "colorMeta": {
       "bg": {
@@ -180,7 +180,7 @@
       },
       "accent": {
         "role": "primary",
-        "displayName": "Caristini Amber",
+        "displayName": "Pin16 Amber",
         "canonical": "#FFB340",
         "tonalRamp": [
           "oklch(15% 0.025 73.2)",
@@ -195,7 +195,7 @@
       },
       "accent-light": {
         "role": "primary",
-        "displayName": "Caristini Amber (light)",
+        "displayName": "Pin16 Amber (light)",
         "canonical": "#FF9F0A",
         "tonalRamp": [
           "oklch(15% 0.029 67.2)",
@@ -765,7 +765,7 @@
   ],
   "narrative": {
     "northStar": "The Driver's Seat at Night",
-    "overview": "Caristini is a first-party iOS app, used in a dark car with the ignition on and the phone in one hand. The world is iOS itself, executed at the craft level of Apple's own apps: a true black ground, grouped secondary surfaces, hairline separators, San Francisco at Dynamic Type sizes, SF Symbols, a native glass tab bar and large titles that collapse into the system bar material. Dark appearance is the default scene; light appearance is a full alternative built from the same token names.\n\nColour is spent on meaning. One amber tint marks everything you can tap. System red and green say fault and healthy. Each tool owns one coloured rounded square, as in iOS Settings. Everything else is neutral grey on black, so a result reads at a glance to someone who is not technical.\n\nMotion is reserved for the car talking back: rings ripple out from the car symbol while a scan runs, and each module's result slides up as it answers. Both stop under Reduce Motion.",
+    "overview": "Pin16 is a first-party iOS app, used in a dark car with the ignition on and the phone in one hand. The world is iOS itself, executed at the craft level of Apple's own apps: a true black ground, grouped secondary surfaces, hairline separators, San Francisco at Dynamic Type sizes, SF Symbols, a native glass tab bar and large titles that collapse into the system bar material. Dark appearance is the default scene; light appearance is a full alternative built from the same token names.\n\nColour is spent on meaning. One amber tint marks everything you can tap. System red and green say fault and healthy. Each tool owns one coloured rounded square, as in iOS Settings. Everything else is neutral grey on black, so a result reads at a glance to someone who is not technical.\n\nMotion is reserved for the car talking back: rings ripple out from the car symbol while a scan runs, and each module's result slides up as it answers. Both stop under Reduce Motion.",
     "keyCharacteristics": [
       "True black ground (`bg`), grouped secondary surfaces (`surface`), hairline `border` separators.",
       "One amber tint (`accent` and `accentText`) for interactive elements.",

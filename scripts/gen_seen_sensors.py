@@ -1,7 +1,7 @@
 """Build src/data/seenSensors.ts from findings sent back by the app.
 
 Input: replica/findings/<car>/*.json, copies of the files the app put in the
-caristini-data repo (findings/<VIN>/...). Each file's data holds the sensor
+pin16-data repo (findings/<VIN>/...). Each file's data holds the sensor
 keys (header-identifier) that car answered: data.sensorsFound (kinds 'saved'
 and 'learn') or data.found (kind 'sensors').
 

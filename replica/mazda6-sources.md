@@ -1,4 +1,4 @@
-# Caristini: Mazda6 sources
+# Pin16: Mazda6 sources
 
 Research note, 11 Nov 2026. Same confidence key as `uds-sources.md` (High, Medium, Low, Unconfirmed). Every command below has a source key; the source table gives the URL.
 

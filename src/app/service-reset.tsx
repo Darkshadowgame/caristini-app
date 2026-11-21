@@ -136,7 +136,7 @@ export default function ServiceResetScreen() {
       }
       const found = changedValues(snap.values, now, { date: new Date(), since: new Date(snap.date), odometerKm: v.odometerKm }, moving);
       if (alive.current) setChanges(found);
-      if (!found.length) setMessage({ tone: 'info', text: 'Nothing changed in the values Caristini can read. The reset may be a command with no stored value: record it with Listen mode.' });
+      if (!found.length) setMessage({ tone: 'info', text: 'Nothing changed in the values Pin16 can read. The reset may be a command with no stored value: record it with Listen mode.' });
     } catch (e) {
       if (alive.current) setMessage({ tone: 'danger', text: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -214,7 +214,7 @@ export default function ServiceResetScreen() {
       <GlowCard tone="plain" style={{ padding: space.lg }}>
         <Text style={[type.title3, { color: t.text }]}>Reset with the adapter</Text>
         <Text style={[type.sub, { color: t.muted, marginTop: 4 }]}>
-          For cars whose service reminder only resets with a diagnostic tool. Caristini sends only what it learned on this car, keeps every value it changes, and puts them back if a step is refused.
+          For cars whose service reminder only resets with a diagnostic tool. Pin16 sends only what it learned on this car, keeps every value it changes, and puts them back if a step is refused.
         </Text>
       </GlowCard>
 
@@ -231,9 +231,9 @@ export default function ServiceResetScreen() {
         <Notice
           icon="information-outline"
           tone="info"
-          text={`No reset is built in for this car yet: Caristini has no built-in service reset for any car. It can reset the service only after it has learned the reset on this car, and that needs another tool (Carista, VCDS or a garage tool) to do the reset once. ${
+          text={`No reset is built in for this car yet: Pin16 has no built-in service reset for any car. It can reset the service only after it has learned the reset on this car, and that needs another tool (Carista, VCDS or a garage tool) to do the reset once. ${
             !cluster
-              ? 'Caristini does not know where this car keeps its service data, so the way to learn it is to record that tool with Listen mode, which needs an OBD Y-splitter.'
+              ? 'Pin16 does not know where this car keeps its service data, so the way to learn it is to record that tool with Listen mode, which needs an OBD Y-splitter.'
               : olderCluster
                 ? 'On this car the only way to learn it is to record that tool with Listen mode, which needs an OBD Y-splitter.'
                 : 'Learn it by compare (no extra parts), or record that tool with Listen mode, which needs an OBD Y-splitter.'
@@ -285,13 +285,13 @@ export default function ServiceResetScreen() {
           ) : null}
           <Group header="Learn it by compare" help={SECTIONS.serviceLearnCompare} footer={v.serviceSnapshot ? `Values saved ${dateTimeText(v.serviceSnapshot.date)}.` : `Each read takes about ${Math.max(1, Math.round((target?.ranges.reduce((n, [a, b]) => n + b - a + 1, 0) ?? 0) * 0.07 / 60))} minutes. Ignition on, engine off.`}>
             <ListRow first icon="content-save-outline" iconColour={TOOLS.service.colour} title={`1. Save the ${target?.label.toLowerCase()} values${v.serviceSnapshot ? ' again' : ''}`} disabled={busy} onPress={save} />
-            <ListRow title="2. Reset the service with Carista or another tool" subtitle="Disconnect Caristini first: one app at a time on the adapter" noChevron />
+            <ListRow title="2. Reset the service with Carista or another tool" subtitle="Disconnect Pin16 first: one app at a time on the adapter" noChevron />
             <ListRow icon="compare-horizontal" iconColour={TOOLS.service.colour} title="3. Read again and compare" disabled={busy || !v.serviceSnapshot} onPress={compare} />
           </Group>
 
           {changes?.length ? (
             <>
-              <Group header="What the reset changed" help={SECTIONS.serviceChanges} footer="Values held back are not written when Caristini does the reset: they hold today’s date, the odometer, or change on their own.">
+              <Group header="What the reset changed" help={SECTIONS.serviceChanges} footer="Values held back are not written when Pin16 does the reset: they hold today’s date, the odometer, or change on their own.">
                 {changes.map((c, i) => (
                   <View key={c.did} style={[styles.change, { borderColor: t.border, borderTopWidth: i ? StyleSheet.hairlineWidth : 0 }]}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>

@@ -1,3 +1,4 @@
+import { useDisplay } from '../fonts';
 import { Stack, router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { allowSleep, stayAwake } from '../keepAwake';
 import { keepRunning, letStop } from '../background';
@@ -25,6 +26,7 @@ import { groupValuesText, sensorCount } from '../vehicle/counts';
 // category. The candidates come from the OBDb project's signal sets for this
 // car and its closest relatives.
 export default function Sensors() {
+  const displayFont = useDisplay();
   const t = useTheme();
   const conn = useConnection();
   const garage = useGarage();
@@ -239,6 +241,7 @@ export default function Sensors() {
               </View>
               <Switch
                 accessibilityLabel={`Search ${nameOf(h)}`}
+                trackColor={{ true: t.green, false: t.sunken }}
                 value={!off.has(h)}
                 onValueChange={(on) =>
                   setOff((old) => {
@@ -293,7 +296,7 @@ export default function Sensors() {
           {odd ? <Text style={[type.caption, { color: t.accentText }]}>check: may not apply</Text> : null}
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel={on ? `Unpin ${r.n}` : `Pin ${r.n} to the top`} hitSlop={10} onPress={() => togglePin(r)} style={{ marginLeft: space.md }}>
-          {/* Amber on or off: the star can be tapped either way. */}
+          {/* Orange on or off: the star can be tapped either way. */}
           <Icon name={on ? ('star' as IconName) : 'star-outline'} size={20} color={on ? t.accent : t.accentText} />
         </Pressable>
       </View>
@@ -331,7 +334,7 @@ export default function Sensors() {
             <View style={{ flex: 1 }}>
               <Text style={[type.title3, { color: t.text }]}>Find my car’s sensors</Text>
               <Text style={[type.sub, { color: t.muted, marginTop: 2 }]}>
-                Caristini asks each module about known maker sensors and keeps the ones your car answers.{quickList.length ? ' A quick search asks only the sensors other cars like this one answered.' : ''}
+                Pin16 asks each module about known maker sensors and keeps the ones your car answers.{quickList.length ? ' A quick search asks only the sensors other cars like this one answered.' : ''}
               </Text>
             </View>
           </View>
@@ -349,7 +352,7 @@ export default function Sensors() {
           {!cat && !query ? (
             <GlowCard tone="ok">
               <View style={styles.heroRow}>
-                <Text style={[styles.big, type.number, { color: t.text }]}>{mine.length}</Text>
+                <Text style={[styles.big, type.number, displayFont, { color: t.text }]}>{mine.length}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={[type.heading, { color: t.text }]}>{mine.length === 1 ? 'sensor' : 'sensors'} on this car</Text>
                   <Text style={[type.small, { color: t.muted }]}>

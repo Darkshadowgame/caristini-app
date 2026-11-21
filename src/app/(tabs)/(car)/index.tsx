@@ -1,3 +1,4 @@
+import { useDisplay } from '../../../fonts';
 import { router, useFocusEffect } from 'expo-router';
 import { chargeVerdict, restVerdict } from '../../../obd/battery';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -17,9 +18,9 @@ import { describeDue, vehicleServiceDue } from '../../../service/reminder';
 import { useSettings } from '../../../settings';
 import { useConnection } from '../../../state';
 import { LinearGradient } from 'expo-linear-gradient';
-import { radius, space, ToolColour, type, useTheme } from '../../../theme';
+import { onTool, radius, space, ToolColour, type, useTheme } from '../../../theme';
 import { MakeBadge, makeLogoFor } from '../../../brand/MakeBadge';
-import { Mascot } from '../../../brand/Mascot';
+import { PinMark } from '../../../brand/PinMark';
 import { Arrive, Button, GlowCard, Group, HeaderButton, Icon, IconName, ListRow, Notice, Pill, Screen, tap, tool, TOOLS } from '../../../ui';
 import { GUIDES } from '../../../help';
 import { WhichCar } from '../../../components/WhichCar';
@@ -43,7 +44,7 @@ function NotConnected() {
   // read from the car and the figure typed on the Service page.
   const due = last?.service ? vehicleServiceDue(last).due : null;
   return (
-    <Screen title="Caristini" guide={GUIDES.home}>
+    <Screen title="Pin16" guide={GUIDES.home}>
       {/* A dropped link is tried again by itself; opening Connect or Stop trying ends it. */}
       {conn.reconnecting ? (
         <>
@@ -56,11 +57,11 @@ function NotConnected() {
         <Notice tone="danger" icon="alert-circle-outline" text={conn.error} />
       ) : null}
 
-      <GlowCard tone="brand" style={styles.welcome}>
-        <Mascot mood="asleep" size={150} />
+      <GlowCard tone="plain" style={styles.welcome}>
+        <PinMark lit={false} size={72} />
         <Text style={[type.title, { color: t.text, marginTop: space.md, textAlign: 'center' }]}>Connect your car</Text>
         <Text style={[type.sub, { color: t.muted, marginTop: space.sm, textAlign: 'center' }]}>
-          Plug the adapter into the OBD port under the dashboard and switch the ignition on. Caristini works out which car it is.
+          Plug the adapter into the OBD port under the dashboard and switch the ignition on. Pin16 works out which car it is.
         </Text>
         <View style={{ gap: space.sm, marginTop: space.xl, alignSelf: 'stretch' }}>
           {/* Not busy while reconnecting, so Connect can be opened to choose an adapter by hand. */}
@@ -105,6 +106,7 @@ function serviceTileValue(v: Vehicle, miles: boolean): string {
 }
 
 function Connected() {
+  const displayFont = useDisplay();
   const t = useTheme();
   const conn = useConnection();
   const v = conn.vehicle!;
@@ -191,13 +193,13 @@ function Connected() {
       <WhichCar />
 
       <Arrive>
-        <GlowCard tone={!checked && !info.milOn ? 'brand' : alert ? 'fault' : 'ok'} style={{ padding: space.xl }}>
+        <GlowCard tone={!checked && !info.milOn ? 'plain' : alert ? 'fault' : 'ok'} style={{ padding: space.xl }}>
           <View style={styles.healthTop}>
             <View style={{ flex: 1 }}>
               <Text style={[type.small, { color: t.muted }]}>{checked ? `Last health check, ${when(checkedAt!)}${last?.complete === false ? ' (stopped early)' : ''}` : 'Health check'}</Text>
               {checked ? (
                 <View style={styles.bigRow}>
-                  <Text style={[styles.big, type.number, { color: faults ? t.danger : t.ok }]}>{faults}</Text>
+                  <Text style={[styles.big, type.number, displayFont, { color: faults ? t.danger : t.ok }]}>{faults}</Text>
                   <Text style={[type.title3, { color: t.text, marginBottom: 8 }]}>{faults === 1 ? 'fault' : 'faults'}</Text>
                 </View>
               ) : (
@@ -205,7 +207,7 @@ function Connected() {
               )}
               {last?.noAnswer ? <Text style={[type.small, { color: t.danger, fontWeight: '600' }]}>No control module answered</Text> : null}
             </View>
-            <Mascot mood={alert ? 'worried' : checked ? 'happy' : 'scanning'} size={92} />
+            <PinMark lit={!alert} size={64} decorative />
           </View>
           <View style={styles.stats}>
             <Stat icon="engine-outline" label="Engine light" value={info.milOn ? 'On' : 'Off'} tone={info.milOn ? 'danger' : 'ok'} />
@@ -257,7 +259,7 @@ function Connected() {
             <Icon name={TOOLS.learnSetting.icon} size={22} color="#FFFFFF" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[type.heading, { color: t.text }]}>Carry on learning from Carista</Text>
+            <Text style={[type.heading, { color: t.text }]}>Carry on learning a setting</Text>
             <Text style={[type.small, { color: t.muted, marginTop: 1 }]}>Starting point saved. Tap to compare what changed.</Text>
           </View>
           <Icon name="chevron-right" size={13} color={t.faint} />
@@ -308,7 +310,7 @@ function Connected() {
 }
 
 // tone: green healthy, red a fault, grey for anything waiting or not known
-// (the Meaning Rule: amber is not a status colour).
+// (the Meaning Rule: orange is not a status colour; status uses green, yellow and red).
 function Stat({ icon, label, value, tone, onPress, note }: { icon: IconName; label: string; value: string; tone: 'ok' | 'danger' | 'neutral'; onPress?: () => void; note?: string }) {
   const t = useTheme();
   const c = tone === 'ok' ? t.ok : tone === 'danger' ? t.danger : t.muted;
@@ -345,7 +347,7 @@ function Tile({ icon, colour, title, value, onPress }: { icon: IconName; colour:
     >
       <LinearGradient colors={[c + '33', c + '00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
       <View style={[styles.tileIcon, { backgroundColor: c }]}>
-        <Icon name={icon} size={20} color="#FFFFFF" />
+        <Icon name={icon} size={20} color={onTool(colour)} />
       </View>
       <Text style={[type.heading, { color: t.text, marginTop: space.md }]}>{title}</Text>
       {/* The status wraps to a second line if it must; it is never cut short. */}

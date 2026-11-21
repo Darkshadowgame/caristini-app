@@ -1,4 +1,4 @@
-"""Decode a Caristini Listen-mode recording into diagnostic messages.
+"""Decode a Pin16 Listen-mode recording into diagnostic messages.
 
 Input lines look like "12.345 7140322F187" (seconds, 3-digit CAN ID, data hex),
 plus "# ..." comments and markers. ISO-TP (UDS on 7xx) frames are rebuilt into

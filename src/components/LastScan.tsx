@@ -39,14 +39,14 @@ export function LastScan({ vin, entry, limit = 12 }: { vin: string; entry: Histo
   return (
     <Group
       header={`Last health check, ${when(entry.at)}${entry.complete === false ? ' (stopped early)' : ''}`}
-      footer={faults.length ? 'Tap a fault for what it means and, where Caristini knows them, the likely causes and fixes.' : undefined}
+      footer={faults.length ? 'Tap a fault for what it means and, where Pin16 knows them, the likely causes and fixes.' : undefined}
       help={SECTIONS.lastScan}
     >
       {entry.noAnswer ? (
         <ListRow
           first
           icon="alert-circle-outline"
-          iconColour="orange"
+          iconColour="gold"
           title="No control module answered"
           subtitle="Only the engine’s standard codes were read, so this is not a clean result."
           noChevron

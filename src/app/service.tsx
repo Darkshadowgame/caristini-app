@@ -168,7 +168,7 @@ export default function Service() {
           <Group
             header="Common service intervals"
             help={SECTIONS.serviceReminder}
-            footer={`Generic intervals, not a plan from your car’s maker: Caristini has no maker service plans. ${plan ? 'Tap another to change it.' : 'Tap the one that matches your service book or handbook, and Caristini counts down to the next service.'}`}
+            footer={`Generic intervals, not a plan from your car’s maker: Pin16 has no maker service plans. ${plan ? 'Tap another to change it.' : 'Tap the one that matches your service book or handbook, and Pin16 counts down to the next service.'}`}
           >
             {PLANS.map((p, i) => (
               <ListRow
@@ -186,7 +186,7 @@ export default function Service() {
             footer={
               odoNow
                 ? `Odometer ${fromKm(odoNow.km, miles).toLocaleString('en-GB')} ${miles ? 'mi' : 'km'}, ${odoNow.typed ? 'typed' : 'read from the car'}${odoNow.at ? ` on ${dateText(odoNow.at)}` : ''}. ${distanceStale ? `The distance left is not counted: the odometer was typed ${odoNow.at ? `${odometerAgeDays(odoNow)} days ago` : 'some time ago'} and the car has been driven since. Type it again to count distance.` : 'The distance left is counted from this figure, so read or type it again now and then.'}`
-                : 'Caristini does not know the odometer yet, so the reminder counts time only. Type it above, or read it from the car, to count distance too.'
+                : 'Pin16 does not know the odometer yet, so the reminder counts time only. Type it above, or read it from the car, to count distance too.'
             }
           >
             {due ? (
@@ -261,7 +261,7 @@ export default function Service() {
         </>
       ) : null}
 
-      <Group header="Reset with the adapter" help={SECTIONS.serviceObd} footer="For cars that need a tool to reset the reminder. Caristini learns the reset once, then does it in one tap.">
+      <Group header="Reset with the adapter" help={SECTIONS.serviceObd} footer="For cars that need a tool to reset the reminder. Pin16 learns the reset once, then does it in one tap.">
         <ListRow
           first
           {...tool('service')}

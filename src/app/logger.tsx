@@ -1,5 +1,6 @@
 // Data logger: choose values, record (by hand or auto-start), drop markers,
 // and open saved logs for this car.
+import { useDisplay } from '../fonts';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -49,6 +50,7 @@ function logLine(s: LogSummary): string {
 }
 
 function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) {
+  const displayFont = useDisplay();
   const t = useTheme();
   const { settings } = useSettings();
   const vin = vehicle.vin;
@@ -141,10 +143,10 @@ function Recorder({ client, vehicle }: { client: ElmClient; vehicle: Vehicle }) 
 
   return (
     <View>
-      {/* The amber wash only while the car is being read (recording, or watching for the auto-start). Red is kept for faults. */}
+      {/* The orange wash only while the car is being read (recording, or watching for the auto-start). Red is kept for faults. */}
       <GlowCard tone={recording || armed ? 'brand' : 'plain'} style={{ padding: space.xl }}>
         <Text style={[type.label, { color: t.muted }]}>{headline}</Text>
-        <Text accessibilityLabel={`Log length ${formatDuration(status.elapsedMs)}`} style={[styles.big, type.number, { color: t.text }]}>
+        <Text accessibilityLabel={`Log length ${formatDuration(status.elapsedMs)}`} style={[styles.big, type.number, displayFont, { color: t.text }]}>
           {recording ? formatDuration(status.elapsedMs) : '0 s'}
         </Text>
         <Text style={[type.sub, type.number, { color: t.muted }]}>{line}</Text>

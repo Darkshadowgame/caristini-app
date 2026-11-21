@@ -131,16 +131,16 @@ export function resetFromRecording(text: string, mod: { id: string; tx: string; 
     // A yes must echo what was asked: the identifier for 2E, the routine for 31.
     const echo = sid === 0x2e ? 3 : sid === 0x31 ? 4 : sid === 0x10 || sid === 0x27 ? 2 : 1;
     const yes = !!a && a.data[0] === sid + 0x40 && q.data.slice(1, echo).every((b, k) => a!.data[1 + k] === b);
-    if (UNSAFE.has(sid) && yes) return { error: `The recording contains a ${hex2(sid)} request (reset, output test or flashing), which Caristini does not replay.` };
+    if (UNSAFE.has(sid) && yes) return { error: `The recording contains a ${hex2(sid)} request (reset, output test or flashing), which Pin16 does not replay.` };
     if (!yes) continue;
     if (sid === 0x10) {
-      if (q.data[1] === 0x02) return { error: 'The recording opens the programming session, which Caristini does not replay.' };
+      if (q.data[1] === 0x02) return { error: 'The recording opens the programming session, which Pin16 does not replay.' };
       steps.push({ kind: 'session', value: q.data[1] });
     } else if (sid === 0x27) {
       const level = q.data[1];
       // Only the VW workshop login (27 03/04, 4-byte seed, key = seed + code)
       // can be worked out; other levels or makes use secret key methods.
-      if (level !== 0x03 && level !== 0x04) return { error: `The recording logs in at level ${hex2(level)}, which Caristini does not replay.` };
+      if (level !== 0x03 && level !== 0x04) return { error: `The recording logs in at level ${hex2(level)}, which Pin16 does not replay.` };
       if (!mod.id.startsWith('vag-')) return { error: 'The recording logs in with a key method only the other tool knows, so it cannot be replayed.' };
       if (level === 0x03) {
         seed = { level, seed: a!.data.slice(2) };

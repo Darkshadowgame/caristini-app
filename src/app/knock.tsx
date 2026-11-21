@@ -1,4 +1,5 @@
 // Knock and timing monitor. Logic and sources: src/monitors/knock.ts.
+import { useDisplay } from '../fonts';
 import { alertBuzz } from '../sound';
 import { useStayAwake } from '../keepAwake';
 import React, { useEffect, useRef, useState } from 'react';
@@ -48,6 +49,7 @@ export default function Knock() {
 
 // Older VW petrol engines: measuring groups 020, 003 and 115 over TP2.0.
 function GroupsMonitor() {
+  const displayFont = useDisplay();
   const t = useTheme();
   const conn = useConnection();
   const client = conn.client!;
@@ -163,7 +165,7 @@ function GroupsMonitor() {
     <>
       <GlowCard tone={verdict.level === 'warn' ? 'fault' : verdict.level === 'ok' ? 'ok' : phase === 'live' ? 'brand' : 'plain'} style={{ padding: space.xl, marginBottom: space.xl }}>
         <Text style={[type.label, { color: t.muted }]}>Knock retard now</Text>
-        <Text style={[styles.big, type.number, { color: colour(now.level) }]}>
+        <Text style={[styles.big, type.number, displayFont, { color: colour(now.level) }]}>
           {now.worst == null ? '–' : `${now.worst.toFixed(1)}°`}
           {now.worstCylinder != null && now.worst ? <Text style={[type.title3, { color: t.muted }]}> cylinder {now.worstCylinder}</Text> : null}
         </Text>
@@ -178,7 +180,7 @@ function GroupsMonitor() {
       ) : null}
       {fail ? <Notice tone="danger" icon="alert-circle-outline" text={`Reading stopped: ${fail}. Check the ignition is on, then tap Start again.`} /> : null}
       {g20 === null ? <Notice icon="information-outline" text="The engine did not answer value group 020, so knock retard is not available on this engine." /> : null}
-      {notDegrees ?<Notice icon="information-outline" text="Group 020 on this engine does not give degrees, so Caristini cannot judge knock. The raw values are shown below." /> : null}
+      {notDegrees ?<Notice icon="information-outline" text="Group 020 on this engine does not give degrees, so Pin16 cannot judge knock. The raw values are shown below." /> : null}
 
       <View style={{ marginVertical: space.lg, gap: space.sm }}>
         {phase === 'live' ? (

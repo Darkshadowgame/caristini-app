@@ -1,7 +1,7 @@
 // Learn my car, AI step: for each module the car reported, Claude searches the
 // web for that part number and coding and returns what the module does and any
 // coding bits owners have published. Suggestions are kept as unconfirmed
-// settings: Caristini only ever offers them through Try mode, which reads the
+// settings: Pin16 only ever offers them through Try mode, which reads the
 // coding back and puts the original back if nothing changes.
 import type { CodingItem } from '../coding/items';
 import type { SensorRow } from '../obd/sensors';
@@ -107,7 +107,7 @@ ${textOf(res)}`;
       bits: [s.bit!],
       length: codingBytes,
       confidence: 'low',
-      note: 'Found by AI research on the web. Unconfirmed: try it, and Caristini puts it back if nothing changes.',
+      note: 'Found by AI research on the web. Unconfirmed: try it, and Pin16 puts it back if nothing changes.',
       sources: [src],
     } as CodingItem);
   }

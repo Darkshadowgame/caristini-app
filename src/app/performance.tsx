@@ -404,7 +404,7 @@ export default function Performance() {
         text="Only use these timers on a closed road or track, never on public roads. Keep your eyes on the road, not the phone."
       />
 
-      <GlowCard tone={run?.phase === 'done' ? 'ok' : 'brand'} style={{ padding: space.xl }}>
+      <GlowCard tone={run?.phase === 'done' ? 'ok' : run?.phase === 'running' ? 'brand' : 'plain'} style={{ padding: space.xl }}>
         <Text style={[type.label, { color: t.muted }]}>Speed</Text>
         <Text
           accessibilityLabel={kmh == null ? 'Speed: no reading' : `Speed ${shown} ${settings.speed}`}

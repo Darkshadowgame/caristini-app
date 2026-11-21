@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Mascot } from '../../brand/Mascot';
+import { PinMark } from '../../brand/PinMark';
 import { diffSnapshots, LearnedPart, partKey, Snapshot, splitKey } from '../../coding/learn';
 import { modulePart } from '../../coding/shared';
 import { ModuleDef, MODULES, modulesFor } from '../../obd/modules';
@@ -114,7 +114,7 @@ export default function Learn() {
     try {
       const snap = { ...(await readCodings(candidates())), ...(deep ? await readDeep(deep) : {}) };
       if (!Object.keys(snap).length) {
-        setError('No module sent its coding. Run a health check first so Caristini knows which modules your car has, then try again.');
+        setError('No module sent its coding. Run a health check first so Pin16 knows which modules your car has, then try again.');
         return;
       }
       await garage.update(v.vin, { learnSnapshot: { date: new Date().toISOString(), codings: snap, deep: deep ?? undefined } });
@@ -188,11 +188,11 @@ export default function Learn() {
   return (
     <Screen>
       <GlowCard tone={reading ? 'brand' : 'plain'} style={styles.hero}>
-        <Mascot mood={reading ? 'scanning' : 'happy'} size={88} />
+        <PinMark size={56} decorative />
         <View style={{ flex: 1 }}>
           <Text style={[type.title3, { color: t.text }]}>Learn settings from Carista</Text>
           <Text style={[type.sub, { color: t.muted, marginTop: 4 }]}>
-            Change one setting per module in Carista each round, for example one in the cluster and one in the doors. Caristini sees what changed in each module and learns them all at once.
+            Change one setting per module in Carista each round, for example one in the cluster and one in the doors. Pin16 sees what changed in each module and learns them all at once.
           </Text>
         </View>
       </GlowCard>
@@ -235,9 +235,9 @@ export default function Learn() {
       ) : null}
 
       <Group header="2. Change settings in Carista" help={SECTIONS.learnChange} footer="One app can use the adapter at a time. Two settings in the same module cannot be told apart, so change only one per module each round.">
-        <ListRow first icon="link-variant-off" iconColour="grey" title="Disconnect Caristini now" subtitle="Then open Carista" disabled={reading} onPress={() => conn.disconnect()} />
+        <ListRow first icon="link-variant-off" iconColour="grey" title="Disconnect Pin16 now" subtitle="Then open Carista" disabled={reading} onPress={() => conn.disconnect()} />
         <ListRow title="In Carista, change one setting in each module you like" subtitle="Note what you changed, for example cluster: needle sweep on" noChevron />
-        <ListRow title="Close Carista, then connect Caristini again" subtitle="The Car tab then shows Carry on learning from Carista" noChevron />
+        <ListRow title="Close Carista, then connect Pin16 again" subtitle="The Car tab then shows Carry on learning a setting" noChevron />
       </Group>
 
       <Group header="3. Compare" help={SECTIONS.learnCompare}>
@@ -271,7 +271,7 @@ export default function Learn() {
             <Button label="Done learning" variant="secondary" onPress={() => router.back()} />
           </>
         ) : (
-          <Notice icon="information-outline" text="Nothing changed in the modules Caristini read. The setting may live in a module it cannot read yet, or Carista did not save it. Try a wider compare on that module." />
+          <Notice icon="information-outline" text="Nothing changed in the modules Pin16 read. The setting may live in a module it cannot read yet, or Carista did not save it. Try a wider compare on that module." />
         )
       ) : null}
     </Screen>

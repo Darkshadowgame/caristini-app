@@ -1,4 +1,4 @@
-// Sends what Caristini found on a car (sensor finder, Discover, settings learned)
+// Sends what Pin16 found on a car (sensor finder, Discover, settings learned)
 // back to the developer, so it can be built into the next version for everyone.
 //
 // Route 1, automatic: a GitHub token with write access to the private findings
@@ -12,7 +12,7 @@ import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import { getSecret } from './secrets';
 
-const REPO = process.env.EXPO_PUBLIC_UPLOAD_REPO || 'Darkshadowgame/caristini-data';
+const REPO = process.env.EXPO_PUBLIC_UPLOAD_REPO || 'Darkshadowgame/pin16-data';
 
 export type SendResult = { via: 'github' | 'email' | 'share' | 'none'; detail: string };
 
@@ -64,6 +64,9 @@ async function toFile(name: string, text: string): Promise<string | null> {
 
 // Findings that could not be sent are kept here and sent again later, so a
 // long Learn my car or sensor search is never lost to a refused token or no signal.
+// Value of the upload "app" field. Sent as 'Pin16' on purpose: new files carry the
+// product name. Files uploaded before the rename carry 'Caristini'.
+const UPLOAD_APP = 'Pin16';
 const OUTBOX = 'caristini.outbox.v1';
 export interface Outgoing {
   path: string;
@@ -159,7 +162,7 @@ export function notSentText(error: string): string {
 export async function sendBack(kind: string, vin: string, data: unknown, opts: { email?: string; allowManual?: boolean } = {}): Promise<SendResult> {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const name = `${kind}-${vin.slice(-8)}-${stamp}.json`;
-  const text = JSON.stringify({ app: 'Caristini', kind, vin, sentAt: new Date().toISOString(), data }, null, 1);
+  const text = JSON.stringify({ app: UPLOAD_APP, kind, vin, sentAt: new Date().toISOString(), data }, null, 1);
   const path = `findings/${vin}/${name}`;
   const message = `Findings from the app: ${kind} on ${vin}`;
   const keep = async (error: string): Promise<SendResult> => {
@@ -180,8 +183,8 @@ export async function sendBack(kind: string, vin: string, data: unknown, opts: {
   if (uri && (await MailComposer.isAvailableAsync().catch(() => false))) {
     const r = await MailComposer.composeAsync({
       recipients: opts.email ? [opts.email] : [],
-      subject: `Caristini findings: ${kind} (${vin})`,
-      body: 'Findings from Caristini, attached, to be built into the next version.',
+      subject: `Pin16 findings: ${kind} (${vin})`,
+      body: 'Findings from Pin16, attached, to be built into the next version.',
       attachments: [uri],
     });
     return { via: 'email', detail: r.status === 'sent' ? 'Email sent.' : 'Email not sent.' };

@@ -38,7 +38,7 @@ function recording(extra: [string, number[]][] = []): string {
     ['77E', [0x7f, 0x2e, 0x31]],
     ...extra,
   ];
-  return ['# Caristini listen test', ...msgs.flatMap(([id, d], i) => frames(i * 0.1, id, d)), '7E8 noise'].join('\n');
+  return ['# Pin16 listen test', ...msgs.flatMap(([id, d], i) => frames(i * 0.1, id, d)), '7E8 noise'].join('\n');
 }
 
 describe('service reset from a recording', () => {
@@ -75,7 +75,7 @@ describe('service reset from a recording', () => {
   });
 
   it('refuses a recorded write holding the date, or a login it cannot work out', () => {
-    const dated = recording([['714', [0x2e, 0x07, 0x01, 0x26, 0x11, 0x12]], ['77E', [0x6e, 0x07, 0x01]]]).replace('# Caristini listen test', '# Caristini listen 2026-11-12T10:00:00.000Z A6');
+    const dated = recording([['714', [0x2e, 0x07, 0x01, 0x26, 0x11, 0x12]], ['77E', [0x6e, 0x07, 0x01]]]).replace('# Pin16 listen test', '# Pin16 listen 2026-11-12T10:00:00.000Z A6');
     const r = resetFromRecording(dated, cluster);
     expect('error' in r && r.error).toMatch(/date/);
     const flash = resetFromRecording(recording([['714', [0x27, 0x11]], ['77E', [0x67, 0x11, 1, 2, 3, 4]]]), cluster);

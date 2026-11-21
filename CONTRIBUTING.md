@@ -1,6 +1,6 @@
-# Contributing to Caristini
+# Contributing to Pin16
 
-Caristini is a hobby project. Help is welcome, in small pieces.
+Pin16 is a hobby project. Help is welcome, in small pieces.
 
 ## What helps most
 

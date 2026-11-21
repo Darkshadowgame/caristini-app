@@ -1,4 +1,4 @@
-// Coding changes Caristini can write, each a bit (or bits) in a module's
+// Coding changes Pin16 can write, each a bit (or bits) in a module's
 // long coding (UDS DID 0600). Every item names its public sources and a
 // confidence; see replica/coding-sources.md. An item is only offered when the
 // module answers and its coding is exactly the length the source describes.

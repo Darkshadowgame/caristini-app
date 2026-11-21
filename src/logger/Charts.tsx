@@ -9,7 +9,7 @@ import { projectRoute, routeIndexAt, RoutePoint } from './gps';
 
 // One colour per value, from the app's tool colours.
 export function chartColours(t: Theme): string[] {
-  return [t.blue, t.orange, t.green, t.purple, t.teal, t.red, t.indigo, t.grey];
+  return [t.blue, t.gold, t.green, t.purple, t.teal, t.red, t.indigo, t.grey];
 }
 
 export interface ChartLine {

@@ -93,7 +93,7 @@ export default function FuelTrims() {
             ))}
           </View>
           <Body muted small style={{ marginTop: space.sm, marginBottom: space.lg }}>
-            {`Plus: the engine adds fuel. Minus: it takes fuel away. Green within ${TRIM_OK}%, amber to ${TRIM_WATCH}%, red beyond.`}
+            {`Plus: the engine adds fuel. Minus: it takes fuel away. Green within ${TRIM_OK}%, yellow to ${TRIM_WATCH}%, red beyond.`}
           </Body>
 
           {sensorRows.length ? (
@@ -116,7 +116,7 @@ function fmt(v: number | null | undefined, decimals: number, unit: string): stri
 }
 
 function bandColour(t: Theme, b: TrimBand | null): string {
-  return b === 'ok' ? t.ok : b === 'watch' ? t.accentText : b === 'high' ? t.danger : t.muted;
+  return b === 'ok' ? t.ok : b === 'watch' ? t.warn : b === 'high' ? t.danger : t.muted;
 }
 
 function BankCard({ bank, values }: { bank: BankPids; values: Record<number, number | null> }) {
@@ -141,7 +141,7 @@ function BankCard({ bank, values }: { bank: BankPids; values: Record<number, num
   );
 }
 
-// One trim with its value and a bar from -25 % to +25 %: green, amber and red zones.
+// One trim with its value and a bar from -25 % to +25 %: green, yellow and red zones.
 function TrimLine({ label, value }: { label: string; value: number | null | undefined }) {
   const t = useTheme();
   const band = trimBand(value);
@@ -154,8 +154,12 @@ function TrimLine({ label, value }: { label: string; value: number | null | unde
         <Text style={[type.small, { color: t.muted }]}>{label}</Text>
         <Text style={[type.sub, type.number, { color: bandColour(t, band), fontWeight: '600' }]}>{value == null ? '–' : `${value > 0 ? '+' : ''}${value.toFixed(1)}%`}</Text>
       </View>
-      <View style={[styles.track, { backgroundColor: t.dangerSoft }]}>
-        {zone(0.5 - watch, 0.5 + watch, t.accentSoft)}
+      {/* The zones sit side by side on a neutral track, so no tint mixes with another. */}
+      <View style={[styles.track, { backgroundColor: t.sunken }]}>
+        {zone(0, 0.5 - watch, t.dangerSoft)}
+        {zone(0.5 + watch, 1, t.dangerSoft)}
+        {zone(0.5 - watch, 0.5 - ok, t.warnSoft)}
+        {zone(0.5 + ok, 0.5 + watch, t.warnSoft)}
         {zone(0.5 - ok, 0.5 + ok, t.okSoft)}
         <View style={[styles.mid, { backgroundColor: t.border }]} />
         {value != null ? <View style={[styles.marker, { left: `${trimPosition(value, SCALE) * 100}%`, backgroundColor: bandColour(t, band) }]} /> : null}

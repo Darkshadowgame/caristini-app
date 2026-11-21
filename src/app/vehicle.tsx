@@ -74,7 +74,7 @@ export default function VehicleDetails() {
             <Body muted small style={{ marginTop: space.sm }}>
               {draft.platform
                 ? `${draft.platform} includes ${platformModels(draft.platform).slice(0, 6).join(', ') || 'other VW group models'}.`
-                : 'The platform is the base a car is built on. Not sure? Leave it: Caristini fills it in from the VIN or part numbers when it can.'}
+                : 'The platform is the base a car is built on. Not sure? Leave it: Pin16 fills it in from the VIN or part numbers when it can.'}
             </Body>
           </>
         ) : null}
@@ -127,7 +127,7 @@ export default function VehicleDetails() {
         title="Remove this car?"
         lines={[
           'Its details, nickname and last fault codes are deleted from this phone. Diary entries stay.',
-          ...(isCurrent ? ['This is the car you are connected to, so Caristini disconnects first.'] : []),
+          ...(isCurrent ? ['This is the car you are connected to, so Pin16 disconnects first.'] : []),
         ]}
         confirmLabel="Remove"
         onCancel={() => setConfirmRemove(false)}

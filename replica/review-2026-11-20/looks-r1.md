@@ -1,4 +1,4 @@
-# Caristini: looks, formatting and branding review, round 1
+# Pin16: looks, formatting and branding review, round 1
 
 Date: 20 Nov 2026. Reviewer: design review agent. Build: static web build at http://localhost:8090, viewport 390 x 844, dark mode first, light mode spot-checked. Demo cars used: SEAT Leon Cupra (main pass) and Audi A6 C7 diesel (sensors, DPF). Screenshots: `replica/review-2026-11-20/shots/looks-*.png` (file names below omit the folder).
 
@@ -166,7 +166,7 @@ Ignored as web-only: the expo-router "!" badge, the drawn top tab bar and its fo
 ## 4. What is already good
 
 - The main path is strong: Car tab hero, Health check with the module ring, the 56px fault count and code chips, and the code detail page read at a glance and look like one hand made them.
-- The mascot is distinctive and its faces (asleep, scanning, smiling, worried) carry state well. With the amber tint on true black it gives Caristini its own look.
+- The mascot is distinctive and its faces (asleep, scanning, smiling, worried) carry state well. With the amber tint on true black it gives Pin16 its own look.
 - Not a Carista copy as far as the assets show: own mascot, colour and wording. No Carista screenshots are in the project, so this was not compared side by side. Carista is named in 4 pieces of UI copy as a tool ("your Carista adapter", "Learn from Carista").
 - Waiting states are well handled: progress, step count, time left, partial results and a "Stop and keep" action on every long read.
 - Tone of voice is plain, direct British English, and sources are labelled ("Owner forum guide (Audizine), not a SEAT figure").
@@ -178,5 +178,5 @@ Ignored as web-only: the expo-router "!" badge, the drawn top tab bar and its fo
 ## Notes for the next round
 
 - Preview data changed by this review (web local storage only): 2 "Setting changed" Diary entries and 2 timeline entries for the SEAT demo car (Coming home lights switched on, then back off), 1 saved 14 s log, 2 health checks, 1 Learn my car run, 1 sensor search on the Audi demo car. Dashboard tile style was put back to Number and the MOT items back to To do.
-- Not reached: Diary with no entries at all, the "Try it" question sheet, the Caristini AI card (did not appear), Emissions self-tests as its own page, Car reference, Fuel trims and Turbo boost detail views, and the native iOS chrome (tab bar, large titles, action sheets).
+- Not reached: Diary with no entries at all, the "Try it" question sheet, the Pin16 AI card (did not appear), Emissions self-tests as its own page, Car reference, Fuel trims and Turbo boost detail views, and the native iOS chrome (tab bar, large titles, action sheets).
 - The `shots` folder already held copies of the app assets (`icon.png`, `splash-icon.png` and so on, with `.old` copies) before this review started; they were left in place.

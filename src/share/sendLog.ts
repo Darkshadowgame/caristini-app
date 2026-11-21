@@ -15,7 +15,7 @@ export async function sendLogNow(reason: string, car: { vin?: string | null; bra
   if (!force && !auto) return null;
   const fresh = trafficLog.unsentCount();
   if (!fresh) return null;
-  const header = `# Caristini adapter log, ${reason}, ${new Date().toISOString()}${car ? `, ${[car.brand, car.model].filter(Boolean).join(' ')} ${car.vin ?? ''}` : ''}`;
+  const header = `# Pin16 adapter log, ${reason}, ${new Date().toISOString()}${car ? `, ${[car.brand, car.model].filter(Boolean).join(' ')} ${car.vin ?? ''}` : ''}`;
   const text = trafficLog.unsentText(header);
   trafficLog.markSent();
   const r = await sendBack('log', car?.vin || 'NO-VIN', { reason, lines: fresh, text }).catch((e) => ({ via: 'none' as const, detail: e instanceof Error ? e.message : String(e) }));

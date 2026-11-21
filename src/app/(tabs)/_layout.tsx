@@ -3,7 +3,7 @@ import React from 'react';
 import { useConnection } from '../../state';
 import { useTheme } from '../../theme';
 
-// The system tab bar: Liquid Glass on iOS 26, SF Symbols, one amber tint.
+// The system tab bar: Liquid Glass on iOS 26, SF Symbols, one orange tint.
 export default function TabsLayout() {
   const t = useTheme();
   const conn = useConnection();

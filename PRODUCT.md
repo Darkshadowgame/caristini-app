@@ -12,7 +12,7 @@ the owner, a car owner who maintains his own cars, and the family and friends wh
 
 ## Product Purpose
 
-Caristini replaces a paid Carista Pro subscription for the jobs the owner does: reading and clearing fault codes across every control module, checking live data when problem solving, resetting service reminders, and (later) changing hidden settings. Success is that the owner reaches for Caristini first and never misses Carista.
+Pin16 replaces a paid Carista Pro subscription for the jobs the owner does: reading and clearing fault codes across every control module, checking live data when problem solving, resetting service reminders, and (later) changing hidden settings. Success is that the owner reaches for Pin16 first and never misses Carista.
 
 ## Positioning
 
@@ -34,9 +34,9 @@ A personal, subscription-free car scanner that shows only what fits the connecte
 
 ## Brand Commitments
 
-- Name: Caristini (a play on Carista; fine for personal use, rename before any public release).
+- Name: Pin16 (not checked against existing apps or trademarks).
 - Must not copy Carista's logo, colours, wording or look. the owner confirmed nothing else in the current look is fixed: colour, layout and tab structure can all change.
-- Standing preference (11 Nov 2026): the owner wants "a more Apple or Carista style": native iOS conventions executed at the craft level of Apple's own apps and Carista, in Caristini's own colours and words.
+- Standing preference (11 Nov 2026): the owner wants "a more Apple or Carista style": native iOS conventions executed at the craft level of Apple's own apps and Carista, in Pin16's own colours and words.
 
 ## Evidence on Hand
 

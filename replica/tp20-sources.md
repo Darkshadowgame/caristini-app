@@ -1,4 +1,4 @@
-# Caristini: VW TP2.0 + KWP2000 sources, and UDS retry and clear behaviour
+# Pin16: VW TP2.0 + KWP2000 sources, and UDS retry and clear behaviour
 
 Research note, 11 Nov 2026. Car: 2012 Audi A6 C7 (MLB), 2.0 TDI, VIN WAUZZZ4GXCN000000. Adapter: Carista BLE, reports "ELM327 v1.5" (a clone: Elm Electronics never made a v1.5, E3).
 

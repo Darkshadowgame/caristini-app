@@ -1,10 +1,10 @@
-// Small GitHub contents client for the Caristini repo: the knowledge base and
+// Small GitHub contents client for the Pin16 repo: the knowledge base and
 // findings live there, so what one car learns reaches every
 // install without a new build. Uses the repo-scoped token (built in from the
 // CARISTINI_UPLOAD_TOKEN secret, or pasted in Settings).
 import { getSecret } from './secrets';
 
-export const REPO = process.env.EXPO_PUBLIC_UPLOAD_REPO || 'Darkshadowgame/caristini-data';
+export const REPO = process.env.EXPO_PUBLIC_UPLOAD_REPO || 'Darkshadowgame/pin16-data';
 const API = `https://api.github.com/repos/${REPO}`;
 
 async function token(): Promise<string | null> {

@@ -1,4 +1,4 @@
-# Caristini consistency review, round 1
+# Pin16 consistency review, round 1
 
 Date: 20 Nov 2026. Reviewer role: critical editor and UX reviewer. Scope: consistency only.
 
@@ -35,7 +35,7 @@ Each finding lists every place, quotes each wording and gives 1 form to use.
 - `src/app/sensors.tsx:280` row text: "· named by AI"
 - `src/help.ts:1044`: "Codes marked Found by AI were saved by an earlier version from a web search..."
 - `src/vehicle/ids.ts:122` (text sent by Share all IDs): "(found by AI, check the data label)"
-- Also in the design file, not user-visible: `DESIGN.md:426-427` "Caristini AI card".
+- Also in the design file, not user-visible: `DESIGN.md:426-427` "Pin16 AI card".
 - Use: "From a web search, check" for the pill and the shared text, "From a web search" in Research notes, "· name from a web search" on sensors, and the same words in `help.ts:1044`. Delete the DESIGN.md section.
 
 ### Medium
@@ -90,7 +90,7 @@ Each finding lists every place, quotes each wording and gives 1 form to use.
 - `src/help.ts:143`: "Fuses and manuals opens the fuse box layouts." Row: `lookup.tsx:71` "Fuses for this car" or "Fuse boxes" under the header "Fuses and manuals". Use "Fuses and manuals" for the row.
 - `src/help.ts:730` title "More settings" against `customise/index.tsx:563` "Get more settings".
 - `src/help.ts:925` title "This session" against `performance.tsx:487` "Runs on this car" (the usual case).
-- `src/help.ts:879` title "What Caristini knows" against `learn-car.tsx:308` "What Caristini knows about this car".
+- `src/help.ts:879` title "What Pin16 knows" against `learn-car.tsx:308` "What Pin16 knows about this car".
 - `src/help.ts:664` title "Older modules": see C12.
 - Use: in each pair, the screen wording.
 
@@ -144,9 +144,9 @@ Each finding lists every place, quotes each wording and gives 1 form to use.
 **C16. "Share CSV" does 2 different things, and shared files are named 4 ways.**
 - `LiveScreen.tsx:226-231`: "Share CSV" sends the CSV as message text (`Share.share`), no file. `LiveScreen.tsx:748` and `help.ts:176` say it opens in Numbers or Excel. To check on the phone.
 - `log-view.tsx:98-105` and `customise/timeline.tsx:52-59`: a real .csv file.
-- File names: `customise/timeline.tsx:52` "caristini-changes-{VIN}.csv"; `log-view.tsx:105` with `logger/store.ts:17` and `:110` "Caristini_log_{id}.csv" and "Caristini_route_{id}.gpx"; `report.tsx:91` the PDF gets the system's random name; `share/sendBack.ts:161` "{kind}-{last 8 of VIN}-{stamp}.json"
-- Share titles: "Caristini live data" (`LiveScreen.tsx:231`), "Caristini adapter log" (`settings.tsx:145`), "Caristini recording" (`listen.tsx:170`), "MOT check" (`mot.tsx:163`), "Change timeline" (`timeline.tsx:59`), "Health report" (`report.tsx:92`)
-- Use: every "Share CSV" writes a file through `shareCsv`. Names "Caristini-{what}-{VIN}-{yyyymmdd}.{ext}", for example "Caristini-health-report-{VIN}-20261120.pdf".
+- File names: `customise/timeline.tsx:52` "caristini-changes-{VIN}.csv"; `log-view.tsx:105` with `logger/store.ts:17` and `:110` "Pin16_log_{id}.csv" and "Pin16_route_{id}.gpx"; `report.tsx:91` the PDF gets the system's random name; `share/sendBack.ts:161` "{kind}-{last 8 of VIN}-{stamp}.json"
+- Share titles: "Pin16 live data" (`LiveScreen.tsx:231`), "Pin16 adapter log" (`settings.tsx:145`), "Pin16 recording" (`listen.tsx:170`), "MOT check" (`mot.tsx:163`), "Change timeline" (`timeline.tsx:59`), "Health report" (`report.tsx:92`)
+- Use: every "Share CSV" writes a file through `shareCsv`. Names "Pin16-{what}-{VIN}-{yyyymmdd}.{ext}", for example "Pin16-health-report-{VIN}-20261120.pdf".
 
 **C17. The same fault tags have different colours and words in Health check and History.**
 - `components/ScanChanges.tsx:39`: New red, Seen before amber, Cleared green

@@ -279,7 +279,7 @@ export class ElmClient {
   }
   // Routes found by asking the car (VW gateway list), per module id.
   private found = new Map<string, Route[]>();
-  // Modules the gateway lists that Caristini has no definition for.
+  // Modules the gateway lists that Pin16 has no definition for.
   private extraDefs: ModuleDef[] = [];
   private discovered = false;
   private tp20Usable = true;
@@ -2676,7 +2676,7 @@ export class ElmClient {
   // Listen mode: the adapter silently records CAN frames another tool (VCDS,
   // Carista) sends on the same port through a Y-splitter. 'all' records
   // everything; 'diag' keeps IDs 700 to 7FF (busy Ford and Mazda buses).
-  // Afterwards the adapter is put back as Caristini set it up.
+  // Afterwards the adapter is put back as Pin16 set it up.
   get canListen(): boolean {
     return !!this.transport.stream && this.isCan;
   }
@@ -2719,7 +2719,7 @@ export class ElmClient {
   }
 
   // Adapter check: what the adapter is, how fast it answers over this link, and
-  // which of Caristini's protocols it supports. Changes nothing in the car;
+  // which of Pin16's protocols it supports. Changes nothing in the car;
   // the only setting touched (protocol B options) is used by TP2.0 alone.
   async checkAdapter(): Promise<AdapterReport> {
     const clean = (r: string) => r.replace(/>/g, '').replace(/\s+/g, ' ').trim();

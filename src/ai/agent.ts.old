@@ -1,4 +1,4 @@
-// Caristini's car assistant: Claude with tools that read this car (sensors,
+// Pin16's car assistant: Claude with tools that read this car (sensors,
 // standard live data, faults, modules, coding settings) and one tool that
 // changes a setting. A change always waits for the owner to tap Allow in the
 // app; the write itself uses the same safe path as Customise.
@@ -49,7 +49,7 @@ const TOOLS = [
   },
   {
     name: 'list_modules',
-    description: 'The control modules Caristini knows on this car, with part numbers and what each does when learned.',
+    description: 'The control modules Pin16 knows on this car, with part numbers and what each does when learned.',
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -60,7 +60,7 @@ const TOOLS = [
   {
     name: 'knowledge_search',
     description:
-      "Searches Caristini's knowledge base for this car: built-in settings, fuse boxes, and everything researched or saved before (fuses, modifications, settings, how-to, notes). Search here first; use web search only when nothing useful is saved.",
+      "Searches Pin16's knowledge base for this car: built-in settings, fuse boxes, and everything researched or saved before (fuses, modifications, settings, how-to, notes). Search here first; use web search only when nothing useful is saved.",
     input_schema: {
       type: 'object',
       properties: {
@@ -74,7 +74,7 @@ const TOOLS = [
   {
     name: 'knowledge_save',
     description:
-      'Saves something useful you found (usually through web search) so it is there next time, for this owner and every Caristini user with this car: a fuse layout, a modification, a coding setting, a how-to or a note. Include the source URLs. For a coding setting give data {module, byte, bits} exactly as the source states; the app then offers it in Customise as unconfirmed. Do not save guesses.',
+      'Saves something useful you found (usually through web search) so it is there next time, for this owner and every Pin16 user with this car: a fuse layout, a modification, a coding setting, a how-to or a note. Include the source URLs. For a coding setting give data {module, byte, bits} exactly as the source states; the app then offers it in Customise as unconfirmed. Do not save guesses.',
     input_schema: {
       type: 'object',
       properties: {
@@ -232,7 +232,7 @@ export async function agentTurn(env: AgentEnv, history: ChatTurn[], context: str
   const turns: ChatTurn[] = [];
   const actions: string[] = [];
   const system = [
-    'You are Caristini, an assistant built into a car diagnostics app, talking to the car owner in British English: short, direct, outcome first, digits for numbers.',
+    'You are Pin16, an assistant built into a car diagnostics app, talking to the car owner in British English: short, direct, outcome first, digits for numbers.',
     'You can read the car through tools. Use them rather than guessing: read sensors to explain how the car is running, read faults, list modules and settings.',
     'Explain values in context for this car (normal ranges, what is worth watching). Be honest about uncertainty.',
     'Only change a setting when the owner asks; use change_setting, which asks them to confirm. Never claim a change happened unless the tool said so.',

@@ -4,15 +4,15 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { DiaryEntry, loadDiary, removeDiary } from '../../../diary';
 import { diaryCars, entryCarKey, entryCarName } from '../../../diaryCars';
 import { useGarage, vehicleTitle } from '../../../vehicle/garage';
-import { space, ToolColour, type, useTheme } from '../../../theme';
-import { Mascot } from '../../../brand/Mascot';
+import { onTool, space, ToolColour, type, useTheme } from '../../../theme';
+import { PinMark } from '../../../brand/PinMark';
 import { GUIDES } from '../../../help';
 import { useSettings } from '../../../settings';
 import { Chips, ConfirmSheet, Group, HeaderButton, Icon, IconName, Screen, tap } from '../../../ui';
 import { dateText } from '../../../timeText';
 
 const KIND: Record<string, { icon: IconName; colour: ToolColour }> = {
-  'Oil service': { icon: 'oil', colour: 'orange' },
+  'Oil service': { icon: 'oil', colour: 'gold' },
   Inspection: { icon: 'clipboard-check-outline', colour: 'blue' },
   'Service reset': { icon: 'wrench-clock', colour: 'green' },
   'Faults cleared': { icon: 'broom', colour: 'red' },
@@ -57,7 +57,7 @@ export default function Diary() {
     >
       {entries && entries.length === 0 ? (
         <View style={{ alignItems: 'center', paddingVertical: space.xxl * 2, paddingHorizontal: space.xl }}>
-          <Mascot mood="happy" size={130} />
+          <PinMark size={72} decorative />
           <Text style={[type.title3, { color: t.text, marginTop: space.lg }]}>No entries yet</Text>
           <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: space.sm }]}>
             Services, repairs and notes you add show here. Cleared faults, service resets and setting changes are added for you.
@@ -81,7 +81,7 @@ export default function Diary() {
             return (
               <View key={e.id} style={[styles.entry, { borderColor: t.border, borderTopWidth: i ? StyleSheet.hairlineWidth : 0 }]}>
                 <View style={[styles.icon, { backgroundColor: t[k.colour] }]}>
-                  <Icon name={k.icon} size={17} color="#FFFFFF" />
+                  <Icon name={k.icon} size={17} color={onTool(k.colour)} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.titleRow}>

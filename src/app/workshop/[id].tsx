@@ -235,7 +235,7 @@ export default function ControlModule() {
           await addDiary({ vin: v.vin, vehicleName: vehicleTitle(v), date: today(), kind: SETTING_CHANGED, mileage: null, notes: `Workshop: ${def.name} did not keep a change. Coding ${toHex(coding)} to ${toHex(res.coding)}. Check it in Workshop.` });
           await addHistory({ vin: v.vin, kind: 'change', title: `${def.name} ${what} (not kept)`, detail: 'Workshop', before: toHex(coding), after: toHex(res.coding), odometerKm: v.odometerKm, changes: [{ module: def.name, key: def.id, setting: 'Change not kept', before: toHex(coding), after: toHex(res.coding), backup: saved[def.id] ?? toHex(coding), source: 'Workshop' }] });
         }
-        if (alive.current) setMessage({ tone: 'danger', text: `${res.restored ? 'The module did not keep the change, so Caristini put the original coding back.' : 'The module did not keep the change and the original could not be confirmed. Tap Put back original coding.'}${note ? ` ${note}` : ''}` });
+        if (alive.current) setMessage({ tone: 'danger', text: `${res.restored ? 'The module did not keep the change, so Pin16 put the original coding back.' : 'The module did not keep the change and the original could not be confirmed. Tap Put back original coding.'}${note ? ` ${note}` : ''}` });
       }
     });
 
@@ -288,7 +288,7 @@ export default function ControlModule() {
           <Segmented options={tabs} value={tab} onPick={setTab} style={{ marginBottom: space.lg }} />
 
           {tab === 'faults' ? (
-            <Group header="Fault memory" help={SECTIONS.moduleFaults} footer="Tap a fault for what it means and, where Caristini knows them, the likely causes.">
+            <Group header="Fault memory" help={SECTIONS.moduleFaults} footer="Tap a fault for what it means and, where Pin16 knows them, the likely causes.">
               {faults?.faults.map((f, i) => (
                 <FaultRow key={`${f.code}-${i}`} fault={f} module={def.name} moduleId={def.id} first={i === 0} />
               ))}
@@ -296,7 +296,7 @@ export default function ControlModule() {
                 faults.state === 'ok' ? (
                   <ListRow first icon="check-circle" iconColour="green" title="No faults stored" noChevron />
                 ) : (
-                  <ListRow first icon="help-circle-outline" iconColour="orange" title="Could not read faults" subtitle={faults.error ?? 'The module did not answer. Try Read again with the ignition on.'} noChevron />
+                  <ListRow first icon="help-circle-outline" iconColour="gold" title="Could not read faults" subtitle={faults.error ?? 'The module did not answer. Try Read again with the ignition on.'} noChevron />
                 )
               ) : null}
               <ListRow first={!faults} icon="refresh" iconColour={TOOLS.workshop.colour} title={busy === 'faults' ? 'Reading…' : 'Read again'} disabled={!!busy} onPress={readFaults} />
@@ -439,7 +439,7 @@ export default function ControlModule() {
                 <Group
                   header="All bytes"
                   help={SECTIONS.moduleBytes}
-                  footer={`Tap a byte to see its 8 bits; named bits say what they do, and bytes with a named bit have an amber outline.${style && style !== 'uds' ? ` This module codes over the older VW protocol (${style === 'did' ? 'the newer record' : 'the older record: changes are checked and put back if the module does not keep them'}).` : ''}`}
+                  footer={`Tap a byte to see its 8 bits; named bits say what they do, and bytes with a named bit have an orange outline.${style && style !== 'uds' ? ` This module codes over the older VW protocol (${style === 'did' ? 'the newer record' : 'the older record: changes are checked and put back if the module does not keep them'}).` : ''}`}
                 >
                   <View style={styles.pad}>
                     <Text selectable style={[type.body, { color: changed ? t.accentText : t.text, fontFamily: MONO }]}>
@@ -490,7 +490,7 @@ export default function ControlModule() {
               </>
             ) : (
               <Group>
-                <ListRow first icon="information-outline" iconColour="grey" title={busy ? 'Reading the coding…' : 'No coding to show'} subtitle={busy ? undefined : 'This module did not give a coding Caristini can read.'} noChevron />
+                <ListRow first icon="information-outline" iconColour="grey" title={busy ? 'Reading the coding…' : 'No coding to show'} subtitle={busy ? undefined : 'This module did not give a coding Pin16 can read.'} noChevron />
               </Group>
             )
           ) : null}
@@ -508,8 +508,8 @@ export default function ControlModule() {
           ...(confirm?.kind === 'clear'
             ? ['Works with the engine running. A few modules only clear with the engine off and the ignition on.', 'Clears this module’s faults. Faults that are still present come back.']
             : confirm?.kind === 'restore'
-              ? ['Puts back the coding this module had before Caristini first changed it.']
-              : ['Caristini saves the current coding first, reads the new one back and puts the original back if the module does not keep it.', ...(items.length ? [] : ['These bits have no public names: only change bits you know from a trusted source.'])]),
+              ? ['Puts back the coding this module had before Pin16 first changed it.']
+              : ['Pin16 saves the current coding first, reads the new one back and puts the original back if the module does not keep it.', ...(items.length ? [] : ['These bits have no public names: only change bits you know from a trusted source.'])]),
         ]}
         confirmLabel={confirm?.kind === 'clear' ? 'Clear faults' : confirm?.kind === 'restore' ? 'Put back' : 'Save to the car'}
         onCancel={() => setConfirm(null)}

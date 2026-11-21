@@ -57,7 +57,7 @@ export function sensorCountShort(c: SensorCount): string {
   return c.groupValues ? `${plural(c.groupValues, 'value')}, ${plural(c.groups, 'group')}` : 'No sensors found yet';
 }
 
-// Modules Caristini has identified on this car (part number or name read).
+// Modules Pin16 has identified on this car (part number or name read).
 export function moduleCount(v: CarLike | null | undefined): number {
   if (!v) return 0;
   return new Set([...(v.ids?.modules ?? []).map((m) => m.id), ...Object.keys(v.knowledge ?? {})]).size;

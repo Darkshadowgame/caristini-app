@@ -1,6 +1,6 @@
 // AI help through Claude, using the owner's own API key (typed in Settings or
 // built in from the repo secret). Used for explaining faults, guessing unknown
-// values from Discover, module research and the "Ask Caristini" chat.
+// values from Discover, module research and the "Ask Pin16" chat.
 //
 // Plain HTTPS to the Messages API: the official TypeScript SDK's modules load
 // in a circular order that the app's bundler (Metro) cannot start, which
@@ -17,7 +17,7 @@ export async function hasClaude(): Promise<boolean> {
 }
 
 const SYSTEM = [
-  'You are the assistant inside Caristini, a personal car diagnostics app used with an ELM327 OBD2 adapter.',
+  'You are the assistant inside Pin16, a personal car diagnostics app used with an ELM327 OBD2 adapter.',
   'Answer for a capable home mechanic in British English, short and direct, outcome first. Use digits for numbers.',
   'Be honest about uncertainty: say when something depends on the exact car or needs a workshop check. Never invent part numbers, coding bits or prices you do not know; give ranges and say they are estimates.',
   'Safety first: say plainly when a fault means the car should not be driven.',

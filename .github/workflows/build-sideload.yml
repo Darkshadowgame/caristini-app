@@ -10,8 +10,8 @@
 #
 # Only the iOS app is built on request; the Android job is switched off.
 #
-# Builds installable test copies of Caristini without a Mac:
-#   - iOS:     an UNSIGNED .ipa (Caristini-unsigned.ipa). Sideloadly signs it on
+# Builds installable test copies of Pin16 without a Mac:
+#   - iOS:     an UNSIGNED .ipa (Pin16-unsigned.ipa). Sideloadly signs it on
 #              Windows with your own Apple ID when you install it.
 #   - Android: a release .apk signed with the template's debug keystore.
 #
@@ -60,7 +60,7 @@ env:
   # secrets build an app that uses only keys typed in Settings.
   EXPO_PUBLIC_UPLOAD_TOKEN: ${{ secrets.CARISTINI_UPLOAD_TOKEN }}
   EXPO_PUBLIC_CLAUDE_KEY: ${{ secrets.CLAUDE_API_KEY }}
-  EXPO_PUBLIC_UPLOAD_REPO: Darkshadowgame/caristini-data
+  EXPO_PUBLIC_UPLOAD_REPO: Darkshadowgame/pin16-data
   EXPO_PUBLIC_COMMIT: ${{ github.sha }}
 
 jobs:
@@ -180,7 +180,7 @@ jobs:
           pod --version
           pod install
 
-      # Prebuild names the workspace and scheme after the app name ("Caristini").
+      # Prebuild names the workspace and scheme after the app name ("Pin16").
       # Read them from what was generated so a rename in app.json still works.
       - name: Find workspace and scheme
         run: |
@@ -218,14 +218,14 @@ jobs:
             -scheme "$SCHEME" \
             -configuration Release \
             -destination "generic/platform=iOS" \
-            -archivePath "$RUNNER_TEMP/Caristini.xcarchive" \
+            -archivePath "$RUNNER_TEMP/Pin16.xcarchive" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
 
-      - name: Package Caristini-unsigned.ipa
+      - name: Package Pin16-unsigned.ipa
         run: |
-          APP=$(find "$RUNNER_TEMP/Caristini.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' | head -n 1)
+          APP=$(find "$RUNNER_TEMP/Pin16.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' | head -n 1)
           if [ -z "$APP" ]; then
             echo "::error::No .app found in the archive."
             exit 1
@@ -237,18 +237,18 @@ jobs:
             exit 1
           fi
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
-          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/Caristini.app"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/Pin16.app"
           cd "$RUNNER_TEMP/ipa"
           # -y keeps symlinks inside embedded frameworks intact.
-          zip -qry "$GITHUB_WORKSPACE/Caristini-unsigned.ipa" Payload
-          ls -lh "$GITHUB_WORKSPACE/Caristini-unsigned.ipa"
+          zip -qry "$GITHUB_WORKSPACE/Pin16-unsigned.ipa" Payload
+          ls -lh "$GITHUB_WORKSPACE/Pin16-unsigned.ipa"
 
       # archive: false uploads the .ipa as-is (not wrapped in a zip).
-      # The artifact takes the file name: Caristini-unsigned.ipa.
+      # The artifact takes the file name: Pin16-unsigned.ipa.
       - name: Upload IPA
         uses: actions/upload-artifact@v7
         with:
-          path: Caristini-unsigned.ipa
+          path: Pin16-unsigned.ipa
           archive: false
           if-no-files-found: error
           retention-days: 7
@@ -342,4 +342,4 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[] | "\(.id) \(.name)"' |
             while read -r id name; do gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "out/$name"; done
           ls -la out
-          gh release create "v$APP_VERSION" out/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Caristini $APP_VERSION" --notes "${NOTES:-Manual build}"
+          gh release create "v$APP_VERSION" out/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Pin16 $APP_VERSION" --notes "${NOTES:-Manual build}"

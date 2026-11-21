@@ -1,7 +1,8 @@
 import { Stack } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
-import { useIsDark, useTheme } from './theme';
+import { useDisplayFontReady } from './fonts';
+import { DISPLAY_FONT, useIsDark, useTheme } from './theme';
 
 // Each tab's own navigation stack: an iOS large title that collapses into the
 // system bar material on scroll. The web preview draws its tab bar over the
@@ -9,6 +10,7 @@ import { useIsDark, useTheme } from './theme';
 export function TabStack() {
   const t = useTheme();
   const dark = useIsDark();
+  const display = useDisplayFontReady();
   return (
     <Stack
       screenOptions={{
@@ -25,7 +27,7 @@ export function TabStack() {
         headerShadowVisible: false,
         headerTintColor: t.accentText,
         headerTitleStyle: { color: t.text, fontWeight: '600' },
-        headerLargeTitleStyle: { color: t.text },
+        headerLargeTitleStyle: { color: t.text, ...(display ? { fontFamily: DISPLAY_FONT.semibold } : null) },
         contentStyle: { backgroundColor: t.bg },
       }}
     />

@@ -1,3 +1,4 @@
+import { useDisplay } from '../fonts';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -10,7 +11,7 @@ import { pidInfo } from '../obd/pids';
 import { Tp20Module, tp20Name } from '../obd/tp20';
 import { useConnection } from '../state';
 import { radius, space, type, useTheme } from '../theme';
-import { Mascot } from '../brand/Mascot';
+import { PinMark } from '../brand/PinMark';
 import { TOOLS, Arrive, Button, ConfirmSheet, GlowCard, Group, Icon, ListRow, ModuleRing, NeedsConnection, Notice, Pill, ScanPulse, Screen, success, tap, tool } from '../ui';
 import { CodeRow, FaultRow } from '../components/CodeRow';
 import { allowSleep, stayAwake } from '../keepAwake';
@@ -43,6 +44,7 @@ const CLEAR_ENGINE_LINE = 'Works with the engine running. A few modules only cle
 const RPM = pidInfo(0x0c)!;
 
 export default function Diagnostics() {
+  const displayFont = useDisplay();
   const t = useTheme();
   const conn = useConnection();
   const garage = useGarage();
@@ -485,14 +487,14 @@ export default function Diagnostics() {
                   return r.state === 'ok' ? 'ok' : r.state === 'faults' ? 'faults' : r.state === 'error' ? 'error' : 'none';
                 })}
               >
-                <Mascot mood="scanning" size={96} />
+                <PinMark size={64} decorative />
               </ModuleRing>
             ) : (
               <ScanPulse active size={150}>
-                <Mascot mood="scanning" size={96} />
+                <PinMark size={64} decorative />
               </ScanPulse>
             )}
-            <Text style={[styles.pct, type.number, { color: t.text }]}>{Math.round(pct * 100)}%</Text>
+            <Text style={[styles.pct, type.number, displayFont, { color: t.text }]}>{Math.round(pct * 100)}%</Text>
             <Text style={[type.sub, { color: t.muted, textAlign: 'center' }]} numberOfLines={1}>
               {current ? `Reading ${current}…` : 'Finishing…'}
             </Text>
@@ -520,7 +522,7 @@ export default function Diagnostics() {
             <View style={styles.summaryRow}>
               <View style={{ flex: 1 }}>
                 <View style={styles.bigRow}>
-                  <Text style={[styles.big, type.number, { color: total ? t.danger : t.ok }]}>{total}</Text>
+                  <Text style={[styles.big, type.number, displayFont, { color: total ? t.danger : t.ok }]}>{total}</Text>
                   <Text style={[type.title3, { color: t.text, marginBottom: 8 }]}>{total === 1 ? 'fault' : 'faults'}</Text>
                 </View>
                 <Text style={[type.sub, { color: info.milOn ? t.danger : t.ok, fontWeight: '600' }]}>Engine light {info.milOn ? 'on' : 'off'}</Text>
@@ -534,7 +536,7 @@ export default function Diagnostics() {
                   </Text>
                 ) : null}
               </View>
-              <Mascot mood={alert ? 'worried' : 'happy'} size={96} />
+              <PinMark lit={!alert} size={64} decorative />
             </View>
           </Arrive>
         )}
@@ -614,7 +616,7 @@ export default function Diagnostics() {
                     key={def.id}
                     first={i === 0}
                     icon="help-circle-outline"
-                    iconColour="orange"
+                    iconColour="gold"
                     title={def.name}
                     subtitle={results[def.id]?.error}
                   />
@@ -671,7 +673,7 @@ export default function Diagnostics() {
                   ? deep.length
                     ? 'Tap a module to read its coding in Workshop. Customise now includes these modules.'
                     : 'No more modules answered at the addresses tried.'
-                  : 'Some VW group modules, such as comfort and doors, speak an older protocol. Caristini looks for them once per car and reads them with the rest after that.'
+                  : 'Some VW group modules, such as comfort and doors, speak an older protocol. Pin16 looks for them once per car and reads them with the rest after that.'
               }
             >
               {(deep ?? []).map((m, i) => (
@@ -679,7 +681,7 @@ export default function Diagnostics() {
                   <ListRow
                     first={i === 0}
                     icon={m.error ? 'help-circle-outline' : m.faults.length ? 'alert-circle-outline' : 'check-circle-outline'}
-                    iconColour={m.error ? 'orange' : m.faults.length ? 'red' : 'green'}
+                    iconColour={m.error ? 'gold' : m.faults.length ? 'red' : 'green'}
                     title={(m.moduleId && client?.moduleById(m.moduleId)?.name) || tp20Name(m.address)}
                     subtitle={m.error ?? ([m.component, m.part].filter(Boolean).join(' · ') || undefined)}
                     value={m.error ? 'Could not read' : m.faults.length ? `${m.faults.length} fault${m.faults.length === 1 ? '' : 's'}` : 'No faults'}

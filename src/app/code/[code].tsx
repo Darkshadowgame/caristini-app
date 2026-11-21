@@ -11,7 +11,7 @@ import { SECTIONS } from '../../help';
 import { Button, Card, Group, Icon, IconName, ListRow, Notice, Pill, Screen, StepNumber, Tone, tool } from '../../ui';
 
 // Severity is about urgency: red for serious only. Moderate and minor are not
-// urgent, so they stay grey (amber is for what you can tap, green for healthy).
+// urgent, so they stay grey (orange is for what you can tap, green for healthy).
 const SEVERITY: Record<string, { text: string; tone: Tone }> = {
   high: { text: 'Serious', tone: 'danger' },
   medium: { text: 'Moderate', tone: 'neutral' },
@@ -93,7 +93,7 @@ export default function CodeDetail() {
           <Text style={[type.sub, { color: t.muted, marginTop: space.sm }]}>
             {vwNumber && vagFaultText(code)
               ? `The meaning comes from public VW fault number lists; the module’s own wording may differ slightly.${meaning.pcode ? ` The same fault as the standard code ${meaning.pcode}.` : ''}`
-              : "This module reports faults in the maker’s own numbering, not as a standard code, so Caristini has no description for it. A dealer or specialist tool shows the text."}
+              : "This module reports faults in the maker’s own numbering, not as a standard code, so Pin16 has no description for it. A dealer or specialist tool shows the text."}
           </Text>
           {entry ? (
             <View style={[styles.drive, { backgroundColor: serious ? t.dangerSoft : t.sunken }]}>

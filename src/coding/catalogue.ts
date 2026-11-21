@@ -16,7 +16,7 @@ export const CATALOGUE_ITEMS: CodingItem[] = [
     byte: 4,
     bits: [0],
     confidence: 'medium',
-    note: 'Works only with tyre pressure monitoring enabled in the ABS module, which Caristini does not write.',
+    note: 'Works only with tyre pressure monitoring enabled in the ABS module, which Pin16 does not write.',
     sources: [
       { label: 'vagcode.info: C7 cluster labels (2012 A7)', url: 'https://vagcode.info/en/components/31efa0ba8917e512d6ff0c1465c23711.html' },
       { label: 'Ross-Tech forum: C7 Audi A6 VAG-COM tweaks', url: 'https://forums.ross-tech.com/index.php?threads/8599/' },
@@ -2086,7 +2086,7 @@ export const CATALOGUE_ITEMS: CodingItem[] = [
       3
     ],
     "confidence": "low",
-    "note": "vag-coding.net calls it a hidden bit set in binary. Goes with 46 byte 15 (cat-c7-engine-door-open) and adaptation channel 98 = 0 (login 16017), which Caristini does not write.",
+    "note": "vag-coding.net calls it a hidden bit set in binary. Goes with 46 byte 15 (cat-c7-engine-door-open) and adaptation channel 98 = 0 (login 16017), which Pin16 does not write.",
     "sources": [
       {
         "label": "vag-coding.net: A6 (C7) disable motor cut-out on door opening",

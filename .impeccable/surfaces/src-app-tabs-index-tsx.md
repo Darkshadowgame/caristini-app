@@ -7,7 +7,7 @@ related_targets: ["src/app"]
 
 ## Scope
 
-The whole Caristini iPhone app (Operate mode): Home, Connect, Diagnose (health check), ECU info, Live data, Service, Customise, Code lookup, Diary, Garage, vehicle details.
+The whole Pin16 iPhone app (Operate mode): Home, Connect, Diagnose (health check), ECU info, Live data, Service, Customise, Code lookup, Diary, Garage, vehicle details.
 
 ## Audience and task
 
@@ -15,9 +15,9 @@ the owner in the driver's seat, ignition on, often at night; family and friends 
 
 ## Direction contract
 
-THESIS: Caristini is a first-party-feeling iOS app, built to the craft level of Apple's own apps and Carista, never a website in a phone frame. It refuses the old look: grey text on a flat dark ground, equal-weight tiles, a flat tab bar and no motion.
+THESIS: Pin16 is a first-party-feeling iOS app, built to the craft level of Apple's own apps and Carista, never a website in a phone frame. It refuses the old look: grey text on a flat dark ground, equal-weight tiles, a flat tab bar and no motion.
 
-OWN-WORLD: iOS dark appearance first (true black ground, grouped secondary #1C1C1E, separators), light appearance as a full alternative. One tint, Caristini amber #FFB340, for every interactive element. System red, green, blue and indigo carry state and tool identity only: each tool owns one coloured rounded-square SF Symbol icon, as in iOS Settings. San Francisco at Dynamic Type sizes, tabular figures for every number. Inset grouped lists, 44 pt rows, native glass tab bar.
+OWN-WORLD: iOS dark appearance first (true black ground, grouped secondary #1C1C1E, separators), light appearance as a full alternative. One tint, Pin16 amber #FFB340, for every interactive element. System red, green, blue and indigo carry state and tool identity only: each tool owns one coloured rounded-square SF Symbol icon, as in iOS Settings. San Francisco at Dynamic Type sizes, tabular figures for every number. Inset grouped lists, 44 pt rows, native glass tab bar.
 
 STORY: the owner opens the app, sees his car and its last result in one glance, taps one amber button to run a health check, watches modules report in, and taps a fault for its meaning and fixes.
 

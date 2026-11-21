@@ -76,19 +76,19 @@ describe('shared file names', () => {
     expect(fileDate(new Date(2026, 0, 5))).toBe('20260105');
   });
 
-  it('names every file Caristini-what-VIN-date', () => {
-    expect(shareFileName('health report', 'WVWZZZ1KZBW000001', at)).toBe('Caristini-health-report-WVWZZZ1KZBW000001-20261120');
-    expect(shareFileName('live data', 'WVWZZZ1KZBW000001', at)).toBe('Caristini-live-data-WVWZZZ1KZBW000001-20261120');
-    expect(shareFileName('changes', 'wvwzzz1kzbw000001', at)).toBe('Caristini-changes-WVWZZZ1KZBW000001-20261120');
+  it('names every file Pin16-what-VIN-date', () => {
+    expect(shareFileName('health report', 'WVWZZZ1KZBW000001', at)).toBe('Pin16-health-report-WVWZZZ1KZBW000001-20261120');
+    expect(shareFileName('live data', 'WVWZZZ1KZBW000001', at)).toBe('Pin16-live-data-WVWZZZ1KZBW000001-20261120');
+    expect(shareFileName('changes', 'wvwzzz1kzbw000001', at)).toBe('Pin16-changes-WVWZZZ1KZBW000001-20261120');
   });
 
   it('leaves the VIN out when there is none', () => {
-    expect(shareFileName('live data', undefined, at)).toBe('Caristini-live-data-20261120');
-    expect(shareFileName('live data', null, at)).toBe('Caristini-live-data-20261120');
+    expect(shareFileName('live data', undefined, at)).toBe('Pin16-live-data-20261120');
+    expect(shareFileName('live data', null, at)).toBe('Pin16-live-data-20261120');
   });
 
   it('uses a log’s own start stamp, so 2 logs from 1 day keep their names', () => {
-    expect(shareFileName('log', 'WVWZZZ1KZBW000001', at, '20261115-142233')).toBe('Caristini-log-WVWZZZ1KZBW000001-20261115-142233');
+    expect(shareFileName('log', 'WVWZZZ1KZBW000001', at, '20261115-142233')).toBe('Pin16-log-WVWZZZ1KZBW000001-20261115-142233');
   });
 
   it('holds only characters that are safe in a file name', () => {

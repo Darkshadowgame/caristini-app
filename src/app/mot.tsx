@@ -1,10 +1,11 @@
 // MOT check: the car's warning lamps and faults, a guided walk-round and a
 // result of likely fails and advisories. Rules and sources: src/mot/rules.ts
 // and replica/mot-rules-sources.md. Read-only on the car.
+import { useDisplay } from '../fonts';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, Share, StyleSheet, Text, View } from 'react-native';
-import { Mascot } from '../brand/Mascot';
+import { PinMark } from '../brand/PinMark';
 import { useLastScan, when } from '../components/LastScan';
 import { SECTIONS } from '../help';
 import { addHistory } from '../history';
@@ -44,6 +45,7 @@ import { useGarage, vehicleTitle } from '../vehicle/garage';
 const fresh = (vin: string): MotDraft => ({ vin, startedAt: Date.now(), answers: {}, read: null });
 
 export default function MotCheck() {
+  const displayFont = useDisplay();
   const t = useTheme();
   const conn = useConnection();
   const garage = useGarage();
@@ -113,7 +115,7 @@ export default function MotCheck() {
         <Stack.Screen options={{ title: 'MOT check', headerRight: () => <GuideButton id="mot" /> }} />
         {!vin ? (
           <>
-            <Notice icon="information-outline" text="Connect to your car once so Caristini knows it. The walk-round then works without the adapter." />
+            <Notice icon="information-outline" text="Connect to your car once so Pin16 knows it. The walk-round then works without the adapter." />
             <Button label="Connect adapter" icon="bluetooth" onPress={() => router.push('/connect')} />
           </>
         ) : (
@@ -222,7 +224,7 @@ export default function MotCheck() {
               <Text style={[type.title, { color: t.text, marginVertical: space.sm }]}>Not checked yet</Text>
             ) : (
               <View style={styles.bigRow}>
-                <Text style={[styles.big, type.number, { color: s.fails.length ? t.danger : s.verdict === 'incomplete' ? t.text : t.ok }]}>{s.fails.length}</Text>
+                <Text style={[styles.big, type.number, displayFont, { color: s.fails.length ? t.danger : s.verdict === 'incomplete' ? t.text : t.ok }]}>{s.fails.length}</Text>
                 <Text style={[type.title3, { color: t.text, marginBottom: 8 }]}>likely {s.fails.length === 1 ? 'fail' : 'fails'}</Text>
               </View>
             )}
@@ -235,7 +237,7 @@ export default function MotCheck() {
             {/* How old the car's part of the result is. */}
             {read ? <Text style={[type.small, { color: t.muted, marginTop: 2 }]}>{readAgeLine(read)}</Text> : null}
           </View>
-          <Mascot mood={s.verdict === 'fail' ? 'worried' : s.verdict === 'incomplete' ? 'scanning' : 'happy'} size={88} />
+          <PinMark lit={s.verdict !== 'fail'} size={56} decorative />
         </View>
       </GlowCard>
 

@@ -1,4 +1,4 @@
-# Caristini consistency fixes, round 1
+# Pin16 consistency fixes, round 1
 
 Date: 20 Nov 2026. Source: `consistency-r1.md` in this folder. Scope: text and presentation in `src` and `__tests__` only. Nothing committed or published. Other agents were changing the same screens at the same time, so every change here is a small targeted edit.
 
@@ -21,7 +21,7 @@ Date: 20 Nov 2026. Source: `consistency-r1.md` in this folder. Scope: text and p
 | C13 | Fixed | "Engine light" everywhere; the Health check guide says once that it is the engine warning light on the dashboard. |
 | C14 | Fixed | Car tab says "1 not yet run" and "All complete". |
 | C15 | Fixed | ConfirmSheet added for: a learned service reset, a dashboard page, a saved Live data set, a speed range and Clear log. Verbs: Delete (trip, set, page, range, learned reset), Clear (log, runs), Remove (car). Customise switches and fault clearing unchanged. |
-| C16 | Fixed, parts left | Live data "Share CSV" shares a .csv file through `shareCsv`. One name pattern from `shareFileName`: `Caristini-{what}-{VIN}-{yyyymmdd}` for the live data CSV, change timeline, log CSV, route GPX and health report PDF (logs use their own start stamp so 2 logs from 1 day keep their names). Left: findings sent to the private store keep their names (the store's own paths, read by other tooling); the adapter log, Listen recording and MOT check are shared as text, so they have no file name. To check on the phone: the PDF copy to the named file, and the Live data CSV in the share sheet. |
+| C16 | Fixed, parts left | Live data "Share CSV" shares a .csv file through `shareCsv`. One name pattern from `shareFileName`: `Pin16-{what}-{VIN}-{yyyymmdd}` for the live data CSV, change timeline, log CSV, route GPX and health report PDF (logs use their own start stamp so 2 logs from 1 day keep their names). Left: findings sent to the private store keep their names (the store's own paths, read by other tooling); the adapter log, Listen recording and MOT check are shared as text, so they have no file name. To check on the phone: the PDF copy to the named file, and the Live data CSV in the share sheet. |
 | C17 | Fixed | New red, Seen before grey, Cleared green in Health check and History; "2 seen before" in both. |
 | C18 | Fixed | One `CodeRow` and `FaultRow` in `src/components/CodeRow.tsx`, used by Health check, Workshop, the last health check and its changes; Workshop shows the `STATE_LABEL` words. Placed in `src/components`, as `src/ui.tsx` would have had to import the connection state and fault library. |
 | C19 | Fixed | `stayAwake` / `allowSleep` (and a small `useStayAwake` hook) on Health check, Live data, Fuel trims, Workshop Live, Read part numbers, Learn from Carista, the MOT read and Listen mode; the 4 `useKeepAwake()` screens moved to the same helper. |
@@ -48,7 +48,7 @@ Date: 20 Nov 2026. Source: `consistency-r1.md` in this folder. Scope: text and p
 
 - New: `__tests__/timeText.test.ts` (time left, dates, shared file names).
 - Updated to the new wording: `__tests__/diag.test.ts` ("1 seen before", plus a test for the odometer unit), `__tests__/ids.test.ts` ("from a web search").
-- Updated to wording already committed by other work: `__tests__/uxFixes.test.ts` expected "Steps known, not yet tested by Caristini"; `src/mods/catalogue.ts` has said "Guide only, no switch yet" since commit 99c3910. This test failed before any change here.
+- Updated to wording already committed by other work: `__tests__/uxFixes.test.ts` expected "Steps known, not yet tested by Pin16"; `src/mods/catalogue.ts` has said "Guide only, no switch yet" since commit 99c3910. This test failed before any change here.
 
 ## Results, 20 Nov 2026
 

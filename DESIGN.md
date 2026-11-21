@@ -1,57 +1,60 @@
 ---
-name: Caristini
-description: A personal iPhone car scanner built to the craft of Apple's own apps, in one amber tint on a true black ground.
+name: Pin16
+description: A personal iPhone car scanner built to the craft of Apple's own apps, in one burnt orange tint on a graphite ground.
 "colors":
-  bg: "#000000"
-  surface: "#1C1C1E"
-  raised: "#2C2C2E"
-  sunken: "#2C2C2E"
-  text: "#FFFFFF"
-  muted: "rgba(235,235,245,0.72)"
-  faint: "rgba(235,235,245,0.4)"
-  border: "rgba(84,84,88,0.6)"
-  accent: "#FFB340"
-  accentSoft: "rgba(255,179,64,0.18)"
-  accentText: "#FFB340"
-  onAccent: "#1A1205"
-  danger: "#FF857D"
-  dangerSoft: "rgba(255,69,58,0.2)"
+  bg: "#131316"
+  surface: "#1B1B1F"
+  raised: "#24242A"
+  sunken: "#24242A"
+  text: "#F5F5F7"
+  muted: "#B0B0BB"
+  faint: "#9A9AA6"
+  border: "#303036"
+  accent: "#E2560B"
+  accentSoft: "rgba(226,86,11,0.2)"
+  accentText: "#FF8546"
+  onAccent: "#0A0A0A"
+  danger: "#FF7A97"
+  dangerSoft: "rgba(255,72,110,0.16)"
+  warn: "#F5D33B"
+  warnSoft: "rgba(245,211,59,0.14)"
   ok: "#30D158"
-  okSoft: "rgba(48,209,88,0.18)"
+  okSoft: "rgba(48,209,88,0.16)"
   info: "#64B5FF"
   infoSoft: "rgba(10,132,255,0.2)"
-  red: "#FF453A"
+  red: "#FF5C7A"
   blue: "#0A84FF"
   green: "#30D158"
   indigo: "#5E5CE6"
   purple: "#BF5AF2"
   teal: "#40C8E0"
-  orange: "#FF9F0A"
+  gold: "#D9A400"
   grey: "#8E8E93"
-  bg-light: "#F2F2F7"
+  bg-light: "#EFEFF2"
   surface-light: "#FFFFFF"
   raised-light: "#FFFFFF"
-  sunken-light: "#E5E5EA"
-  text-light: "#000000"
-  muted-light: "rgba(60,60,67,0.78)"
-  faint-light: "rgba(60,60,67,0.36)"
-  border-light: "rgba(60,60,67,0.22)"
-  accent-light: "#FF9F0A"
-  accentSoft-light: "rgba(255,159,10,0.16)"
-  accentText-light: "#8A4E00"
-  danger-light: "#B80012"
-  dangerSoft-light: "rgba(255,59,48,0.12)"
+  sunken-light: "#E4E4E9"
+  text-light: "#131316"
+  muted-light: "rgba(19,19,22,0.72)"
+  faint-light: "rgba(19,19,22,0.64)"
+  border-light: "rgba(19,19,22,0.14)"
+  accent-light: "#E2560B"
+  accentSoft-light: "rgba(226,86,11,0.12)"
+  accentText-light: "#963100"
+  warn-light: "#6E5000"
+  danger-light: "#B8123A"
+  dangerSoft-light: "rgba(184,18,58,0.1)"
   ok-light: "#196B2D"
   okSoft-light: "rgba(52,199,89,0.14)"
   info-light: "#0058BA"
   infoSoft-light: "rgba(0,122,255,0.12)"
-  red-light: "#FF3B30"
+  red-light: "#E5304F"
   blue-light: "#007AFF"
   green-light: "#34C759"
   indigo-light: "#5856D6"
   purple-light: "#AF52DE"
   teal-light: "#30B0C7"
-  orange-light: "#FF9500"
+  gold-light: "#C99700"
 typography:
   display:
     fontFamily: "SF Pro Display, -apple-system, system-ui, sans-serif"
@@ -257,33 +260,33 @@ components:
     padding: "4px 7px"
 ---
 
-# Design System: Caristini
+# Design System: Pin16
 
 ## Overview
 
 **Creative North Star: "The Driver's Seat at Night"**
 
-Caristini is a first-party iOS app, used in a dark car with the ignition on and the phone in one hand. The world is iOS itself, executed at the craft level of Apple's own apps: a true black ground, grouped secondary surfaces, hairline separators, San Francisco at Dynamic Type sizes, SF Symbols, a native glass tab bar and large titles that collapse into the system bar material. Dark appearance is the default scene; light appearance is a full alternative built from the same token names.
+Pin16 is a first-party iOS app, used in a dark car with the ignition on and the phone in one hand. The world is iOS itself, executed at the craft level of Apple's own apps: a true black ground, grouped secondary surfaces, hairline separators, San Francisco at Dynamic Type sizes, SF Symbols, a native glass tab bar and large titles that collapse into the system bar material. Dark appearance is the default scene; light appearance is a full alternative built from the same token names.
 
-Colour is spent on meaning. One amber tint marks everything you can tap. System red and green say fault and healthy. Each tool owns one coloured rounded square, as in iOS Settings. Everything else is neutral grey on black, so a result reads at a glance to someone who is not technical.
+Colour is spent on meaning. One burnt orange tint marks everything you can tap. pink-red and green say fault and healthy. Each tool owns one coloured rounded square, as in iOS Settings. Everything else is neutral grey on black, so a result reads at a glance to someone who is not technical.
 
 Motion is reserved for the car talking back: rings ripple out from the car symbol while a scan runs, and each module's result slides up as it answers. Both stop under Reduce Motion.
 
 **Key Characteristics:**
-- True black ground (`bg`), grouped secondary surfaces (`surface`), hairline `border` separators.
-- One amber tint (`accent` and `accentText`) for interactive elements.
+- Graphite ground (`bg`, #131316), grouped secondary surfaces (`surface`), hairline `border` separators.
+- One burnt orange tint (`accent` and `accentText`) for interactive elements.
 - State colours carry meaning: `danger` for faults, `ok` for healthy, neutral grey for everything non-urgent.
-- One fixed colour square per tool, white SF Symbol glyph.
+- One fixed colour square per tool: white SF Symbol glyph, near-black on the light squares (gold, teal, green). Red squares are for faults only (Clear faults). Switches that are on are green. The iPhone large title is the plain string "Pin16"; the wordmark shows in the collapsed header.
 - Inset grouped sections with uppercase headers outside the container.
 - Tabular figures for every number; Menlo for codes.
 - Native chrome: glass tab bar, large-title stacks, blur header, system action sheets.
 
 ## Colors
 
-A neutral iOS system palette with one warm amber tint and the system state and tool colours. Every key below has a light variant with the `-light` suffix.
+A neutral iOS system palette with one burnt orange tint and the system state and tool colours. Every key below has a light variant with the `-light` suffix.
 
 ### Primary
-- **Caristini Amber** (`accent`): fills the primary capsule button, the selected tab, the text cursor and the ScanPulse rings. `accentText` is its text and glyph form for bar buttons, Cancel, Done, ghost buttons and checkmarks; in light appearance it darkens to a legible amber brown. `accentSoft` is the 18% wash behind secondary buttons. `onAccent` is the near-black label on a filled amber button.
+- **Pin16 Burnt Orange** (`accent`): fills the primary capsule button, the selected tab, the text cursor and the ScanPulse rings. `accentText` is its text and glyph form for bar buttons, Cancel, Done, ghost buttons and checkmarks; in light appearance it darkens to a legible dark burnt orange. `accentSoft` is the 18% wash behind secondary buttons. `onAccent` is the near-black label on a filled orange button.
 
 ### Secondary
 - **Fault Red** (`danger`, `dangerSoft`): fault counts, fault pills, destructive actions, low-battery warnings and serious-code chips.
@@ -291,7 +294,7 @@ A neutral iOS system palette with one warm amber tint and the system state and t
 - **Info Blue** (`info`, `infoSoft`): maker-specific notes and context notices.
 
 ### Tertiary
-- **Tool Squares** (`red`, `blue`, `green`, `indigo`, `purple`, `teal`, `orange`, `grey`): the iOS system colours behind white glyphs in 30px rounded squares. One square per tool family, from the `TOOLS` table in src/ui.tsx (29 tools on 8 colours): `red` Health check, History, Clear, Performance; `blue` Live data, Sensors, Dashboard, User guide; `green` Service, Battery, MOT check; `purple` Customise, Timeline, Learn from Carista, Research notes; `teal` Lookup, Fuses, Monitors, Emissions self-tests; `indigo` Learn my car, Modules, Discover, Car IDs, Health report, Data logger; `orange` Workshop, Diary; `grey` Listen, Vehicle details. Rows that are actions inside a tool (Check again, Read again, Share, Save, Start again) take the colour of the tool they sit in. `grey` is the square for car facts and anything without its own tool. `red` doubles as the tab badge colour.
+- **Tool Squares** (`red`, `blue`, `green`, `indigo`, `purple`, `teal`, `gold`, `grey`): the iOS system colours behind glyphs (white, or near-black on gold, teal and green) in 30px rounded squares. One square per tool family, from the `TOOLS` table in src/ui.tsx (29 tools on 8 colours): `red` Clear faults only; `blue` Live data, Sensors, Dashboard, User guide, Performance; `green` Service, Battery, MOT check; `purple` Customise, Timeline, Learn a setting, Research notes; `teal` Health check, Lookup, Fuses, Monitors, Emissions self-tests; `indigo` History, Learn my car, Modules, Discover, Car IDs, Health report, Data logger; `gold` Workshop, Diary; `grey` Listen, Vehicle details. Rows that are actions inside a tool (Check again, Read again, Share, Save, Start again) take the colour of the tool they sit in. `grey` is the square for car facts and anything without its own tool. `red` doubles as the tab badge colour.
 
 ### Neutral
 - **True Black** (`bg`): the page ground in dark appearance; iOS grouped grey in light.
@@ -302,7 +305,7 @@ A neutral iOS system palette with one warm amber tint and the system state and t
 - **Separator** (`border`): hairline rules between rows.
 
 ### Named Rules
-**The One Tint Rule.** Amber marks what you can tap: buttons, bar buttons, the selected tab, checkmarks, the cursor. The one sanctioned non-interactive use is progress of an action the user started (ScanPulse rings and ProgressBar fill). Nothing else is amber.
+**The One Tint Rule.** Orange marks what you can tap: buttons, bar buttons, the selected tab, checkmarks, the cursor. The one sanctioned non-interactive use is progress of an action the user started (ScanPulse rings and ProgressBar fill). Nothing else is orange.
 
 **The Meaning Rule.** Red means a fault or a destructive action. Green means healthy. Anything non-urgent (could not read, minor, not found) is neutral grey on `sunken`. Red and green are never decoration.
 
@@ -368,7 +371,7 @@ Capsules with a firm press: opacity 0.75 and scale 0.97 while held, 0.4 opacity 
 
 ### Chips
 - **Segmented:** a `sunken` track with 2px padding and 48px minimum height; each segment is at least 44px tall, the chosen one lifted to `surface`. Used for the MOT walk-round (Pass, Advisory, Fail, To do) and for pickers with 2 to 4 options (`Segmented` in src/ui.tsx).
-- **Chip:** a 36px capsule with a 44px tap target, amber when selected (`Chip` and `Chips` in src/ui.tsx).
+- **Chip:** a 36px capsule with a 44px tap target, orange when selected (`Chip` and `Chips` in src/ui.tsx).
 - **Pill:** full-round, 3px by 9px padding, 13px semibold, optional 11px leading glyph. Tones: `ok`, `danger`, neutral (`sunken` with `muted`), `info`, `accent`.
 - **Code chip:** Menlo 13px bold on `sunken` (or `dangerSoft` with `danger` for a serious code), 6px radius.
 
@@ -378,11 +381,11 @@ Capsules with a firm press: opacity 0.75 and scale 0.97 while held, 0.4 opacity 
 - **Shadow Strategy:** none; see Elevation & Depth.
 - **Border:** none.
 - **Internal Padding:** 16px; hero cards (Health, Diagnose, code detail) use 24px.
-- **Glow card:** hero cards on Home, Connect and Diagnose carry a soft diagonal wash from a tinted corner into `surface`: amber (`glowBrand`) while connecting or scanning, green (`glowOk`) with no faults, red (`glowFault`) with faults. The wash names the state; the card holds the Mascot and the headline figure.
+- **Glow card:** hero cards on Home, Connect and Diagnose carry a soft diagonal wash from a tinted corner into `surface`: orange (`glowBrand`) while connecting or scanning, green (`glowOk`) with no faults, red (`glowFault`) with faults. The wash names the state; the card holds the Pin16 mark and the headline figure. An idle hero (not connected, waiting to start) is a plain `surface` card with a hairline border and no wash; the wash shows only while something is running or needs attention.
 - **Group:** an inset grouped section. Uppercase `label` header in `muted` outside and above the container (16px inset, 6px gap), optional `small` footer below. Rows inside are separated by hairlines.
 
 ### Inputs / Fields
-- **Search field:** `sunken` well, 10px radius, 44px tall, 16px magnifier glyph in `muted`, `body` text, amber cursor, no outline.
+- **Search field:** `sunken` well, 10px radius, 44px tall, 16px magnifier glyph in `muted`, `body` text, orange cursor, no outline.
 - **Focus:** native cursor only; no ring.
 
 ### Navigation
@@ -396,9 +399,10 @@ The iOS Settings cell: optional 30px colour square with a 17px white glyph, `bod
 
 ### Confirm Sheet
 Writes to the car ask first. On iPhone this is the system action sheet (`ActionSheetIOS`): title, the consequence in the message, the destructive action in red and Cancel apart, tinted `accentText`. Elsewhere a bottom sheet copies that layout: message and the red action in one 14px group, Cancel in its own group below. The action fires once per opening.
+Display type: Space Grotesk 500 and 600 for large titles, hero figures (the Dashboard tile figures too) and the wordmark only. It loads without blocking the first screen; until it is ready, or if it fails, the system font shows. Body text stays the system font.
 
-### Mascot (signature)
-A small amber car in a navy mechanic's cap, drawn in SVG (`src/brand/Mascot.tsx`). Its face shows what the app is doing: asleep before a car is connected and on empty lists, wide-eyed with eyes to one side while it scans, smiling with no faults, worried when faults are found. It sits inside ScanPulse during a scan and at the trailing side of the result card. It never replaces a status word or number.
+### Brand mark
+A small brand mark (`PinMark`, `src/brand/PinMark.tsx`): the OBD2 port outline in the accent with pin 16 lit. It sits inside ScanPulse during a scan, at the trailing side of result cards and above the title and one line of an empty state. With nothing to show or no car connected the lit pin goes grey. The old cartoon mascot is retired (`src/brand/Mascot.tsx.old`). The `Wordmark` (`src/brand/Wordmark.tsx`) shows the name: "Pin" in the text colour, "16" in the accent, Space Grotesk 500, letter spacing -0.02em.
 
 ### Make badge
 The connected car's maker mark, white on the maker's own colour in a rounded square, shown on Home, Garage rows and Last connected. Marks are Simple Icons v16.37.0 paths (CC0) for Audi, Volkswagen, SEAT, Skoda, Ford and Mazda; other makes show no badge.
@@ -413,7 +417,7 @@ After a change to a setting not yet confirmed on the car, a neutral Confirm Shee
 A Menlo chip with the fuse number on `sunken`, the function in `sub`, the rating in tabular `muted` at the end. Unused slots drop to half opacity. A search field filters by function.
 
 ### ScanPulse (signature)
-The car symbol in an `accentSoft` disc at 56% of the component size, with 3 amber 2px rings that grow to the full size and fade (opacity 0 to 0.55 to 0) over 1800ms with an ease-out cubic curve, staggered 600ms, looping while the car is being read. Used on Connect and as the hero of a Diagnose or ECU info scan, over a tabular percentage. Under Reduce Motion the rings hold still.
+The car symbol in an `accentSoft` disc at 56% of the component size, with 3 orange 2px rings that grow to the full size and fade (opacity 0 to 0.55 to 0) over 1800ms with an ease-out cubic curve, staggered 600ms, looping while the car is being read. Used on Connect and as the hero of a Diagnose or ECU info scan, over a tabular percentage. Under Reduce Motion the rings hold still.
 
 ### Arrive
 Content that comes back from the car (a module's result, the scan summary) slides up 12px and fades in once over 420ms with an ease-out expo curve. Under Reduce Motion it appears at once. Results keep their order while a scan runs and re-sort (faults first) only when it ends.
@@ -422,16 +426,16 @@ Content that comes back from the car (a module's result, the scan summary) slide
 A 4px `sunken` track with an `accent` fill that glides to each new value over 400ms (ease-out expo), with a `sub` label and a semibold tabular percentage above.
 
 ### Module ring (signature)
-One dot per control module around the mascot on the health check. Dots fill in as modules answer: green clear, red faults, orange could not read, dim not fitted; the module being asked pulses amber (still under Reduce Motion). `ModuleRing` in src/ui.tsx.
+One dot per control module around the mark on the health check. Dots fill in as modules answer: green clear, red faults, orange could not read, dim not fitted; the module being asked pulses orange (still under Reduce Motion). `ModuleRing` in src/ui.tsx.
 
 ### Tool tile (Home)
 Four main tools as 2-by-2 tiles: a solid tool-colour icon square, title, one-line status, a diagonal glow of the tool colour from the top left (`LinearGradient`, colour at 20% to 0%). Press scales to 0.97.
 
 ### Category chips
-Horizontal scrolling pills above long lists (Customise, History): amber fill when selected, surface fill otherwise, count in tabular figures.
+Horizontal scrolling pills above long lists (Customise, History): orange fill when selected, surface fill otherwise, count in tabular figures.
 
 ### Pending changes bar
-Amber-soft bar under a coding settings list while switches differ from the car: how many bytes changed and a compact Save to the car button. Nothing is written until it is tapped.
+orange-soft bar under a coding settings list while switches differ from the car: how many bytes changed and a compact Save to the car button. Nothing is written until it is tapped.
 
 ## Do's and Don'ts
 
@@ -446,7 +450,7 @@ Amber-soft bar under a coding settings list while switches differ from the car: 
 - **Do** keep demo cars behind `Platform.OS === 'web'`; the phone app connects to real adapters only.
 
 ### Don't:
-- **Don't** use amber for decoration, headings, illustrations or status. The exceptions are the Mascot's body and the `glowBrand` wash on a hero card while the car is being read.
+- **Don't** use orange for decoration, headings, illustrations or status. The exceptions are the lit pin of the mark and the `glowBrand` wash on a hero card while the car is being read.
 - **Don't** use red or green for a state that is not a fault or a healthy result; minor and unknown stay grey.
 - **Don't** give a non-tool row a tool's colour square.
 - **Don't** add shadows; depth is tonal.

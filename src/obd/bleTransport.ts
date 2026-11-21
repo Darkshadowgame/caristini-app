@@ -75,7 +75,7 @@ function waitForBluetooth(m: BleManagerT, ms = 8000): Promise<void> {
     }, true);
   }).catch(async (e) => {
     if ((await m.state()) === 'Unauthorized') {
-      throw new Error('Caristini is not allowed to use Bluetooth. Turn it on in Settings > Privacy & Security > Bluetooth.');
+      throw new Error('Pin16 is not allowed to use Bluetooth. Turn it on in Settings > Privacy & Security > Bluetooth.');
     }
     throw e;
   });

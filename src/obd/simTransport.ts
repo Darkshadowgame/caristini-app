@@ -492,7 +492,7 @@ export class SimTransport implements Transport {
     }
     if (cmd === '1003' || cmd === '1001') return this.sessionChange(cmd === '1003' ? 3 : 1);
     if (cmd === 'ATI') return 'ELM327 v2.2';
-    if (cmd === 'AT@1') return 'Caristini demo adapter';
+    if (cmd === 'AT@1') return 'Pin16 demo adapter';
     if (cmd === 'ATDP') return 'ISO 15765-4 (CAN 11/500)';
     if (cmd === 'ATRV') return `${(13.9 + Math.random() * 0.4).toFixed(1)}V`;
     if (cmd.startsWith('AT')) return 'OK';

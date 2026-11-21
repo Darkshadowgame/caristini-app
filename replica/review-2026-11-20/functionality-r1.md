@@ -1,4 +1,4 @@
-# Caristini functionality review, round 1
+# Pin16 functionality review, round 1
 
 Date: 20 Nov 2026. Reviewer: product tester (functionality only).
 
@@ -48,7 +48,7 @@ Why: 1 high, 11 medium and 17 low findings. The rubric gives 7 for "several medi
 **1. A coding write leaves no record, and the screen shows the old setting, if you leave while it is writing.** Feature: Customise, Workshop coding, Change timeline, History, Diary.
 - Steps (repeated in the browser, Leon demo): Customise > flip "Leaving home lights" > go back within 1 second (the write takes about 8 seconds and shows only a small spinner). Result: the car has the setting on (shown after Read settings again), History and Diary have no entry, the Change timeline lists 2 changes where 3 were made, and Customise shows the setting as off until Read settings again.
 - Code: `src/app/customise/index.tsx:269` returns when the screen has gone, before `client.sessionValues.set` (272), `setCodings`, the cache update (275), `addDiary` (292) and `addHistory` (296). Same pattern in `src/app/workshop/[id].tsx:195` (write) and `:159` (fault clear). Related, code only: a Workshop write never updates `client.sessionValues`, and Customise reuses those values on re-entry (`index.tsx:121`), so Customise can show old switch states after a Workshop write. The compare inside `writeCoding` (`src/obd/elm.ts:2191`, `2278`) stops a write from old data, so no wrong bytes are written.
-- Help broken: "Every change is saved to History and your diary" (`src/help.ts:240`), "Every setting Caristini changed on this car" (`src/help.ts:443`).
+- Help broken: "Every change is saved to History and your diary" (`src/help.ts:240`), "Every setting Pin16 changed on this car" (`src/help.ts:443`).
 - Fix: after the write returns, always update `client.sessionValues`, the coding cache, Diary and History; guard only the `setState` calls with `alive.current`. Do the same in Workshop (write and clear), and set `client.sessionValues` there too. Add a "Writing, keep this page open" line beside the spinner.
 
 ### Medium
@@ -133,7 +133,7 @@ Why: 1 high, 11 medium and 17 low findings. The rubric gives 7 for "several medi
 
 **26. The DPF monitor shows internal file names as sources and forgets regenerations.** `src/app/dpf.tsx:170` ("mazda6-sources Z5 capture", repeated in the browser); regenerations seen live in state only (`:31`). Fix: owner-readable source labels; save regenerations on the car.
 
-**27. One Jest test fails.** `__tests__/uxFixes.test.ts:55` expects "Steps known, not yet tested by Caristini"; `src/mods/catalogue.ts:26` says "Guide only, no switch yet". Fix: update the test or the label.
+**27. One Jest test fails.** `__tests__/uxFixes.test.ts:55` expects "Steps known, not yet tested by Pin16"; `src/mods/catalogue.ts:26` says "Guide only, no switch yet". Fix: update the test or the label.
 
 **28. History entries cannot be removed.** `removeHistory` (`src/history.ts:111`) has no caller. A test entry, or the MOT entry saved in finding 16, stays for good. Fix: a Delete link on an opened entry, with a confirmation.
 

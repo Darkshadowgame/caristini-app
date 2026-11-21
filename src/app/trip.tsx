@@ -1,4 +1,5 @@
 // Trip computer. Maths and sources: src/monitors/trip.ts.
+import { useDisplay } from '../fonts';
 import { useStayAwake } from '../keepAwake';
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -31,6 +32,7 @@ export default function TripScreen() {
 }
 
 function TripBody() {
+  const displayFont = useDisplay();
   const t = useTheme();
   const conn = useConnection();
   const client = conn.client!;
@@ -137,7 +139,7 @@ function TripBody() {
       {running ? <Awake /> : null}
       <GlowCard tone={running ? 'brand' : 'plain'} style={{ padding: space.xl, marginBottom: space.xl }}>
         <Text style={[type.label, { color: t.muted }]}>{running ? 'This trip' : 'Trip'}</Text>
-        <Text style={[styles.big, type.number, { color: t.text }]}>{sum ? distance(sum.km) : distance(0)}</Text>
+        <Text style={[styles.big, type.number, displayFont, { color: t.text }]}>{sum ? distance(sum.km) : distance(0)}</Text>
         <View style={styles.stats}>
           <Stat label="Time" value={sum ? duration(sum.hours) : '–'} />
           <Stat label="Average" value={speed(sum?.avgKmh ?? null)} />

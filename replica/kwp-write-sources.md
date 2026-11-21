@@ -1,4 +1,4 @@
-# Caristini: KWP2000 writes on VW TP2.0 modules (long coding, adaptation, read-back)
+# Pin16: KWP2000 writes on VW TP2.0 modules (long coding, adaptation, read-back)
 
 Research note, 11 Nov 2026. Follows `tp20-sources.md`, `leon-sources.md` (sections 3 and 5) and `vcds-sources.md` (section 3). Those notes left three gaps: no public capture of a long-coding write to a TP2.0 module, a disagreement on the KWP adaptation routines (kw1281test vs vag-tool), and no settled way to read long coding. This note adds new public evidence only; settled points are referenced, not repeated.
 

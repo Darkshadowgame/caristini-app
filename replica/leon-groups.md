@@ -1,4 +1,4 @@
-# Caristini: Leon 1P1 measuring block field names
+# Pin16: Leon 1P1 measuring block field names
 
 Research note, 11 Nov 2026. Car: 2007 SEAT Leon Cupra 1P1, 2.0 TFSI 240 PS, 6-speed manual, PQ35. Companion to `leon-sources.md` (protocol, addresses, formula table). This note gives a plain-English name for each field of the measuring block groups that public sources document, so the app can label the values it already decodes from `21 <group>`.
 

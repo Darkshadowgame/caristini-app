@@ -47,7 +47,7 @@ export interface Vehicle {
   tried?: Record<string, TryResult>;
   // Module coding read from the car (read-only), kept as a backup.
   codingBackup?: { date: string; modules: { module: string; part: string | null; coding: string | null }[] };
-  // Coding (hex) each module had before Caristini first changed it, by module id.
+  // Coding (hex) each module had before Pin16 first changed it, by module id.
   codingOriginal?: Record<string, string>;
   // Learn from Carista: settings saved before the owner changed one elsewhere.
   // deep: module whose data identifiers 0000 to 0FFF were also saved.

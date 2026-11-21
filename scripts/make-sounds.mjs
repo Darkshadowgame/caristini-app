@@ -41,6 +41,6 @@ writeFileSync(new URL('alert.wav', out), wav([[988, 140], [0, 60], [784, 180]]))
 writeFileSync(new URL('shift.wav', out), wav([[1568, 90]], 0.5));
 // Knock or DPF regeneration: three short beeps.
 writeFileSync(new URL('warn.wav', out), wav([[660, 90], [0, 70], [660, 90], [0, 70], [660, 90]]));
-// A long read finished while Caristini was in the background: three rising tones.
+// A long read finished while Pin16 was in the background: three rising tones.
 writeFileSync(new URL('done.wav', out), wav([[659, 110], [0, 30], [784, 110], [0, 30], [1047, 220]], 0.5));
 console.log('Wrote alert.wav, shift.wav, warn.wav, done.wav');

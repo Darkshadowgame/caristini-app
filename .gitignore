@@ -59,7 +59,7 @@ captures/
 *api_key*
 *.secret
 
-# Screen recordings of Carista and Caristini, kept on this PC only.
+# Screen recordings of Carista and Pin16, kept on this PC only.
 Recordings/
 
 # Worker copies made by Claude Code.

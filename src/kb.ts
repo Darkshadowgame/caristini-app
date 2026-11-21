@@ -1,7 +1,7 @@
-// Caristini knowledge base: entries saved by earlier versions (fuse layouts,
+// Pin16 knowledge base: entries saved by earlier versions (fuse layouts,
 // modifications, coding settings, procedures, notes) and what owners added, per make, model
 // and platform. Kept on the phone for offline use and shared through the
-// caristini repo (kb/entries/<make>/<id>.json), so it reaches every install
+// pin16 repo (kb/entries/<make>/<id>.json), so it reaches every install
 // on its next start and can be folded into the app's own lists later.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ALL_ITEMS, CodingItem } from './coding/items';

@@ -6,7 +6,7 @@ import { DEMO_CARS } from '../obd/simTransport';
 import { useSettings } from '../settings';
 import { useConnection } from '../state';
 import { space, type, useTheme } from '../theme';
-import { Mascot } from '../brand/Mascot';
+import { PinMark } from '../brand/PinMark';
 import { Button, GlowCard, Group, ListRow, Notice, Pill, ScanPulse, Screen } from '../ui';
 
 // Demo cars are a development aid for the web preview only; the phone app
@@ -50,7 +50,7 @@ export default function Connect() {
         (msg) => {
           stopScan();
           setScanning(false);
-          setScanError(`Bluetooth search stopped: ${msg}. Check Bluetooth is on and Caristini may use it in iPhone Settings, then tap Search again.`);
+          setScanError(`Bluetooth search stopped: ${msg}. Check Bluetooth is on and Pin16 may use it in iPhone Settings, then tap Search again.`);
         },
       );
       uiTimer.current = setTimeout(() => setScanning(false), 10000);
@@ -85,7 +85,7 @@ export default function Connect() {
       <Screen>
         <View style={styles.connecting}>
           <ScanPulse active={!leaving} size={170}>
-            <Mascot mood={leaving ? 'happy' : 'scanning'} size={110} />
+            <PinMark size={72} decorative />
           </ScanPulse>
           <Text style={[type.title, { color: t.text, marginTop: space.lg, textAlign: 'center' }]}>{leaving ? 'Connected' : `${conn.step}…`}</Text>
           <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: space.sm }]}>
@@ -100,15 +100,15 @@ export default function Connect() {
     <Screen>
       {conn.status === 'error' && conn.error ? <Notice tone="danger" icon="alert-circle-outline" text={conn.error} /> : null}
 
-      <GlowCard tone="brand" style={styles.intro}>
+      <GlowCard tone={scanning ? 'brand' : 'plain'} style={styles.intro}>
         <ScanPulse active={scanning} size={150}>
-          <Mascot mood={scanning ? 'scanning' : 'happy'} size={96} />
+          <PinMark size={72} decorative />
         </ScanPulse>
         <Text style={[type.title3, { color: t.text, marginTop: space.md, textAlign: 'center' }]}>
           {scanning ? 'Looking for your adapter' : found.length ? 'Pick your adapter' : 'Find your adapter'}
         </Text>
         <Text style={[type.sub, { color: t.muted, textAlign: 'center', marginTop: space.xs }]}>
-          Adapter plugged in, ignition on. On iPhone use a Bluetooth LE OBD2 adapter (your Carista adapter is one).
+          Adapter plugged in, ignition on. On iPhone use a Bluetooth LE OBD2 adapter (check your adapter is one).
         </Text>
         {bleBlocked ? (
           <View style={{ marginTop: space.lg, alignSelf: 'stretch' }}>
@@ -156,7 +156,7 @@ export default function Connect() {
       ) : searched && Platform.OS !== 'web' ? (
         <Notice
           icon="bluetooth-off"
-          text="No adapter found. Check it is plugged in under the dashboard, the ignition is on and Bluetooth is on. A Carista adapter shows as Carista. Then tap Search again."
+          text="No adapter found. Check it is plugged in under the dashboard, the ignition is on and Bluetooth is on. Then tap Search again."
         />
       ) : null}
 
